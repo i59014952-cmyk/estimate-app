@@ -3,35 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Расчёт сметы ремонта</title>
+    <title>Калькулятор сметы</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Смета ремонта</h1>
-
-        <section class="input-block">
-            <label for="area">Площадь (м²)</label>
-            <input type="number" id="area" min="0" step="0.1" value="1">
-        </section>
+        <h1>Калькулятор сметы</h1>
 
         <div id="status" class="status"></div>
 
-        <table id="estimate-table">
-            <thead>
-                <tr>
-                    <th>Название</th>
-                    <th>Ед. изм.</th>
-                    <th>Кол-во</th>
-                    <th>Цена за ед.</th>
-                    <th>Итого</th>
-                </tr>
-            </thead>
-            <tbody id="estimate-body"></tbody>
-        </table>
+        <section class="search-block">
+            <label for="search">Поиск работы</label>
+            <input type="text" id="search" placeholder="Начните вводить название…" autocomplete="off" disabled>
+            <div id="results" class="results"></div>
+        </section>
 
-        <section class="result">
-            <div class="result-row total"><span>Общая сумма:</span> <span id="grand-total">0</span> ₽</div>
+        <section class="estimate">
+            <div class="estimate-header">
+                <h2>Смета</h2>
+                <button id="export-btn" type="button">Экспорт в CSV</button>
+            </div>
+            <table id="estimate-table">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Ед. изм.</th>
+                        <th>Кол-во</th>
+                        <th>Цена за ед.</th>
+                        <th>Итого</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="estimate-body">
+                    <tr class="empty"><td colspan="6">Ничего не добавлено</td></tr>
+                </tbody>
+            </table>
+
+            <div class="totals">
+                <div class="total-row"><span>Сумма:</span> <span id="subtotal">0</span> ₽</div>
+                <div class="total-row"><span>НДС 20%:</span> <span id="vat">0</span> ₽</div>
+                <div class="total-row grand"><span>Итого с НДС:</span> <span id="grand">0</span> ₽</div>
+            </div>
         </section>
     </div>
 
