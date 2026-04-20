@@ -1,70 +1,125 @@
-const works = [
-    { id: 'demolition', name: 'Демонтаж старых покрытий', price: 350 },
-    { id: 'walls-align', name: 'Выравнивание стен', price: 600 },
-    { id: 'floor-align', name: 'Выравнивание пола (стяжка)', price: 700 },
-    { id: 'ceiling', name: 'Покраска потолка', price: 250 },
-    { id: 'wallpaper', name: 'Поклейка обоев', price: 300 },
-    { id: 'tile', name: 'Укладка плитки', price: 1200 },
-    { id: 'laminate', name: 'Укладка ламината', price: 400 },
-    { id: 'electric', name: 'Электромонтаж', price: 500 },
-    { id: 'plumbing', name: 'Сантехнические работы', price: 800 },
-];
-
-const materials = [
-    { id: 'primer', name: 'Грунтовка', price: 80 },
-    { id: 'plaster', name: 'Штукатурка', price: 250 },
-    { id: 'putty', name: 'Шпаклёвка', price: 180 },
-    { id: 'paint', name: 'Краска', price: 220 },
-    { id: 'wallpaper-mat', name: 'Обои', price: 400 },
-    { id: 'tile-mat', name: 'Плитка', price: 900 },
-    { id: 'laminate-mat', name: 'Ламинат', price: 700 },
-    { id: 'cable', name: 'Кабель и фурнитура', price: 150 },
-    { id: 'pipes', name: 'Трубы и фитинги', price: 200 },
-];
+const FILES = ['one.json', 'two.json', 'th.json'];
+const SKIP_WORDS = ['итого', 'ндс'];
+const AREA_UNITS = ['м.', 'м.п.', 'м2'];
 
 const areaInput = document.getElementById('area');
-const worksList = document.getElementById('works-list');
-const materialsList = document.getElementById('materials-list');
-const worksTotalEl = document.getElementById('works-total');
-const materialsTotalEl = document.getElementById('materials-total');
+const tbody = document.getElementById('estimate-body');
+const statusEl = document.getElementById('status');
 const grandTotalEl = document.getElementById('grand-total');
 
-function formatPrice(value) {
-    return new Intl.NumberFormat('ru-RU').format(Math.round(value));
+let items = [];
+
+function toNumber(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string') return NaN;
+    const cleaned = value.replace(/\s/g, '').replace(',', '.');
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? NaN : n;
 }
 
-function renderList(container, items, type) {
-    container.innerHTML = items.map(item => `
-        <label>
-            <input type="checkbox" data-type="${type}" data-id="${item.id}" data-price="${item.price}">
-            <span class="name">${item.name}</span>
-            <span class="price">${item.price} ₽/м²</span>
-        </label>
-    `).join('');
+function pickName(row) {
+    if (row.Column2 != null && String(row.Column2).trim() !== '') return String(row.Column2).trim();
+    for (const key of Object.keys(row)) {
+        if (key.startsWith('МО') && row[key] != null && String(row[key]).trim() !== '') {
+            return String(row[key]).trim();
+        }
+    }
+    return '';
 }
 
-function calculate() {
+function pickFirstNumber(row, keys) {
+    for (const key of keys) {
+        const n = toNumber(row[key]);
+        if (!isNaN(n)) return n;
+    }
+    return 0;
+}
+
+function shouldSkip(name, qty) {
+    if (isNaN(qty)) return true;
+    const lower = name.toLowerCase();
+    return SKIP_WORDS.some(w => lower.includes(w));
+}
+
+function extractItems(data) {
+    let rows = [];
+    if (Array.isArray(data)) rows = data;
+    else if (data && typeof data === 'object') {
+        for (const v of Object.values(data)) {
+            if (Array.isArray(v)) rows = rows.concat(v);
+        }
+    }
+    const result = [];
+    for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
+        const name = pickName(row);
+        if (!name) continue;
+        const qty = toNumber(row.Column4);
+        if (shouldSkip(name, qty)) continue;
+        const unit = row.Column3 != null ? String(row.Column3).trim() : '';
+        const materialPrice = toNumber(row.Column5) || 0;
+        const workPrice = pickFirstNumber(row, ['Column6', 'Column7']);
+        const rowTotal = pickFirstNumber(row, ['Column8', 'Column10']);
+        const unitPrice = (materialPrice || 0) + (workPrice || 0);
+        result.push({ name, unit, qty, unitPrice, rowTotal });
+    }
+    return result;
+}
+
+function formatNumber(value) {
+    return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
+}
+
+function isAreaUnit(unit) {
+    const u = (unit || '').toLowerCase().replace(/\s/g, '');
+    return AREA_UNITS.some(a => u === a.toLowerCase());
+}
+
+function calcRowTotal(item, area) {
+    if (isAreaUnit(item.unit)) return item.unitPrice * area;
+    return item.rowTotal || item.unitPrice * item.qty;
+}
+
+function render() {
     const area = parseFloat(areaInput.value) || 0;
-    let worksTotal = 0;
-    let materialsTotal = 0;
-
-    document.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
-        const price = parseFloat(cb.dataset.price) * area;
-        if (cb.dataset.type === 'works') worksTotal += price;
-        else materialsTotal += price;
-    });
-
-    worksTotalEl.textContent = formatPrice(worksTotal);
-    materialsTotalEl.textContent = formatPrice(materialsTotal);
-    grandTotalEl.textContent = formatPrice(worksTotal + materialsTotal);
+    let total = 0;
+    tbody.innerHTML = items.map(item => {
+        const rowTotal = calcRowTotal(item, area);
+        total += rowTotal;
+        return `
+            <tr>
+                <td>${item.name}</td>
+                <td>${item.unit}</td>
+                <td class="num">${formatNumber(item.qty)}</td>
+                <td class="num">${formatNumber(item.unitPrice)}</td>
+                <td class="num">${formatNumber(rowTotal)}</td>
+            </tr>
+        `;
+    }).join('');
+    grandTotalEl.textContent = formatNumber(total);
 }
 
-renderList(worksList, works, 'works');
-renderList(materialsList, materials, 'materials');
+function parseJsonLoose(text) {
+    try { return JSON.parse(text); } catch (_) {}
+    return JSON.parse('[' + text + ']');
+}
 
-areaInput.addEventListener('input', calculate);
-document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.addEventListener('change', calculate);
-});
+function loadAll() {
+    statusEl.textContent = 'Загрузка данных…';
+    Promise.all(FILES.map(f => fetch(f).then(r => {
+        if (!r.ok) throw new Error(`${f}: ${r.status}`);
+        return r.text().then(parseJsonLoose);
+    })))
+    .then(results => {
+        items = results.flatMap(extractItems);
+        statusEl.textContent = `Загружено позиций: ${items.length}`;
+        render();
+    })
+    .catch(err => {
+        statusEl.textContent = `Ошибка загрузки: ${err.message}`;
+        statusEl.classList.add('error');
+    });
+}
 
-calculate();
+areaInput.addEventListener('input', render);
+loadAll();
