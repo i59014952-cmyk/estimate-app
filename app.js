@@ -251,8 +251,13 @@ function downloadTemplate() {
 
 function parseCsv(text) {
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-    const sep = (text.split('\n')[0].match(/;/g) || []).length >
-                (text.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+    const semi = (text.match(/;/g) || []).length;
+    const comma = (text.match(/,/g) || []).length;
+    const tab = (text.match(/\t/g) || []).length;
+    let sep = ';';
+    if (tab > semi && tab > comma) sep = '\t';
+    else if (comma > semi) sep = ',';
+    console.log(`[CSV] разделитель: "${sep}" (; ${semi}, , ${comma}, \\t ${tab})`);
     const rows = [];
     let field = '';
     let row = [];
@@ -298,7 +303,8 @@ function isValidImportRow(row) {
 }
 
 function importRows(rows) {
-    console.log('CSV/XLSX первые 5 строк после парсинга:', rows.slice(0, 5));
+    console.log(`[Импорт] всего строк после парсинга: ${rows.length}`);
+    console.log('[Импорт] первые 10 строк:', rows.slice(0, 10));
     let imported = 0;
     let notFoundCount = 0;
     let skipped = 0;
@@ -308,6 +314,7 @@ function importRows(rows) {
         const qty = toNumber(row[1]);
         const q = isFinite(qty) && qty > 0 ? qty : 1;
         const match = fuzzyFind(name);
+        console.log(`[Поиск] "${name}" (qty=${q}) -> ${match ? 'найдено: ' + match.name : 'НЕ найдено'}`);
         if (match) {
             addRow({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false });
         } else {
@@ -316,6 +323,7 @@ function importRows(rows) {
         }
         imported++;
     }
+    console.log(`[Импорт] итог: загружено=${imported}, без цены=${notFoundCount}, пропущено=${skipped}`);
     return { imported, notFoundCount, skipped };
 }
 
@@ -367,6 +375,10 @@ function loadCatalog() {
         return r.text().then(parseJsonLoose);
     })))
     .then(results => {
+        results.forEach((data, i) => {
+            const items = extractItems(data);
+            console.log(`[JSON] ${FILES[i]}: распаршено ${items.length} позиций`);
+        });
         const all = results.flatMap(extractItems);
         const seen = new Map();
         for (const item of all) {
@@ -375,12 +387,15 @@ function loadCatalog() {
         }
         catalog = Array.from(seen.values());
         for (const item of catalog) item.tokenSet = new Set(tokenize(item.name));
+        console.log(`[JSON] Загружено ${catalog.length} позиций из JSON (после дедупа)`);
+        console.log('[JSON] пример первых 3 позиций:', catalog.slice(0, 3));
         statusEl.textContent = `Каталог загружен: ${catalog.length} позиций`;
         searchInput.disabled = false;
         uploadBtn.disabled = false;
         searchInput.focus();
     })
     .catch(err => {
+        console.error('[JSON] Ошибка загрузки:', err);
         statusEl.textContent = `Ошибка загрузки: ${err.message}`;
         statusEl.classList.add('error');
     });
