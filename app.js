@@ -79,19 +79,15 @@ function fuzzyFind(query) {
     if (qTokens.length === 0) return null;
     let best = null;
     let bestHits = 0;
-    let bestScore = 0;
     for (const item of catalog) {
         let hits = 0;
         for (const t of qTokens) if (item.tokenSet.has(t)) hits++;
-        const score = hits / qTokens.length;
-        if (hits > bestHits || (hits === bestHits && score > bestScore)) {
+        if (hits > bestHits) {
             bestHits = hits;
-            bestScore = score;
             best = item;
         }
     }
-    const ok = bestScore >= 1.0 || (bestHits >= 2 && bestScore >= 0.5);
-    return ok ? best : null;
+    return bestHits >= 2 ? best : null;
 }
 
 function formatMoney(value) {
@@ -286,35 +282,30 @@ function readXlsx(arrayBuffer) {
     return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 }
 
-const SKIP_PHRASES = ['смета', 'объект:', 'адрес', 'основание:', '№№', 'п/п'];
+const SKIP_PHRASES = ['смета', 'объект:', 'адрес:', 'основание:', '№№', 'п/п', 'наименование'];
 
-function isValidImportRow(name, rawQty) {
+function isValidImportRow(row) {
+    const allEmpty = row.every(c => String(c ?? '').trim() === '');
+    if (allEmpty) return false;
+    const name = String(row[0] ?? '').trim();
     if (!name) return false;
-    if (name.startsWith('#')) return false;
+    if (/^\s*\d+([.,]\d+)?\s*$/.test(name)) return false;
     const lower = name.toLowerCase();
     for (const phrase of SKIP_PHRASES) {
         if (lower.includes(phrase)) return false;
     }
-    if (/^\s*\d+([.,]\d+)?\s*$/.test(name)) return false;
-    if (name.length <= 10) return false;
-    if (name.trim().split(/\s+/).length < 2) return false;
-    const qtyStr = String(rawQty ?? '').trim();
-    if (qtyStr !== '' && isNaN(toNumber(qtyStr))) return false;
     return true;
 }
 
 function importRows(rows) {
+    console.log('CSV/XLSX первые 5 строк после парсинга:', rows.slice(0, 5));
     let imported = 0;
     let notFoundCount = 0;
     let skipped = 0;
     for (const row of rows) {
+        if (!isValidImportRow(row)) { skipped++; continue; }
         const name = String(row[0] ?? '').trim();
-        const rawQty = row[1];
-        if (!isValidImportRow(name, rawQty)) {
-            if (name) skipped++;
-            continue;
-        }
-        const qty = toNumber(rawQty);
+        const qty = toNumber(row[1]);
         const q = isFinite(qty) && qty > 0 ? qty : 1;
         const match = fuzzyFind(name);
         if (match) {
