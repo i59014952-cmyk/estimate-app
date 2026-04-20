@@ -200,6 +200,29 @@ tr.not-found .price-missing {
     font-style: italic;
 }
 
+.src-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.src-badge.local {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.src-badge.ddc {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.src-badge.none {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
 .estimate-header {
     display: flex;
     justify-content: space-between;

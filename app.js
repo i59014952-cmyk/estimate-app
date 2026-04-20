@@ -1,7 +1,9 @@
 const FILES = ['one.json', 'two.json', 'th.json'];
+const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
 const SKIP_WORDS = ['итого', 'ндс'];
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
+const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', none: '—' };
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -17,6 +19,7 @@ const fileInput = document.getElementById('file-input');
 const uploadSummary = document.getElementById('upload-summary');
 
 let catalog = [];
+let ddcCatalog = [];
 let estimate = [];
 let nextId = 1;
 
@@ -74,12 +77,10 @@ function tokenize(s) {
         .filter(w => w.length >= 3);
 }
 
-function fuzzyFind(query) {
-    const qTokens = tokenize(query);
-    if (qTokens.length === 0) return null;
+function fuzzyFindIn(qTokens, pool) {
     let best = null;
     let bestHits = 0;
-    for (const item of catalog) {
+    for (const item of pool) {
         let hits = 0;
         for (const t of qTokens) if (item.tokenSet.has(t)) hits++;
         if (hits > bestHits) {
@@ -88,6 +89,16 @@ function fuzzyFind(query) {
         }
     }
     return bestHits >= 2 ? best : null;
+}
+
+function fuzzyFind(query) {
+    const qTokens = tokenize(query);
+    if (qTokens.length === 0) return null;
+    const local = fuzzyFindIn(qTokens, catalog);
+    if (local) return { ...local, source: 'local' };
+    const ddc = fuzzyFindIn(qTokens, ddcCatalog);
+    if (ddc) return { ...ddc, source: 'ddc' };
+    return null;
 }
 
 function formatMoney(value) {
@@ -131,7 +142,7 @@ function renderResults(query) {
             const add = () => {
                 const qty = parseFloat(qtyInput.value);
                 if (!isFinite(qty) || qty <= 0) return;
-                addRow({ name: item.name, unit: item.unit, unitPrice: item.unitPrice, qty, notFound: false });
+                addRow({ name: item.name, unit: item.unit, unitPrice: item.unitPrice, qty, notFound: false, source: 'local' });
             };
             addBtn.addEventListener('click', add);
             qtyInput.addEventListener('keydown', e => {
@@ -142,7 +153,7 @@ function renderResults(query) {
     resultsEl.classList.add('open');
 }
 
-function addRow({ name, unit, unitPrice, qty, notFound }) {
+function addRow({ name, unit, unitPrice, qty, notFound, source }) {
     estimate.push({
         id: nextId++,
         name,
@@ -150,6 +161,7 @@ function addRow({ name, unit, unitPrice, qty, notFound }) {
         unitPrice: unitPrice || 0,
         qty: qty || 0,
         notFound: !!notFound,
+        source: source || (notFound ? 'none' : 'local'),
     });
     renderEstimate();
 }
@@ -170,7 +182,7 @@ function updateQty(id, qty) {
 
 function renderEstimate() {
     if (estimate.length === 0) {
-        bodyEl.innerHTML = '<tr class="empty"><td colspan="6">Ничего не добавлено</td></tr>';
+        bodyEl.innerHTML = '<tr class="empty"><td colspan="7">Ничего не добавлено</td></tr>';
     } else {
         bodyEl.innerHTML = estimate.map(r => `
             <tr data-id="${r.id}" class="${r.notFound ? 'not-found' : ''}">
@@ -179,6 +191,7 @@ function renderEstimate() {
                 <td><input type="number" class="qty" min="0" step="0.01" value="${r.qty}"></td>
                 <td class="num">${r.notFound ? '<span class="price-missing">цена не найдена</span>' : formatMoney(r.unitPrice)}</td>
                 <td class="num row-total">${r.notFound ? '—' : formatMoney(r.qty * r.unitPrice)}</td>
+                <td><span class="src-badge ${r.source}">${SOURCE_LABELS[r.source] || '—'}</span></td>
                 <td><button type="button" class="del-btn">Удалить</button></td>
             </tr>
         `).join('');
@@ -223,7 +236,7 @@ function downloadCsv(rows, filename) {
 
 function exportCsv() {
     if (estimate.length === 0) return;
-    const rows = [['Название', 'Ед. изм.', 'Кол-во', 'Цена за ед.', 'Итого']];
+    const rows = [['Название', 'Ед. изм.', 'Кол-во', 'Цена за ед.', 'Итого', 'Источник']];
     for (const r of estimate) {
         rows.push([
             r.name,
@@ -231,14 +244,15 @@ function exportCsv() {
             r.qty,
             r.notFound ? 'цена не найдена' : r.unitPrice.toFixed(2),
             r.notFound ? '' : (r.qty * r.unitPrice).toFixed(2),
+            SOURCE_LABELS[r.source] || '',
         ]);
     }
     const subtotal = estimate.reduce((s, r) => r.notFound ? s : s + r.qty * r.unitPrice, 0);
     const vat = subtotal * VAT_RATE;
     rows.push([]);
-    rows.push(['', '', '', 'Сумма', subtotal.toFixed(2)]);
-    rows.push(['', '', '', 'НДС 20%', vat.toFixed(2)]);
-    rows.push(['', '', '', 'Итого с НДС', (subtotal + vat).toFixed(2)]);
+    rows.push(['', '', '', 'Сумма', subtotal.toFixed(2), '']);
+    rows.push(['', '', '', 'НДС 20%', vat.toFixed(2), '']);
+    rows.push(['', '', '', 'Итого с НДС', (subtotal + vat).toFixed(2), '']);
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
@@ -334,9 +348,9 @@ function importRows(rows) {
         const match = fuzzyFind(name);
         console.log(`[Поиск] "${name}" (qty=${q}) -> ${match ? 'найдено: ' + match.name : 'НЕ найдено'}`);
         if (match) {
-            addRow({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false });
+            addRow({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source });
         } else {
-            addRow({ name, unit: '', unitPrice: 0, qty: q, notFound: true });
+            addRow({ name, unit: '', unitPrice: 0, qty: q, notFound: true, source: 'none' });
             notFoundCount++;
         }
         imported++;
@@ -386,13 +400,45 @@ function handleFile(file) {
     }
 }
 
-function loadCatalog() {
-    statusEl.textContent = 'Загрузка каталога…';
-    Promise.all(FILES.map(f => fetch(f).then(r => {
+function extractDdcItems(rows) {
+    if (rows.length < 2) return [];
+    const header = rows[0].map(h => String(h || '').trim().toLowerCase());
+    const nameIdx = header.indexOf('name');
+    const unitIdx = header.indexOf('unit');
+    const priceIdx = header.indexOf('price_avg');
+    const sectionIdx = header.indexOf('parent_section');
+    const collectionIdx = header.indexOf('parent_collection');
+    if (priceIdx === -1) {
+        console.warn('[DDC] не найдена колонка price_avg, заголовок:', header);
+        return [];
+    }
+    const sections = new Map();
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const section = sectionIdx !== -1 ? String(row[sectionIdx] || '').trim() : '';
+        const resName = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : '';
+        const displayName = section || resName;
+        if (!displayName) continue;
+        if (sections.has(displayName)) continue;
+        const price = toNumber(row[priceIdx]);
+        if (isNaN(price) || price <= 0) continue;
+        const unit = unitIdx !== -1 ? String(row[unitIdx] || '').trim() : '';
+        const collection = collectionIdx !== -1 ? String(row[collectionIdx] || '').trim() : '';
+        sections.set(displayName, {
+            name: displayName,
+            unit,
+            unitPrice: price,
+            searchText: `${displayName} ${collection} ${resName}`.trim(),
+        });
+    }
+    return Array.from(sections.values());
+}
+
+function loadLocalCatalog() {
+    return Promise.all(FILES.map(f => fetch(f).then(r => {
         if (!r.ok) throw new Error(`${f}: ${r.status}`);
         return r.text().then(parseJsonLoose);
-    })))
-    .then(results => {
+    }))).then(results => {
         results.forEach((data, i) => {
             const items = extractItems(data);
             console.log(`[JSON] ${FILES[i]}: распаршено ${items.length} позиций`);
@@ -406,17 +452,45 @@ function loadCatalog() {
         catalog = Array.from(seen.values());
         for (const item of catalog) item.tokenSet = new Set(tokenize(item.name));
         console.log(`[JSON] Загружено ${catalog.length} позиций из JSON (после дедупа)`);
-        console.log('[JSON] пример первых 3 позиций:', catalog.slice(0, 3));
-        statusEl.textContent = `Каталог загружен: ${catalog.length} позиций`;
-        searchInput.disabled = false;
-        uploadBtn.disabled = false;
-        searchInput.focus();
-    })
-    .catch(err => {
-        console.error('[JSON] Ошибка загрузки:', err);
-        statusEl.textContent = `Ошибка загрузки: ${err.message}`;
-        statusEl.classList.add('error');
     });
+}
+
+function loadDdcCatalog() {
+    return fetch(DDC_URL).then(r => {
+        if (!r.ok) throw new Error(`DDC: ${r.status}`);
+        return r.text();
+    }).then(text => {
+        const rows = parseCsv(text);
+        const items = extractDdcItems(rows);
+        const seen = new Map();
+        for (const item of items) {
+            const key = item.name + '|' + item.unit;
+            if (!seen.has(key)) seen.set(key, item);
+        }
+        ddcCatalog = Array.from(seen.values());
+        for (const item of ddcCatalog) item.tokenSet = new Set(tokenize(item.searchText || item.name));
+        console.log(`[DDC] Загружено ${ddcCatalog.length} позиций из DDC базы`);
+        console.log('[DDC] пример первых 3 позиций:', ddcCatalog.slice(0, 3));
+    }).catch(err => {
+        console.warn('[DDC] Не удалось загрузить DDC базу:', err.message);
+        ddcCatalog = [];
+    });
+}
+
+function loadCatalog() {
+    statusEl.textContent = 'Загрузка каталогов…';
+    Promise.all([loadLocalCatalog(), loadDdcCatalog()])
+        .then(() => {
+            statusEl.textContent = `Своя база: ${catalog.length}, DDC база: ${ddcCatalog.length}`;
+            searchInput.disabled = false;
+            uploadBtn.disabled = false;
+            searchInput.focus();
+        })
+        .catch(err => {
+            console.error('[Каталог] Ошибка загрузки:', err);
+            statusEl.textContent = `Ошибка загрузки: ${err.message}`;
+            statusEl.classList.add('error');
+        });
 }
 
 searchInput.addEventListener('input', e => renderResults(e.target.value));
