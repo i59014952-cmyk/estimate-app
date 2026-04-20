@@ -11,6 +11,10 @@ const subtotalEl = document.getElementById('subtotal');
 const vatEl = document.getElementById('vat');
 const grandEl = document.getElementById('grand');
 const exportBtn = document.getElementById('export-btn');
+const uploadBtn = document.getElementById('upload-btn');
+const templateBtn = document.getElementById('template-btn');
+const fileInput = document.getElementById('file-input');
+const uploadSummary = document.getElementById('upload-summary');
 
 let catalog = [];
 let estimate = [];
@@ -63,8 +67,39 @@ function extractItems(data) {
     return result;
 }
 
+function tokenize(s) {
+    return String(s).toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3);
+}
+
+function fuzzyFind(query) {
+    const qTokens = tokenize(query);
+    if (qTokens.length === 0) return null;
+    let best = null;
+    let bestHits = 0;
+    let bestScore = 0;
+    for (const item of catalog) {
+        let hits = 0;
+        for (const t of qTokens) if (item.tokenSet.has(t)) hits++;
+        const score = hits / qTokens.length;
+        if (hits > bestHits || (hits === bestHits && score > bestScore)) {
+            bestHits = hits;
+            bestScore = score;
+            best = item;
+        }
+    }
+    const ok = bestScore >= 1.0 || (bestHits >= 2 && bestScore >= 0.5);
+    return ok ? best : null;
+}
+
 function formatMoney(value) {
     return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Math.round(value * 100) / 100);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function renderResults(query) {
@@ -86,7 +121,7 @@ function renderResults(query) {
     } else {
         resultsEl.innerHTML = matches.map((item, idx) => `
             <div class="result-item" data-idx="${idx}">
-                <span class="r-name" title="${escapeAttr(item.name)}">${escapeHtml(item.name)}</span>
+                <span class="r-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
                 <span class="r-unit">${escapeHtml(item.unit)}</span>
                 <span class="r-price">${formatMoney(item.unitPrice)} ₽</span>
                 <input type="number" min="0" step="0.01" value="1" class="r-qty">
@@ -100,7 +135,7 @@ function renderResults(query) {
             const add = () => {
                 const qty = parseFloat(qtyInput.value);
                 if (!isFinite(qty) || qty <= 0) return;
-                addToEstimate(item, qty);
+                addRow({ name: item.name, unit: item.unit, unitPrice: item.unitPrice, qty, notFound: false });
             };
             addBtn.addEventListener('click', add);
             qtyInput.addEventListener('keydown', e => {
@@ -111,16 +146,15 @@ function renderResults(query) {
     resultsEl.classList.add('open');
 }
 
-function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function escapeAttr(s) {
-    return escapeHtml(s);
-}
-
-function addToEstimate(item, qty) {
-    estimate.push({ id: nextId++, name: item.name, unit: item.unit, unitPrice: item.unitPrice, qty });
+function addRow({ name, unit, unitPrice, qty, notFound }) {
+    estimate.push({
+        id: nextId++,
+        name,
+        unit: unit || '',
+        unitPrice: unitPrice || 0,
+        qty: qty || 0,
+        notFound: !!notFound,
+    });
     renderEstimate();
 }
 
@@ -135,7 +169,7 @@ function updateQty(id, qty) {
     row.qty = isFinite(qty) && qty >= 0 ? qty : 0;
     renderTotals();
     const totalCell = bodyEl.querySelector(`tr[data-id="${id}"] .row-total`);
-    if (totalCell) totalCell.textContent = formatMoney(row.qty * row.unitPrice);
+    if (totalCell) totalCell.textContent = row.notFound ? '—' : formatMoney(row.qty * row.unitPrice);
 }
 
 function renderEstimate() {
@@ -143,12 +177,12 @@ function renderEstimate() {
         bodyEl.innerHTML = '<tr class="empty"><td colspan="6">Ничего не добавлено</td></tr>';
     } else {
         bodyEl.innerHTML = estimate.map(r => `
-            <tr data-id="${r.id}">
+            <tr data-id="${r.id}" class="${r.notFound ? 'not-found' : ''}">
                 <td>${escapeHtml(r.name)}</td>
                 <td>${escapeHtml(r.unit)}</td>
                 <td><input type="number" class="qty" min="0" step="0.01" value="${r.qty}"></td>
-                <td class="num">${formatMoney(r.unitPrice)}</td>
-                <td class="num row-total">${formatMoney(r.qty * r.unitPrice)}</td>
+                <td class="num">${r.notFound ? '<span class="price-missing">цена не найдена</span>' : formatMoney(r.unitPrice)}</td>
+                <td class="num row-total">${r.notFound ? '—' : formatMoney(r.qty * r.unitPrice)}</td>
                 <td><button type="button" class="del-btn">Удалить</button></td>
             </tr>
         `).join('');
@@ -164,7 +198,7 @@ function renderEstimate() {
 }
 
 function renderTotals() {
-    const subtotal = estimate.reduce((s, r) => s + r.qty * r.unitPrice, 0);
+    const subtotal = estimate.reduce((s, r) => r.notFound ? s : s + r.qty * r.unitPrice, 0);
     const vat = subtotal * VAT_RATE;
     subtotalEl.textContent = formatMoney(subtotal);
     vatEl.textContent = formatMoney(vat);
@@ -172,34 +206,150 @@ function renderTotals() {
     exportBtn.disabled = estimate.length === 0;
 }
 
-function exportCsv() {
-    if (estimate.length === 0) return;
-    const rows = [['Название', 'Ед. изм.', 'Кол-во', 'Цена за ед.', 'Итого']];
-    for (const r of estimate) {
-        rows.push([r.name, r.unit, r.qty, r.unitPrice.toFixed(2), (r.qty * r.unitPrice).toFixed(2)]);
-    }
-    const subtotal = estimate.reduce((s, r) => s + r.qty * r.unitPrice, 0);
-    const vat = subtotal * VAT_RATE;
-    rows.push([]);
-    rows.push(['', '', '', 'Сумма', subtotal.toFixed(2)]);
-    rows.push(['', '', '', 'НДС 20%', vat.toFixed(2)]);
-    rows.push(['', '', '', 'Итого с НДС', (subtotal + vat).toFixed(2)]);
+function csvCell(value) {
+    const s = String(value ?? '');
+    if (/[";\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+}
+
+function downloadCsv(rows, filename) {
     const csv = rows.map(r => r.map(csvCell).join(';')).join('\r\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `estimate-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
 
-function csvCell(value) {
-    const s = String(value ?? '');
-    if (/[";\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-    return s;
+function exportCsv() {
+    if (estimate.length === 0) return;
+    const rows = [['Название', 'Ед. изм.', 'Кол-во', 'Цена за ед.', 'Итого']];
+    for (const r of estimate) {
+        rows.push([
+            r.name,
+            r.unit,
+            r.qty,
+            r.notFound ? 'цена не найдена' : r.unitPrice.toFixed(2),
+            r.notFound ? '' : (r.qty * r.unitPrice).toFixed(2),
+        ]);
+    }
+    const subtotal = estimate.reduce((s, r) => r.notFound ? s : s + r.qty * r.unitPrice, 0);
+    const vat = subtotal * VAT_RATE;
+    rows.push([]);
+    rows.push(['', '', '', 'Сумма', subtotal.toFixed(2)]);
+    rows.push(['', '', '', 'НДС 20%', vat.toFixed(2)]);
+    rows.push(['', '', '', 'Итого с НДС', (subtotal + vat).toFixed(2)]);
+    downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+function downloadTemplate() {
+    downloadCsv([['Наименование', 'Количество']], 'template.csv');
+}
+
+function parseCsv(text) {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const sep = (text.split('\n')[0].match(/;/g) || []).length >
+                (text.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+    const rows = [];
+    let field = '';
+    let row = [];
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+            if (c === '"') {
+                if (text[i + 1] === '"') { field += '"'; i++; }
+                else inQuotes = false;
+            } else field += c;
+        } else {
+            if (c === '"') inQuotes = true;
+            else if (c === sep) { row.push(field); field = ''; }
+            else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+            else if (c === '\r') { /* skip */ }
+            else field += c;
+        }
+    }
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(cell => cell && cell.trim() !== ''));
+}
+
+function readXlsx(arrayBuffer) {
+    const wb = XLSX.read(arrayBuffer, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+}
+
+function looksLikeHeader(row) {
+    const a = String(row[0] || '').toLowerCase();
+    const b = String(row[1] || '').toLowerCase();
+    return a.includes('наимен') || b.includes('кол');
+}
+
+function importRows(rows) {
+    let imported = 0;
+    let notFoundCount = 0;
+    let start = 0;
+    if (rows.length > 0 && looksLikeHeader(rows[0])) start = 1;
+    for (let i = start; i < rows.length; i++) {
+        const name = String(rows[i][0] ?? '').trim();
+        const qty = toNumber(rows[i][1]);
+        if (!name) continue;
+        const q = isFinite(qty) && qty > 0 ? qty : 1;
+        const match = fuzzyFind(name);
+        if (match) {
+            addRow({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false });
+        } else {
+            addRow({ name, unit: '', unitPrice: 0, qty: q, notFound: true });
+            notFoundCount++;
+        }
+        imported++;
+    }
+    return { imported, notFoundCount };
+}
+
+function handleFile(file) {
+    uploadSummary.classList.remove('error');
+    uploadSummary.textContent = `Обработка файла: ${file.name}…`;
+    const ext = file.name.toLowerCase().split('.').pop();
+    const reader = new FileReader();
+    reader.onerror = () => {
+        uploadSummary.textContent = 'Ошибка чтения файла';
+        uploadSummary.classList.add('error');
+    };
+    if (ext === 'xlsx' || ext === 'xls') {
+        if (typeof XLSX === 'undefined') {
+            uploadSummary.textContent = 'Библиотека XLSX не загружена — используйте CSV';
+            uploadSummary.classList.add('error');
+            return;
+        }
+        reader.onload = e => {
+            try {
+                const rows = readXlsx(new Uint8Array(e.target.result));
+                const { imported, notFoundCount } = importRows(rows);
+                uploadSummary.textContent = `Загружено позиций: ${imported}, без цены: ${notFoundCount}`;
+            } catch (err) {
+                uploadSummary.textContent = `Ошибка разбора: ${err.message}`;
+                uploadSummary.classList.add('error');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        reader.onload = e => {
+            try {
+                const rows = parseCsv(e.target.result);
+                const { imported, notFoundCount } = importRows(rows);
+                uploadSummary.textContent = `Загружено позиций: ${imported}, без цены: ${notFoundCount}`;
+            } catch (err) {
+                uploadSummary.textContent = `Ошибка разбора: ${err.message}`;
+                uploadSummary.classList.add('error');
+            }
+        };
+        reader.readAsText(file, 'utf-8');
+    }
 }
 
 function loadCatalog() {
@@ -216,8 +366,10 @@ function loadCatalog() {
             if (!seen.has(key)) seen.set(key, item);
         }
         catalog = Array.from(seen.values());
+        for (const item of catalog) item.tokenSet = new Set(tokenize(item.name));
         statusEl.textContent = `Каталог загружен: ${catalog.length} позиций`;
         searchInput.disabled = false;
+        uploadBtn.disabled = false;
         searchInput.focus();
     })
     .catch(err => {
@@ -234,6 +386,13 @@ document.addEventListener('click', e => {
     if (!e.target.closest('.search-block')) resultsEl.classList.remove('open');
 });
 exportBtn.addEventListener('click', exportCsv);
+templateBtn.addEventListener('click', downloadTemplate);
+uploadBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+    e.target.value = '';
+});
 
 renderEstimate();
 loadCatalog();

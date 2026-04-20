@@ -18,6 +18,13 @@
             <div id="results" class="results"></div>
         </section>
 
+        <section class="upload-block">
+            <button id="upload-btn" type="button" disabled>Загрузить список работ</button>
+            <button id="template-btn" type="button">Скачать шаблон</button>
+            <input type="file" id="file-input" accept=".csv,.xlsx,.xls" hidden>
+            <div id="upload-summary" class="upload-summary"></div>
+        </section>
+
         <section class="estimate">
             <div class="estimate-header">
                 <h2>Смета</h2>
@@ -47,6 +54,7 @@
         </section>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

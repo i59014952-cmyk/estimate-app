@@ -137,6 +137,69 @@ h2 {
     text-align: center;
 }
 
+.upload-block {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    padding: 14px 16px;
+    background: #f9fafb;
+    border-radius: 8px;
+}
+
+.upload-block button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+#upload-btn {
+    background: #2563eb;
+    color: #fff;
+}
+
+#upload-btn:hover:not(:disabled) {
+    background: #1d4ed8;
+}
+
+#upload-btn:disabled {
+    background: #d1d5db;
+    cursor: not-allowed;
+}
+
+#template-btn {
+    background: #fff;
+    color: #2563eb;
+    border: 1px solid #2563eb;
+}
+
+#template-btn:hover {
+    background: #eff6ff;
+}
+
+.upload-summary {
+    flex: 1;
+    min-width: 200px;
+    font-size: 0.9rem;
+    color: #6b7280;
+}
+
+.upload-summary.error {
+    color: #b91c1c;
+}
+
+tr.not-found td {
+    background: #fef3c7;
+}
+
+tr.not-found .price-missing {
+    color: #b91c1c;
+    font-style: italic;
+}
+
 .estimate-header {
     display: flex;
     justify-content: space-between;
