@@ -301,7 +301,11 @@ function readXlsx(arrayBuffer) {
     return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 }
 
-const SKIP_PHRASES = ['смета', 'объект:', 'адрес:', 'основание:', '№№', 'п/п', 'наименование'];
+const SKIP_PHRASES = [
+    'смета', 'объект:', 'адрес:', 'основание:', '№№', 'п/п', 'наименование',
+    'итого', 'ндс', 'всего с ндс', 'всего без ндс', 'примечания', 'примечание',
+    'заказчик', 'подрядчик', 'исполнитель', 'подпись',
+];
 
 function isPureNumber(s) {
     return /^\s*\d+([.,]\d+)?\s*$/.test(s);
@@ -330,6 +334,7 @@ function extractNameAndQty(row) {
 
 function shouldSkipName(name) {
     if (!name) return true;
+    if (!/\p{L}{3,}/u.test(name)) return true;
     const lower = name.toLowerCase();
     for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
     return false;
