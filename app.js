@@ -247,7 +247,10 @@ function exportCsv() {
 }
 
 function downloadTemplate() {
-    downloadCsv([['Наименование', 'Количество']], 'template.csv');
+    downloadCsv([
+        ['# Заполните только реальные наименования работ и количество'],
+        ['Наименование', 'Количество'],
+    ], 'template.csv');
 }
 
 function parseCsv(text) {
@@ -283,21 +286,35 @@ function readXlsx(arrayBuffer) {
     return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 }
 
-function looksLikeHeader(row) {
-    const a = String(row[0] || '').toLowerCase();
-    const b = String(row[1] || '').toLowerCase();
-    return a.includes('наимен') || b.includes('кол');
+const SKIP_PHRASES = ['смета', 'объект:', 'адрес', 'основание:', '№№', 'п/п'];
+
+function isValidImportRow(name, rawQty) {
+    if (!name) return false;
+    if (name.startsWith('#')) return false;
+    const lower = name.toLowerCase();
+    for (const phrase of SKIP_PHRASES) {
+        if (lower.includes(phrase)) return false;
+    }
+    if (/^\s*\d+([.,]\d+)?\s*$/.test(name)) return false;
+    if (name.length <= 10) return false;
+    if (name.trim().split(/\s+/).length < 2) return false;
+    const qtyStr = String(rawQty ?? '').trim();
+    if (qtyStr !== '' && isNaN(toNumber(qtyStr))) return false;
+    return true;
 }
 
 function importRows(rows) {
     let imported = 0;
     let notFoundCount = 0;
-    let start = 0;
-    if (rows.length > 0 && looksLikeHeader(rows[0])) start = 1;
-    for (let i = start; i < rows.length; i++) {
-        const name = String(rows[i][0] ?? '').trim();
-        const qty = toNumber(rows[i][1]);
-        if (!name) continue;
+    let skipped = 0;
+    for (const row of rows) {
+        const name = String(row[0] ?? '').trim();
+        const rawQty = row[1];
+        if (!isValidImportRow(name, rawQty)) {
+            if (name) skipped++;
+            continue;
+        }
+        const qty = toNumber(rawQty);
         const q = isFinite(qty) && qty > 0 ? qty : 1;
         const match = fuzzyFind(name);
         if (match) {
@@ -308,7 +325,7 @@ function importRows(rows) {
         }
         imported++;
     }
-    return { imported, notFoundCount };
+    return { imported, notFoundCount, skipped };
 }
 
 function handleFile(file) {
@@ -329,8 +346,8 @@ function handleFile(file) {
         reader.onload = e => {
             try {
                 const rows = readXlsx(new Uint8Array(e.target.result));
-                const { imported, notFoundCount } = importRows(rows);
-                uploadSummary.textContent = `Загружено позиций: ${imported}, без цены: ${notFoundCount}`;
+                const { imported, notFoundCount, skipped } = importRows(rows);
+                uploadSummary.textContent = `Загружено: ${imported}, без цены: ${notFoundCount}, пропущено: ${skipped}`;
             } catch (err) {
                 uploadSummary.textContent = `Ошибка разбора: ${err.message}`;
                 uploadSummary.classList.add('error');
@@ -341,8 +358,8 @@ function handleFile(file) {
         reader.onload = e => {
             try {
                 const rows = parseCsv(e.target.result);
-                const { imported, notFoundCount } = importRows(rows);
-                uploadSummary.textContent = `Загружено позиций: ${imported}, без цены: ${notFoundCount}`;
+                const { imported, notFoundCount, skipped } = importRows(rows);
+                uploadSummary.textContent = `Загружено: ${imported}, без цены: ${notFoundCount}, пропущено: ${skipped}`;
             } catch (err) {
                 uploadSummary.textContent = `Ошибка разбора: ${err.message}`;
                 uploadSummary.classList.add('error');
