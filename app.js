@@ -289,17 +289,36 @@ function readXlsx(arrayBuffer) {
 
 const SKIP_PHRASES = ['смета', 'объект:', 'адрес:', 'основание:', '№№', 'п/п', 'наименование'];
 
-function isValidImportRow(row) {
-    const allEmpty = row.every(c => String(c ?? '').trim() === '');
-    if (allEmpty) return false;
-    const name = String(row[0] ?? '').trim();
-    if (!name) return false;
-    if (/^\s*\d+([.,]\d+)?\s*$/.test(name)) return false;
-    const lower = name.toLowerCase();
-    for (const phrase of SKIP_PHRASES) {
-        if (lower.includes(phrase)) return false;
+function isPureNumber(s) {
+    return /^\s*\d+([.,]\d+)?\s*$/.test(s);
+}
+
+function extractNameAndQty(row) {
+    const cells = row.map(c => String(c ?? '').trim());
+    let nameIdx = -1;
+    for (let i = 0; i < cells.length; i++) {
+        const c = cells[i];
+        if (!c) continue;
+        if (isPureNumber(c)) continue;
+        if (c.length < 3) continue;
+        nameIdx = i;
+        break;
     }
-    return true;
+    if (nameIdx === -1) return { name: '', qty: NaN };
+    const name = cells[nameIdx];
+    let qty = NaN;
+    for (let i = nameIdx + 1; i < cells.length; i++) {
+        const n = toNumber(cells[i]);
+        if (!isNaN(n) && n > 0) { qty = n; break; }
+    }
+    return { name, qty };
+}
+
+function shouldSkipName(name) {
+    if (!name) return true;
+    const lower = name.toLowerCase();
+    for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
+    return false;
 }
 
 function importRows(rows) {
@@ -309,9 +328,8 @@ function importRows(rows) {
     let notFoundCount = 0;
     let skipped = 0;
     for (const row of rows) {
-        if (!isValidImportRow(row)) { skipped++; continue; }
-        const name = String(row[0] ?? '').trim();
-        const qty = toNumber(row[1]);
+        const { name, qty } = extractNameAndQty(row);
+        if (!name || shouldSkipName(name)) { skipped++; continue; }
         const q = isFinite(qty) && qty > 0 ? qty : 1;
         const match = fuzzyFind(name);
         console.log(`[Поиск] "${name}" (qty=${q}) -> ${match ? 'найдено: ' + match.name : 'НЕ найдено'}`);
