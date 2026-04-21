@@ -172,3 +172,52 @@ async def prices(req: Req):
 @app.get("/health")
 def health():
     return {"ok": True, "browser": state["browser"] is not None}
+
+
+@app.get("/debug")
+async def debug(q: str = "цемент"):
+    browser: Browser = state["browser"]
+    if browser is None:
+        raise HTTPException(503, "browser not initialised")
+    context = await browser.new_context(
+        user_agent=USER_AGENT,
+        locale="ru-RU",
+        viewport={"width": 1366, "height": 900},
+    )
+    page = await context.new_page()
+    try:
+        url = SEARCH_URL.format(q=q.strip().replace(" ", "+"))
+        await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
+        await page.wait_for_timeout(2000)
+        final_url = page.url
+        html = await page.content()
+        # sample all data-test values and class names for guidance
+        data_tests = await page.evaluate(
+            "() => Array.from(new Set(Array.from(document.querySelectorAll('[data-test]')).map(e=>e.getAttribute('data-test'))))"
+        )
+        classes = await page.evaluate(
+            "() => { const c = new Map(); document.querySelectorAll('*').forEach(e => e.classList.forEach(cl => c.set(cl,(c.get(cl)||0)+1))); return Array.from(c.entries()).sort((a,b)=>b[1]-a[1]).slice(0,40); }"
+        )
+        selector_counts = {}
+        for sel in [
+            '[data-test="product-snippet"]',
+            '[data-test="product-card"]',
+            '[data-test*="product"]',
+            'article',
+            '.product-card',
+            '.pt-product-snippet',
+            '.product-snippet',
+            '[class*="product"]',
+            '[class*="snippet"]',
+            '[class*="catalog-item"]',
+        ]:
+            selector_counts[sel] = await page.locator(sel).count()
+        return {
+            "final_url": final_url,
+            "html_head": html[:8000],
+            "data_tests": data_tests[:50],
+            "top_classes": classes,
+            "selector_counts": selector_counts,
+        }
+    finally:
+        await context.close()
