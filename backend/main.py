@@ -212,9 +212,17 @@ async def debug(q: str = "цемент"):
             '[class*="catalog-item"]',
         ]:
             selector_counts[sel] = await page.locator(sel).count()
+        try:
+            await page.wait_for_selector('[class*="product"], [class*="Product"], [class*="snippet"]', timeout=8000)
+        except Exception:
+            pass
+        html = await page.content()
+        body_text = await page.evaluate("() => document.body.innerText.slice(0, 4000)")
         return {
             "final_url": final_url,
-            "html_head": html[:8000],
+            "html_len": len(html),
+            "html_head": html[:30000],
+            "body_text": body_text,
             "data_tests": data_tests[:50],
             "top_classes": classes,
             "selector_counts": selector_counts,
