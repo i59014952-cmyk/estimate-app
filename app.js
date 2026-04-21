@@ -1,9 +1,11 @@
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
+const PETROVICH_BACKEND = 'https://petrovich-proxy.onrender.com';
+const PETROVICH_BATCH = 20;
 const SKIP_WORDS = ['итого', 'ндс'];
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
-const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', none: '—' };
+const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', petrovich: 'Петрович', none: '—' };
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -15,6 +17,7 @@ const grandEl = document.getElementById('grand');
 const exportBtn = document.getElementById('export-btn');
 const uploadBtn = document.getElementById('upload-btn');
 const templateBtn = document.getElementById('template-btn');
+const petrovichBtn = document.getElementById('petrovich-btn');
 const fileInput = document.getElementById('file-input');
 const uploadSummary = document.getElementById('upload-summary');
 
@@ -153,7 +156,7 @@ function renderResults(query) {
     resultsEl.classList.add('open');
 }
 
-function addRow({ name, unit, unitPrice, qty, notFound, source }) {
+function addRow({ name, unit, unitPrice, qty, notFound, source, url }) {
     estimate.push({
         id: nextId++,
         name,
@@ -162,6 +165,7 @@ function addRow({ name, unit, unitPrice, qty, notFound, source }) {
         qty: qty || 0,
         notFound: !!notFound,
         source: source || (notFound ? 'none' : 'local'),
+        url: url || '',
     });
     renderEstimate();
 }
@@ -184,9 +188,13 @@ function renderEstimate() {
     if (estimate.length === 0) {
         bodyEl.innerHTML = '<tr class="empty"><td colspan="7">Ничего не добавлено</td></tr>';
     } else {
-        bodyEl.innerHTML = estimate.map(r => `
+        bodyEl.innerHTML = estimate.map(r => {
+            const nameCell = r.url
+                ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" class="product-link">${escapeHtml(r.name)}</a>`
+                : escapeHtml(r.name);
+            return `
             <tr data-id="${r.id}" class="${r.notFound ? 'not-found' : ''}">
-                <td>${escapeHtml(r.name)}</td>
+                <td>${nameCell}</td>
                 <td>${escapeHtml(r.unit)}</td>
                 <td><input type="number" class="qty" min="0" step="0.01" value="${r.qty}"></td>
                 <td class="num">${r.notFound ? '<span class="price-missing">цена не найдена</span>' : formatMoney(r.unitPrice)}</td>
@@ -194,7 +202,8 @@ function renderEstimate() {
                 <td><span class="src-badge ${r.source}">${SOURCE_LABELS[r.source] || '—'}</span></td>
                 <td><button type="button" class="del-btn">Удалить</button></td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
         bodyEl.querySelectorAll('tr[data-id]').forEach(tr => {
             const id = parseInt(tr.dataset.id, 10);
             tr.querySelector('.qty').addEventListener('input', e => {
@@ -213,6 +222,8 @@ function renderTotals() {
     vatEl.textContent = formatMoney(vat);
     grandEl.textContent = formatMoney(subtotal + vat);
     exportBtn.disabled = estimate.length === 0;
+    const anyNotFound = estimate.some(r => r.notFound);
+    petrovichBtn.disabled = !anyNotFound || petrovichBtn.dataset.busy === '1';
 }
 
 function csvCell(value) {
@@ -483,6 +494,56 @@ function loadDdcCatalog() {
     });
 }
 
+async function fetchPetrovichPrices() {
+    const targets = estimate.filter(r => r.notFound);
+    if (targets.length === 0) return;
+    petrovichBtn.dataset.busy = '1';
+    petrovichBtn.disabled = true;
+    const prevLabel = petrovichBtn.textContent;
+    petrovichBtn.textContent = 'Запрос к Петровичу…';
+    uploadSummary.classList.remove('error');
+    uploadSummary.textContent = `Запрос ${targets.length} позиций у Петровича (первый раз может занять до минуты)…`;
+    try {
+        const names = targets.map(r => r.name);
+        const results = [];
+        for (let i = 0; i < names.length; i += PETROVICH_BATCH) {
+            const batch = names.slice(i, i + PETROVICH_BATCH);
+            const r = await fetch(`${PETROVICH_BACKEND}/prices`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ names: batch }),
+            });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const part = await r.json();
+            results.push(...part);
+            console.log('[Петрович] батч ответ:', part);
+        }
+        let updated = 0;
+        for (let i = 0; i < targets.length; i++) {
+            const row = targets[i];
+            const res = results[i];
+            if (!res || !res.found || !res.price) continue;
+            row.name = res.title || row.name;
+            row.unitPrice = res.price;
+            row.unit = row.unit || 'шт.';
+            row.notFound = false;
+            row.source = 'petrovich';
+            row.url = res.url || '';
+            updated++;
+        }
+        uploadSummary.textContent = `Петрович: распознано ${updated} из ${targets.length}`;
+        renderEstimate();
+    } catch (err) {
+        console.error('[Петрович] ошибка:', err);
+        uploadSummary.textContent = `Петрович недоступен: ${err.message}`;
+        uploadSummary.classList.add('error');
+    } finally {
+        delete petrovichBtn.dataset.busy;
+        petrovichBtn.textContent = prevLabel;
+        renderTotals();
+    }
+}
+
 function loadCatalog() {
     statusEl.textContent = 'Загрузка каталогов…';
     Promise.all([loadLocalCatalog(), loadDdcCatalog()])
@@ -490,6 +551,7 @@ function loadCatalog() {
             statusEl.textContent = `Своя база: ${catalog.length}, DDC база: ${ddcCatalog.length}`;
             searchInput.disabled = false;
             uploadBtn.disabled = false;
+            renderTotals();
             searchInput.focus();
         })
         .catch(err => {
@@ -514,6 +576,7 @@ fileInput.addEventListener('change', e => {
     if (file) handleFile(file);
     e.target.value = '';
 });
+petrovichBtn.addEventListener('click', fetchPetrovichPrices);
 
 renderEstimate();
 loadCatalog();

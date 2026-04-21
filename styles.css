@@ -218,9 +218,41 @@ tr.not-found .price-missing {
     color: #065f46;
 }
 
+.src-badge.petrovich {
+    background: #fde68a;
+    color: #92400e;
+}
+
 .src-badge.none {
     background: #f3f4f6;
     color: #6b7280;
+}
+
+#petrovich-btn {
+    background: #fff;
+    color: #92400e;
+    border: 1px solid #fbbf24;
+}
+
+#petrovich-btn:hover:not(:disabled) {
+    background: #fef3c7;
+}
+
+#petrovich-btn:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+    border-color: #e5e7eb;
+    cursor: not-allowed;
+}
+
+td a.product-link {
+    color: #2563eb;
+    text-decoration: none;
+    border-bottom: 1px dotted #93c5fd;
+}
+
+td a.product-link:hover {
+    border-bottom-style: solid;
 }
 
 .estimate-header {
