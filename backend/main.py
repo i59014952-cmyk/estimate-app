@@ -228,6 +228,16 @@ async def debug(q: str = "цемент"):
         for term in ['goods', 'product', 'search_result', 'searchResults', 'catalog-item', 'price_with_discount', 'price_list', '__NUXT__', '__NEXT_DATA__', 'apollo', 'PRELOADED_STATE', 'item-card', 'ym:', 'nothingFound']:
             idx = html.find(term)
             hints[term] = idx
+        html_slices = {}
+        for term in ['product', 'Product', 'goods', 'snippet', '__LOADABLE_REQUIRED_CHUNKS___ext', 'data-product', 'article', 'ld+json', 'pet4Data']:
+            idx = html.find(term)
+            if idx != -1:
+                html_slices[term] = html[max(0, idx-200):idx+600]
+        # also count a few generic selectors after SPA settled
+        await page.wait_for_timeout(5000)
+        late_counts = {}
+        for sel in ['[data-test]', 'a[href*="/catalog/"]', '[class*="Card"]', '[class*="Item"]', '[class*="SearchResult"]', '[class*="Good"]', 'img']:
+            late_counts[sel] = await page.locator(sel).count()
         return {
             "final_url": final_url,
             "html_len": len(html),
@@ -235,8 +245,10 @@ async def debug(q: str = "цемент"):
             "data_tests": data_tests[:50],
             "top_classes": classes[:40],
             "selector_counts": selector_counts,
+            "late_counts": late_counts,
             "json_scripts": json_scripts,
             "html_hints": hints,
+            "html_slices": html_slices,
         }
     finally:
         await context.close()
