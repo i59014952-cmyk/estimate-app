@@ -213,19 +213,30 @@ async def debug(q: str = "цемент"):
         ]:
             selector_counts[sel] = await page.locator(sel).count()
         try:
-            await page.wait_for_selector('[class*="product"], [class*="Product"], [class*="snippet"]', timeout=8000)
+            await page.wait_for_selector('[class*="product"], [class*="Product"], [class*="snippet"], [class*="catalog"]', timeout=8000)
         except Exception:
             pass
         html = await page.content()
         body_text = await page.evaluate("() => document.body.innerText.slice(0, 4000)")
+        json_scripts = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('script')).filter(s =>
+                s.type && (s.type.includes('json') || s.type.includes('ld'))
+            ).map(s => ({type: s.type, id: s.id, len: (s.textContent||'').length, preview: (s.textContent||'').slice(0, 200)}))
+        """)
+        # search HTML for hints
+        hints = {}
+        for term in ['goods', 'product', 'search_result', 'searchResults', 'catalog-item', 'price_with_discount', 'price_list', '__NUXT__', '__NEXT_DATA__', 'apollo', 'PRELOADED_STATE', 'item-card', 'ym:', 'nothingFound']:
+            idx = html.find(term)
+            hints[term] = idx
         return {
             "final_url": final_url,
             "html_len": len(html),
-            "html_head": html[:30000],
             "body_text": body_text,
             "data_tests": data_tests[:50],
-            "top_classes": classes,
+            "top_classes": classes[:40],
             "selector_counts": selector_counts,
+            "json_scripts": json_scripts,
+            "html_hints": hints,
         }
     finally:
         await context.close()
