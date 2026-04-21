@@ -175,7 +175,7 @@ def health():
 
 
 @app.get("/debug")
-async def debug(q: str = "цемент"):
+async def debug(q: str = "цемент", path: str = "/catalog/search/?search="):
     browser: Browser = state["browser"]
     if browser is None:
         raise HTTPException(503, "browser not initialised")
@@ -186,7 +186,7 @@ async def debug(q: str = "цемент"):
     )
     page = await context.new_page()
     try:
-        url = SEARCH_URL.format(q=q.strip().replace(" ", "+"))
+        url = f"https://petrovich.ru{path}{q.strip().replace(' ', '+')}"
         await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
         await page.wait_for_timeout(2000)
         final_url = page.url
