@@ -233,17 +233,32 @@ async def debug(q: str = "цемент"):
             idx = html.find(term)
             if idx != -1:
                 html_slices[term] = html[max(0, idx-200):idx+600]
-        # also count a few generic selectors after SPA settled
-        await page.wait_for_timeout(5000)
+        # wait longer for Diginetica XHR search and collect detailed DOM info
+        await page.wait_for_timeout(10000)
         late_counts = {}
-        for sel in ['[data-test]', 'a[href*="/catalog/"]', '[class*="Card"]', '[class*="Item"]', '[class*="SearchResult"]', '[class*="Good"]', 'img']:
+        for sel in ['[data-test]', 'a[href*="/catalog/"]', '[class*="Card"]', '[class*="Item"]', '[class*="SearchResult"]', '[class*="Good"]', 'img', 'a[href^="/catalog/"]', '[class*="snippet"]', '[class*="Snippet"]', '.ddtc-product', '[id^="dgn"]']:
             late_counts[sel] = await page.locator(sel).count()
+        late_data_tests = await page.evaluate(
+            "() => Array.from(new Set(Array.from(document.querySelectorAll('[data-test]')).map(e=>e.getAttribute('data-test')))).slice(0, 120)"
+        )
+        late_classes = await page.evaluate(
+            "() => { const c = new Map(); document.querySelectorAll('*').forEach(e => e.classList.forEach(cl => c.set(cl,(c.get(cl)||0)+1))); return Array.from(c.entries()).sort((a,b)=>b[1]-a[1]).slice(0,60); }"
+        )
+        # intercept network: what requests were made?
+        # Look for catalog-card links specifically
+        catalog_links = await page.evaluate(
+            "() => Array.from(document.querySelectorAll('a[href^=\"/catalog/\"]')).slice(0,10).map(a => ({href: a.href, text: (a.innerText||'').slice(0,100)}))"
+        )
         return {
             "final_url": final_url,
             "html_len": len(html),
             "body_text": body_text,
+            "late_body_text": (await page.evaluate("() => document.body.innerText.slice(0, 4000)")),
             "data_tests": data_tests[:50],
+            "late_data_tests": late_data_tests,
             "top_classes": classes[:40],
+            "late_top_classes": late_classes,
+            "catalog_links": catalog_links,
             "selector_counts": selector_counts,
             "late_counts": late_counts,
             "json_scripts": json_scripts,
