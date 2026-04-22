@@ -312,6 +312,77 @@ function readXlsx(arrayBuffer) {
     return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 }
 
+const scriptCache = {};
+function loadScript(src) {
+    if (scriptCache[src]) return scriptCache[src];
+    scriptCache[src] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('не удалось загрузить ' + src));
+        document.head.appendChild(s);
+    });
+    return scriptCache[src];
+}
+
+async function extractPdfText(arrayBuffer) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let out = '';
+    for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const tc = await page.getTextContent();
+        const byLine = new Map();
+        for (const it of tc.items) {
+            const y = Math.round(it.transform[5]);
+            if (!byLine.has(y)) byLine.set(y, []);
+            byLine.get(y).push(it.str);
+        }
+        const lines = Array.from(byLine.entries())
+            .sort((a, b) => b[0] - a[0])
+            .map(([_, arr]) => arr.join(' '));
+        out += lines.join('\n') + '\n';
+    }
+    return out;
+}
+
+async function extractDocxText(arrayBuffer) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+    const res = await mammoth.extractRawText({ arrayBuffer });
+    return res.value || '';
+}
+
+async function extractImageText(file, onProgress) {
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    const { data } = await Tesseract.recognize(file, 'rus+eng', {
+        logger: m => {
+            if (onProgress && m.status && typeof m.progress === 'number') {
+                onProgress(m.status, m.progress);
+            }
+        },
+    });
+    return data.text || '';
+}
+
+function textToRows(text) {
+    const rows = [];
+    const qtyRx = /(\d+(?:[.,]\d+)?)\s*(шт\.?|м\.?п\.?|м2|м²|м3|кг|т|л|компл\.?|упак\.?)?\s*$/i;
+    for (const raw of text.split(/\r?\n/)) {
+        const line = raw.replace(/\s+/g, ' ').trim();
+        if (!line) continue;
+        const m = line.match(qtyRx);
+        if (m) {
+            const name = line.slice(0, m.index).trim().replace(/[–—\-·•:;,]+$/u, '').trim();
+            const qty = m[1];
+            if (name) { rows.push([name, qty]); continue; }
+        }
+        rows.push([line, '']);
+    }
+    return rows;
+}
+
 const SKIP_PHRASES = [
     'смета', 'объект:', 'адрес:', 'основание:', '№№', 'п/п', 'наименование',
     'итого', 'ндс', 'всего с ндс', 'всего без ндс',
@@ -376,45 +447,90 @@ function importRows(rows) {
     return { imported, notFoundCount, skipped };
 }
 
+function reportImport(prefix, rows) {
+    const { imported, notFoundCount, skipped } = importRows(rows);
+    uploadSummary.textContent = `${prefix}: загружено ${imported}, без цены ${notFoundCount}, пропущено ${skipped}`;
+}
+
 function handleFile(file) {
     uploadSummary.classList.remove('error');
-    uploadSummary.textContent = `Обработка файла: ${file.name}…`;
-    const ext = file.name.toLowerCase().split('.').pop();
-    const reader = new FileReader();
-    reader.onerror = () => {
-        uploadSummary.textContent = 'Ошибка чтения файла';
+    uploadSummary.textContent = `Обработка: ${file.name}…`;
+    const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
+    const mime = (file.type || '').toLowerCase();
+
+    const failAsync = err => {
+        console.error('[handleFile]', err);
+        uploadSummary.textContent = `Ошибка разбора: ${err.message || err}`;
         uploadSummary.classList.add('error');
     };
-    if (ext === 'xlsx' || ext === 'xls') {
+
+    const readBuffer = () => new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error('не удалось прочитать файл'));
+        r.readAsArrayBuffer(file);
+    });
+    const readText = () => new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error('не удалось прочитать файл'));
+        r.readAsText(file, 'utf-8');
+    });
+
+    if (ext === 'xlsx' || ext === 'xls' || mime.includes('spreadsheet')) {
         if (typeof XLSX === 'undefined') {
-            uploadSummary.textContent = 'Библиотека XLSX не загружена — используйте CSV';
-            uploadSummary.classList.add('error');
-            return;
+            return failAsync(new Error('XLSX не загружен, откройте интернет'));
         }
-        reader.onload = e => {
-            try {
-                const rows = readXlsx(new Uint8Array(e.target.result));
-                const { imported, notFoundCount, skipped } = importRows(rows);
-                uploadSummary.textContent = `Загружено: ${imported}, без цены: ${notFoundCount}, пропущено: ${skipped}`;
-            } catch (err) {
-                uploadSummary.textContent = `Ошибка разбора: ${err.message}`;
-                uploadSummary.classList.add('error');
-            }
-        };
-        reader.readAsArrayBuffer(file);
-    } else {
-        reader.onload = e => {
-            try {
-                const rows = parseCsv(e.target.result);
-                const { imported, notFoundCount, skipped } = importRows(rows);
-                uploadSummary.textContent = `Загружено: ${imported}, без цены: ${notFoundCount}, пропущено: ${skipped}`;
-            } catch (err) {
-                uploadSummary.textContent = `Ошибка разбора: ${err.message}`;
-                uploadSummary.classList.add('error');
-            }
-        };
-        reader.readAsText(file, 'utf-8');
+        readBuffer()
+            .then(buf => reportImport('XLSX', readXlsx(new Uint8Array(buf))))
+            .catch(failAsync);
+        return;
     }
+
+    if (ext === 'pdf' || mime === 'application/pdf') {
+        uploadSummary.textContent = 'PDF: загрузка библиотеки и разбор…';
+        readBuffer()
+            .then(extractPdfText)
+            .then(text => {
+                console.log('[PDF] распознано символов:', text.length);
+                console.log('[PDF] фрагмент:', text.slice(0, 400));
+                reportImport('PDF', textToRows(text));
+            })
+            .catch(failAsync);
+        return;
+    }
+
+    if (ext === 'docx' || mime.includes('wordprocessingml')) {
+        uploadSummary.textContent = 'DOCX: извлекаю текст…';
+        readBuffer()
+            .then(extractDocxText)
+            .then(text => {
+                console.log('[DOCX] распознано символов:', text.length);
+                console.log('[DOCX] фрагмент:', text.slice(0, 400));
+                reportImport('DOCX', textToRows(text));
+            })
+            .catch(failAsync);
+        return;
+    }
+
+    if (['jpg', 'jpeg', 'png', 'webp'].includes(ext) || mime.startsWith('image/')) {
+        uploadSummary.textContent = 'Изображение: загружаю OCR (первый раз ~5–10 МБ)…';
+        extractImageText(file, (status, progress) => {
+            uploadSummary.textContent = `OCR ${status}: ${Math.round(progress * 100)}%`;
+        })
+            .then(text => {
+                console.log('[OCR] распознано символов:', text.length);
+                console.log('[OCR] фрагмент:', text.slice(0, 400));
+                reportImport('OCR', textToRows(text));
+            })
+            .catch(failAsync);
+        return;
+    }
+
+    // default: CSV / plain text
+    readText()
+        .then(text => reportImport('CSV', parseCsv(text)))
+        .catch(failAsync);
 }
 
 function extractDdcItems(rows) {
