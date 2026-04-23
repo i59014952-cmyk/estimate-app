@@ -108,6 +108,16 @@ function tokenize(s) {
         .filter(w => w.length >= 3);
 }
 
+function isRelevantCandidate(query, candidate) {
+    const qTokens = tokenize(query);
+    const significant = qTokens.filter(t => t.length >= 5);
+    const pool = significant.length > 0 ? significant : qTokens;
+    if (pool.length === 0) return true;
+    const cName = String(candidate && candidate.name || '').toLowerCase();
+    if (!cName) return false;
+    return pool.some(qt => cName.includes(qt.slice(0, 5)));
+}
+
 function fuzzyFindIn(qTokens, pool) {
     let best = null;
     let bestHits = 0;
@@ -352,8 +362,10 @@ async function togglePicker(id) {
             const r = await fetch(url);
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const j = await r.json();
-            row.candidates = (j.results || []).filter(x => x && (x.price || x.name));
-            console.log(`[Подбор] "${row.name}" -> ${row.candidates.length} вариантов`);
+            row.candidates = (j.results || [])
+                .filter(x => x && (x.price || x.name))
+                .filter(x => isRelevantCandidate(row.name, x));
+            console.log(`[Подбор] "${row.name}" -> ${row.candidates.length} вариантов (после фильтра релевантности)`);
         } catch (err) {
             row.candidates = [];
             row.candidatesError = err.message;
@@ -878,7 +890,11 @@ async function fetchPricesForNotFound() {
         while (queue.length > 0) {
             const row = queue.shift();
             if (!row) return;
-            const candidates = await searchOne(row.name);
+            const rawCandidates = await searchOne(row.name);
+            const candidates = rawCandidates.filter(c => isRelevantCandidate(row.name, c));
+            if (rawCandidates.length !== candidates.length) {
+                console.log(`[Запрос цен] "${row.name}": отфильтровано нерелевантных ${rawCandidates.length - candidates.length}`);
+            }
             done++;
             row.candidates = candidates;
             if (candidates.length > 0) {
