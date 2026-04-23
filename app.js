@@ -5,7 +5,7 @@ const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
 const KOLORIT_BACKEND = 'https://petrovich-proxy.onrender.com';
 const KOLORIT_CONCURRENCY = 3;
-const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', kolorit: 'Колорит', none: '—' };
+const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', kolorit: 'Колорит', manual: 'Вручную', none: '—' };
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -165,6 +165,10 @@ function addRow({ name, unit, unitPrice, qty, notFound, source, url }) {
         notFound: !!notFound,
         source: source || (notFound ? 'none' : 'local'),
         url: url || '',
+        expanded: false,
+        candidates: null,
+        candidatesLoading: false,
+        candidatesError: null,
     });
     renderEstimate();
 }
@@ -210,27 +214,140 @@ function renderEstimate() {
             const nameCell = r.url
                 ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" class="product-link">${escapeHtml(r.name)}${LINK_ICON}</a>`
                 : escapeHtml(r.name);
-            return `
-            <tr data-id="${r.id}" class="${r.notFound ? 'not-found' : ''}">
-                <td>${nameCell}</td>
-                <td>${escapeHtml(r.unit)}</td>
-                <td><input type="number" class="qty" min="0" step="0.01" value="${r.qty}"></td>
-                <td class="num">${r.notFound ? '<span class="price-missing">цена не найдена</span>' : formatMoney(r.unitPrice)}</td>
-                <td class="num row-total">${r.notFound ? '—' : formatMoney(r.qty * r.unitPrice)}</td>
-                <td><span class="src-badge ${r.source}">${SOURCE_LABELS[r.source] || '—'}</span></td>
-                <td><button type="button" class="del-btn" aria-label="Удалить">${TRASH_ICON}</button></td>
-            </tr>
-        `;
+            const priceCell = r.notFound
+                ? `<div class="price-missing">цена не найдена</div>
+                   <button type="button" class="btn-link" data-action="picker">${r.expanded ? 'Скрыть' : 'Подобрать / ввести'}</button>`
+                : formatMoney(r.unitPrice);
+            const mainRow = `
+                <tr data-id="${r.id}" class="${r.notFound ? 'not-found' : ''}">
+                    <td>${nameCell}</td>
+                    <td>${escapeHtml(r.unit)}</td>
+                    <td><input type="number" class="qty" min="0" step="0.01" value="${r.qty}"></td>
+                    <td class="num">${priceCell}</td>
+                    <td class="num row-total">${r.notFound ? '—' : formatMoney(r.qty * r.unitPrice)}</td>
+                    <td><span class="src-badge ${r.source}">${SOURCE_LABELS[r.source] || '—'}</span></td>
+                    <td><button type="button" class="del-btn" aria-label="Удалить">${TRASH_ICON}</button></td>
+                </tr>
+            `;
+            const expandRow = r.expanded ? renderPicker(r) : '';
+            return mainRow + expandRow;
         }).join('');
         bodyEl.querySelectorAll('tr[data-id]').forEach(tr => {
             const id = parseInt(tr.dataset.id, 10);
-            tr.querySelector('.qty').addEventListener('input', e => {
-                updateQty(id, parseFloat(e.target.value));
+            const qty = tr.querySelector('.qty');
+            if (qty) qty.addEventListener('input', e => updateQty(id, parseFloat(e.target.value)));
+            const del = tr.querySelector('.del-btn');
+            if (del) del.addEventListener('click', () => removeFromEstimate(id));
+            const picker = tr.querySelector('[data-action="picker"]');
+            if (picker) picker.addEventListener('click', () => togglePicker(id));
+        });
+        bodyEl.querySelectorAll('tr.expand-row').forEach(tr => {
+            const id = parseInt(tr.dataset.parentId, 10);
+            tr.querySelectorAll('[data-candidate]').forEach(btn => {
+                btn.addEventListener('click', () => applyCandidate(id, parseInt(btn.dataset.candidate, 10)));
             });
-            tr.querySelector('.del-btn').addEventListener('click', () => removeFromEstimate(id));
+            const input = tr.querySelector('[data-manual-input]');
+            const apply = tr.querySelector('[data-action="apply-manual"]');
+            if (input && apply) {
+                apply.addEventListener('click', () => applyManualPrice(id, input.value));
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') { e.preventDefault(); applyManualPrice(id, input.value); }
+                });
+                input.focus();
+            }
         });
     }
     renderTotals();
+}
+
+function renderPicker(r) {
+    let list = '';
+    if (r.candidatesLoading) {
+        list = '<div class="picker__loading">Поиск вариантов в каталоге Колорит…</div>';
+    } else if (r.candidatesError) {
+        list = `<div class="picker__error">Ошибка: ${escapeHtml(r.candidatesError)}</div>`;
+    } else if (!r.candidates || r.candidates.length === 0) {
+        list = '<div class="picker__empty">В каталоге Колорит ничего не нашлось — введите цену вручную ниже.</div>';
+    } else {
+        list = r.candidates.map((c, i) => `
+            <button type="button" class="picker__item" data-candidate="${i}">
+                <span class="picker__item-name">${escapeHtml(c.name || '')}</span>
+                <span class="picker__item-unit">${escapeHtml(c.unit || '')}</span>
+                <span class="picker__item-price">${c.price ? formatMoney(c.price) + ' ₽' : '—'}</span>
+            </button>
+        `).join('');
+    }
+    return `
+        <tr class="expand-row" data-parent-id="${r.id}">
+            <td colspan="7">
+                <div class="picker">
+                    <div class="picker__title">Варианты для «${escapeHtml(r.name)}»</div>
+                    <div class="picker__list">${list}</div>
+                    <div class="picker__manual">
+                        <span>или введите цену вручную:</span>
+                        <input type="number" min="0" step="0.01" data-manual-input placeholder="0">
+                        <span>₽</span>
+                        <button type="button" data-action="apply-manual">Применить</button>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+async function togglePicker(id) {
+    const row = estimate.find(r => r.id === id);
+    if (!row) return;
+    row.expanded = !row.expanded;
+    if (row.expanded && row.candidates === null && !row.candidatesLoading) {
+        row.candidatesLoading = true;
+        row.candidatesError = null;
+        renderEstimate();
+        try {
+            const url = `${KOLORIT_BACKEND}/kolorit/search?query=${encodeURIComponent(row.name)}&limit=5`;
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            row.candidates = (j.results || []).filter(x => x && (x.price || x.name));
+            console.log(`[Подбор] "${row.name}" -> ${row.candidates.length} вариантов`);
+        } catch (err) {
+            row.candidates = [];
+            row.candidatesError = err.message;
+        } finally {
+            row.candidatesLoading = false;
+            renderEstimate();
+        }
+    } else {
+        renderEstimate();
+    }
+}
+
+function applyCandidate(id, idx) {
+    const row = estimate.find(r => r.id === id);
+    if (!row || !row.candidates || !row.candidates[idx]) return;
+    const c = row.candidates[idx];
+    if (!c.price) return;
+    row.name = c.name || row.name;
+    row.unit = c.unit || row.unit || 'шт.';
+    row.unitPrice = c.price;
+    row.url = c.url || '';
+    row.source = 'kolorit';
+    row.notFound = false;
+    row.expanded = false;
+    renderEstimate();
+}
+
+function applyManualPrice(id, raw) {
+    const row = estimate.find(r => r.id === id);
+    if (!row) return;
+    const n = parseFloat(String(raw).replace(',', '.'));
+    if (!isFinite(n) || n < 0) return;
+    row.unitPrice = n;
+    row.unit = row.unit || 'шт.';
+    row.source = 'manual';
+    row.notFound = false;
+    row.expanded = false;
+    renderEstimate();
 }
 
 function renderTotals() {

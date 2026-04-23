@@ -524,7 +524,144 @@ td a.product-link:hover svg { color: var(--primary); }
 .src-badge.local { background: var(--primary-soft); color: var(--primary-strong); }
 .src-badge.ddc { background: var(--success-soft); color: var(--success); }
 .src-badge.kolorit { background: var(--accent-indigo-soft); color: var(--accent-indigo); }
+.src-badge.manual { background: var(--warn-soft); color: var(--warn); }
 .src-badge.none { background: var(--surface-3); color: var(--text-muted); }
+
+/* === Picker (inline alternatives + manual price) === */
+
+.btn-link {
+    display: inline-block;
+    background: none;
+    border: none;
+    padding: 2px 0;
+    margin-top: 4px;
+    color: var(--primary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-link:hover { text-decoration: underline; }
+
+tr.expand-row td {
+    padding: 0;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+}
+
+.picker {
+    padding: 16px 20px;
+    border-left: 3px solid var(--primary);
+}
+
+.picker__title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.picker__list {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.picker__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.picker__item:hover {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+.picker__item-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.picker__item-unit {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.picker__item-price {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.picker__loading,
+.picker__empty,
+.picker__error {
+    font-size: 13px;
+    padding: 10px 0;
+    color: var(--text-muted);
+}
+
+.picker__error { color: var(--danger); }
+
+.picker__manual {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+.picker__manual input {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 14px;
+    width: 140px;
+    text-align: right;
+    background: var(--surface);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.picker__manual input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.picker__manual button {
+    padding: 7px 14px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.picker__manual button:hover { background: var(--primary-strong); }
 
 /* === Totals hero === */
 
