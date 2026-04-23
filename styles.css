@@ -717,8 +717,9 @@ tr.expand-row td {
     overflow: hidden;
 }
 
-.totals-hero[hidden] {
-    display: none;
+.totals-hero[hidden],
+[hidden] {
+    display: none !important;
 }
 
 .totals-hero::before {
