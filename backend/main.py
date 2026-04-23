@@ -351,3 +351,41 @@ def cache_clear():
     before = len(state["cache"])
     state["cache"].clear()
     return {"cleared": before}
+
+
+@app.get("/debug/home")
+async def debug_home():
+    if state["browser"] is None:
+        raise HTTPException(503, "browser not initialised")
+    ctx = await _new_context(DEFAULT_CITY)
+    page = await ctx.new_page()
+    try:
+        await page.goto("https://petrovich.ru/", wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
+        await page.wait_for_timeout(3000)
+        inputs = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('input')).slice(0, 30).map(i => ({
+                type: i.type,
+                name: i.name || null,
+                id: i.id || null,
+                placeholder: i.placeholder || null,
+                dataTest: i.getAttribute('data-test') || null,
+                className: (i.className || '').slice(0, 80)
+            }))
+        """)
+        forms = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('form')).slice(0, 10).map(f => ({
+                action: f.action || null,
+                method: f.method || null,
+                dataTest: f.getAttribute('data-test') || null,
+                html: f.outerHTML.slice(0, 800)
+            }))
+        """)
+        main_search_html = await page.evaluate("""
+            () => {
+                const el = document.querySelector('[data-test="main-search-form"]');
+                return el ? el.outerHTML.slice(0, 2000) : null;
+            }
+        """)
+        return {"inputs": inputs, "forms": forms, "main_search_html": main_search_html}
+    finally:
+        await ctx.close()
