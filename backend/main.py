@@ -559,6 +559,11 @@ async def krepmast_debug(query: str = "саморезы", path: str = "/catalog/
         })
         if len(sample_cards) >= 3:
             break
+    # Also dump first product card directly
+    first_card_html = None
+    first_card = soup.select_one(".catalog-item") or soup.select_one("[itemtype*='Product']")
+    if first_card:
+        first_card_html = str(first_card)[:3000]
     return {
         "url": url,
         "html_len": len(html),
@@ -567,6 +572,7 @@ async def krepmast_debug(query: str = "саморезы", path: str = "/catalog/
         "selector_counts": counts,
         "top_classes": top_classes,
         "sample_cards": sample_cards,
+        "first_card_html": first_card_html,
     }
 
 
