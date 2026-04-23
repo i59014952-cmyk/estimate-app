@@ -375,7 +375,8 @@ function renderTotals() {
     vatEl.textContent = formatMoney(vat);
     grandEl.textContent = formatMoney(subtotal + vat);
     exportBtn.disabled = estimate.length === 0;
-    koloritBtn.disabled = estimate.length === 0 || koloritBtn.dataset.busy === '1';
+    const anyNotFound = estimate.some(r => r.notFound);
+    koloritBtn.disabled = !anyNotFound || koloritBtn.dataset.busy === '1';
 }
 
 function csvCell(value) {
@@ -775,7 +776,7 @@ function loadDdcCatalog() {
 }
 
 async function fetchPricesForNotFound() {
-    const targets = estimate.slice();
+    const targets = estimate.filter(r => r.notFound);
     if (targets.length === 0) return;
     koloritBtn.dataset.busy = '1';
     koloritBtn.disabled = true;
