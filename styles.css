@@ -94,7 +94,11 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
     display: flex;
     align-items: center;
     gap: 12px;
+    cursor: pointer;
+    user-select: none;
 }
+
+.brand:hover .brand__name { color: var(--primary); }
 
 .brand__mark {
     width: 36px;
