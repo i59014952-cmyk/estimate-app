@@ -658,10 +658,24 @@ function extractNameAndQty(row) {
     return { name, qty };
 }
 
+function looksLikeOcrNoise(name) {
+    if (/[|¢]/.test(name)) return true;
+    if (/[\[\]{}]/.test(name)) return true;
+    const lettersOnly = (name.match(/\p{L}/gu) || []).join('');
+    if (lettersOnly.length < 8) return true;
+    const words = name.match(/\p{L}{4,}/gu) || [];
+    if (words.length < 2 && name.length < 40) return true;
+    const alnumTokens = (name.match(/[\p{L}\p{N}]+/gu) || []).filter(t => t.length >= 2);
+    const shortJunk = alnumTokens.filter(t => t.length <= 2).length;
+    if (alnumTokens.length > 0 && shortJunk / alnumTokens.length > 0.5) return true;
+    return false;
+}
+
 function shouldSkipName(name) {
     if (!name) return true;
     if (!/\p{L}{3,}/u.test(name)) return true;
     if (isHiddenCategory(name)) return true;
+    if (looksLikeOcrNoise(name)) return true;
     const lower = name.toLowerCase();
     for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
     const firstWord = (lower.match(/[\p{L}\p{N}/]+/u) || [''])[0];
