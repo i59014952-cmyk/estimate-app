@@ -3,9 +3,16 @@ const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenCo
 const SKIP_WORDS = ['итого', 'ндс'];
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
-const KOLORIT_BACKEND = 'https://petrovich-proxy.onrender.com';
-const KOLORIT_CONCURRENCY = 3;
-const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', kolorit: 'Колорит', manual: 'Вручную', none: '—' };
+const PRICES_BACKEND = 'https://petrovich-proxy.onrender.com';
+const PRICES_CONCURRENCY = 3;
+const SOURCE_LABELS = {
+    local: 'Своя база',
+    ddc: 'DDC база',
+    kolorit: 'Колорит',
+    krepmast: 'Крепмаст',
+    manual: 'Вручную',
+    none: '—',
+};
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -269,13 +276,16 @@ function renderPicker(r) {
     } else if (!r.candidates || r.candidates.length === 0) {
         list = '<div class="picker__empty">В каталоге Колорит ничего не нашлось — введите цену вручную ниже.</div>';
     } else {
-        list = r.candidates.map((c, i) => `
+        list = r.candidates.map((c, i) => {
+            const src = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
+            return `
             <button type="button" class="picker__item" data-candidate="${i}">
                 <span class="picker__item-name">${escapeHtml(c.name || '')}</span>
-                <span class="picker__item-unit">${escapeHtml(c.unit || '')}</span>
+                <span class="src-badge ${src}">${SOURCE_LABELS[src]}</span>
                 <span class="picker__item-price">${c.price ? formatMoney(c.price) + ' ₽' : '—'}</span>
             </button>
-        `).join('');
+        `;
+        }).join('');
     }
     return `
         <tr class="expand-row" data-parent-id="${r.id}">
@@ -304,7 +314,7 @@ async function togglePicker(id) {
         row.candidatesError = null;
         renderEstimate();
         try {
-            const url = `${KOLORIT_BACKEND}/kolorit/search?query=${encodeURIComponent(row.name)}&limit=5`;
+            const url = `${PRICES_BACKEND}/prices/search?query=${encodeURIComponent(row.name)}&limit=6`;
             const r = await fetch(url);
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const j = await r.json();
@@ -331,7 +341,7 @@ function applyCandidate(id, idx) {
     row.unit = c.unit || row.unit || 'шт.';
     row.unitPrice = c.price;
     row.url = c.url || '';
-    row.source = 'kolorit';
+    row.source = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
     row.notFound = false;
     row.expanded = false;
     renderEstimate();
@@ -757,27 +767,27 @@ function loadDdcCatalog() {
     });
 }
 
-async function fetchKoloritPrices() {
+async function fetchPricesForNotFound() {
     const targets = estimate.filter(r => r.notFound);
     if (targets.length === 0) return;
     koloritBtn.dataset.busy = '1';
     koloritBtn.disabled = true;
     const prevLabel = koloritBtn.textContent;
-    koloritBtn.textContent = 'Запрос к Колориту…';
+    koloritBtn.textContent = 'Запрос цен…';
     uploadSummary.classList.remove('error');
-    uploadSummary.textContent = `Запрос ${targets.length} позиций у Колорита…`;
+    uploadSummary.textContent = `Поиск ${targets.length} позиций в Колорит + Крепмаст…`;
     let updated = 0, done = 0, failed = 0;
-    const reportProgress = () => { uploadSummary.textContent = `Колорит: ${done}/${targets.length} (обновлено ${updated})`; };
+    const reportProgress = () => { uploadSummary.textContent = `Запрос цен: ${done}/${targets.length} (обновлено ${updated})`; };
     async function searchOne(name) {
-        const url = `${KOLORIT_BACKEND}/kolorit/search?query=${encodeURIComponent(name)}&limit=1`;
+        const url = `${PRICES_BACKEND}/prices/search?query=${encodeURIComponent(name)}&limit=1`;
         try {
             const r = await fetch(url);
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const j = await r.json();
-            console.log(`[Колорит] "${name}" -> ${j.results?.length || 0} шт.`);
+            console.log(`[Запрос цен] "${name}" -> ${j.results?.length || 0} шт.`);
             return (j.results && j.results[0]) || null;
         } catch (err) {
-            console.warn('[Колорит] ошибка', name, err.message);
+            console.warn('[Запрос цен] ошибка', name, err.message);
             failed++;
             return null;
         }
@@ -793,7 +803,7 @@ async function fetchKoloritPrices() {
                 row.unitPrice = hit.price;
                 row.unit = hit.unit || row.unit || 'шт.';
                 row.notFound = false;
-                row.source = 'kolorit';
+                row.source = hit.city === 'krepmast' ? 'krepmast' : 'kolorit';
                 row.url = hit.url || '';
                 updated++;
             }
@@ -801,14 +811,14 @@ async function fetchKoloritPrices() {
         }
     }
     const queue = targets.slice();
-    const workers = Array.from({ length: KOLORIT_CONCURRENCY }, () => worker(queue));
+    const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker(queue));
     try {
         await Promise.all(workers);
-        uploadSummary.textContent = `Колорит: распознано ${updated} из ${targets.length} (ошибок: ${failed})`;
+        uploadSummary.textContent = `Запрос цен: распознано ${updated} из ${targets.length} (ошибок: ${failed})`;
         renderEstimate();
     } catch (err) {
-        console.error('[Колорит] сбой', err);
-        uploadSummary.textContent = `Колорит недоступен: ${err.message}`;
+        console.error('[Запрос цен] сбой', err);
+        uploadSummary.textContent = `Сервис цен недоступен: ${err.message}`;
         uploadSummary.classList.add('error');
     } finally {
         delete koloritBtn.dataset.busy;
@@ -850,7 +860,7 @@ fileInput.addEventListener('change', e => {
     if (file) handleFile(file);
     e.target.value = '';
 });
-koloritBtn.addEventListener('click', fetchKoloritPrices);
+koloritBtn.addEventListener('click', fetchPricesForNotFound);
 
 initTheme();
 renderEstimate();

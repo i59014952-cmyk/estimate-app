@@ -515,6 +515,165 @@ async def kolorit_search(
     return SearchResponse(query=query, city="kolorit", strategy_used="http", cached=False, results=items, trail=tried)
 
 
+@app.get("/prices/search", response_model=SearchResponse)
+async def prices_search(
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(6, ge=1, le=30),
+):
+    """Combined search: Kolorit + Krepmast in parallel, merged by URL."""
+    key = _cache_key("combined", query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city="combined", strategy_used="cache", cached=True, results=cached)
+
+    per_source = max(3, (limit + 1) // 2)
+
+    async def k():
+        try:
+            items, tr = await _kolorit_search_merged(query, per_source)
+            return items, [f"kolorit: {t}" for t in tr]
+        except Exception as e:
+            return [], [f"kolorit: error: {e!s}"[:140]]
+
+    async def m():
+        try:
+            items, tr = await _krepmast_search_merged(query, per_source)
+            return items, [f"krepmast: {t}" for t in tr]
+        except Exception as e:
+            return [], [f"krepmast: error: {e!s}"[:140]]
+
+    (k_items, k_trail), (m_items, m_trail) = await asyncio.gather(k(), m())
+
+    # Tag source via city field so frontend can colour-code
+    for it in k_items:
+        it.city = "kolorit"
+    for it in m_items:
+        it.city = "krepmast"
+
+    merged: list[PriceItem] = []
+    seen: set[str] = set()
+    # Interleave kolorit and krepmast for balanced diversity
+    for pair in zip(k_items, m_items):
+        for it in pair:
+            key_ = it.url or it.name
+            if key_ in seen:
+                continue
+            seen.add(key_)
+            merged.append(it)
+            if len(merged) >= limit:
+                break
+        if len(merged) >= limit:
+            break
+    # Add any leftovers
+    for it in k_items + m_items:
+        if len(merged) >= limit:
+            break
+        key_ = it.url or it.name
+        if key_ in seen:
+            continue
+        seen.add(key_)
+        merged.append(it)
+
+    _cache_set(key, merged)
+    return SearchResponse(
+        query=query, city="combined", strategy_used="http", cached=False,
+        results=merged, trail=k_trail + m_trail,
+    )
+
+
+def _krepmast_parse(html: str, limit: int) -> list[PriceItem]:
+    """Krepmast uses .catalog-item with data-name/data-price/data-id attributes."""
+    soup = BeautifulSoup(html, "lxml")
+    items: list[PriceItem] = []
+    for card in soup.select(".catalog-item"):
+        if len(items) >= limit:
+            break
+        name = (card.get("data-name") or "").strip()
+        price_raw = (card.get("data-price") or "").strip()
+        sku = (card.get("data-id") or "").strip() or None
+        if not name:
+            name_el = card.select_one("[itemprop='name']")
+            if name_el:
+                name = name_el.get_text(" ", strip=True)
+        if not name:
+            continue
+        price = _parse_price(price_raw)
+        if price is None:
+            meta = card.select_one("meta[itemprop='price']")
+            if meta:
+                price = _parse_price(meta.get("content", ""))
+        if price is None or price <= 0:
+            continue
+        link_el = card.select_one(".blk_name a[href]") or card.select_one("a[href*='/catalog/']")
+        url_ = None
+        if link_el:
+            href = link_el.get("href") or ""
+            url_ = href if href.startswith("http") else f"https://krepmast.ru{href}"
+        in_stock = None
+        stock_raw = card.get("data-stock")
+        if stock_raw:
+            try:
+                in_stock = int(stock_raw) > 0
+            except ValueError:
+                pass
+        items.append(PriceItem(
+            name=name,
+            sku=sku,
+            price=price,
+            unit=None,
+            in_stock=in_stock,
+            city="kazan",
+            url=url_,
+        ))
+    return items
+
+
+async def _krepmast_search_merged(query: str, limit: int) -> tuple[list[PriceItem], list[str]]:
+    q = query.strip().replace(" ", "+")
+    urls_to_try = [
+        f"https://krepmast.ru/search/?q={q}",
+        f"https://krepmast.ru/search/?search={q}",
+        f"https://krepmast.ru/catalog/search/?q={q}",
+    ]
+    merged: list[PriceItem] = []
+    seen: set[str] = set()
+    tried: list[str] = []
+    for url in urls_to_try:
+        try:
+            html = await _kolorit_fetch(url)
+        except Exception as e:
+            tried.append(f"{url} -> fetch error: {e!s}"[:140])
+            continue
+        chunk = _krepmast_parse(html, limit)
+        tried.append(f"{url} -> {len(chunk)} items")
+        for item in chunk:
+            key = item.url or item.name
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= limit:
+                return merged, tried
+    return merged[:limit], tried
+
+
+@app.get("/krepmast/search", response_model=SearchResponse)
+async def krepmast_search(
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(5, ge=1, le=30),
+):
+    key = _cache_key("krepmast", query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city="krepmast", strategy_used="cache", cached=True, results=cached)
+    try:
+        items, tried = await _krepmast_search_merged(query, limit)
+    except Exception as e:
+        raise HTTPException(502, f"krepmast fetch failed: {e!s}"[:200])
+    _cache_set(key, items)
+    return SearchResponse(query=query, city="krepmast", strategy_used="http", cached=False, results=items, trail=tried)
+
+
 @app.get("/krepmast/debug")
 async def krepmast_debug(query: str = "саморезы", path: str = "/catalog/krepezh/samorezy/"):
     url = f"https://krepmast.ru{path}"

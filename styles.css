@@ -524,6 +524,7 @@ td a.product-link:hover svg { color: var(--primary); }
 .src-badge.local { background: var(--primary-soft); color: var(--primary-strong); }
 .src-badge.ddc { background: var(--success-soft); color: var(--success); }
 .src-badge.kolorit { background: var(--accent-indigo-soft); color: var(--accent-indigo); }
+.src-badge.krepmast { background: var(--success-soft); color: var(--success); }
 .src-badge.manual { background: var(--warn-soft); color: var(--warn); }
 .src-badge.none { background: var(--surface-3); color: var(--text-muted); }
 
@@ -585,6 +586,11 @@ tr.expand-row td {
     color: var(--text);
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
+}
+
+.picker__item .src-badge {
+    font-size: 11px;
+    padding: 2px 8px;
 }
 
 .picker__item:hover {
