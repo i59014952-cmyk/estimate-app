@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-empty-state-upload';
+const APP_VERSION = 'v2026-04-23-no-top-upload';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -46,10 +46,10 @@ const vatEl = document.getElementById('vat');
 const grandEl = document.getElementById('grand');
 const totalsEl = document.getElementById('totals-hero');
 const exportBtn = document.getElementById('export-btn');
-const uploadBtn = document.getElementById('upload-btn');
 const koloritBtn = document.getElementById('kolorit-btn');
 const fileInput = document.getElementById('file-input');
 const uploadSummary = document.getElementById('upload-summary');
+let catalogReady = false;
 
 let catalog = [];
 let ddcCatalog = [];
@@ -262,7 +262,8 @@ function updateQty(id, qty) {
     if (totalCell) totalCell.textContent = row.notFound ? '—' : formatMoney(row.qty * row.unitPrice);
 }
 
-const EMPTY_STATE_HTML = `
+function emptyStateHtml() {
+    return `
     <tr class="empty"><td colspan="7">
         <div class="empty-state">
             <div class="empty-state__icon">
@@ -275,7 +276,7 @@ const EMPTY_STATE_HTML = `
             </div>
             <div class="empty-state__title">Смета пуста</div>
             <div class="empty-state__hint">Загрузите коммерческое предложение (Excel, PDF, Word) или начните поиск работы через строку выше.</div>
-            <button id="empty-upload-btn" class="btn btn--primary" type="button">
+            <button id="empty-upload-btn" class="btn btn--primary" type="button"${catalogReady ? '' : ' disabled'}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
@@ -285,6 +286,7 @@ const EMPTY_STATE_HTML = `
             </button>
         </div>
     </td></tr>`;
+}
 
 const LINK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
@@ -292,7 +294,7 @@ const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 function renderEstimate() {
     const prevScrollY = window.scrollY;
     if (estimate.length === 0) {
-        bodyEl.innerHTML = EMPTY_STATE_HTML;
+        bodyEl.innerHTML = emptyStateHtml();
         const emptyUploadBtn = bodyEl.querySelector('#empty-upload-btn');
         if (emptyUploadBtn) emptyUploadBtn.addEventListener('click', () => fileInput.click());
     } else {
@@ -999,8 +1001,8 @@ function loadCatalog() {
         .then(() => {
             setCatalogStatus();
             searchInput.disabled = false;
-            uploadBtn.disabled = false;
-            renderTotals();
+            catalogReady = true;
+            renderEstimate();
             searchInput.focus();
         })
         .catch(err => {
@@ -1018,7 +1020,6 @@ document.addEventListener('click', e => {
     if (!e.target.closest('.search-block')) resultsEl.classList.remove('open');
 });
 exportBtn.addEventListener('click', exportCsv);
-uploadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => {
     const file = e.target.files[0];
     if (file) handleFile(file);
