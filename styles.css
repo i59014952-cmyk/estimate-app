@@ -717,6 +717,10 @@ tr.expand-row td {
     overflow: hidden;
 }
 
+.totals-hero[hidden] {
+    display: none;
+}
+
 .totals-hero::before {
     content: "";
     position: absolute;
