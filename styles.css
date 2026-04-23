@@ -536,6 +536,8 @@ td a.product-link:hover svg { color: var(--primary); }
 
 .empty-state__hint { font-size: 13px; line-height: 1.5; max-width: 340px; }
 
+.empty-state .btn { margin-top: 8px; }
+
 /* === Source badges === */
 
 .src-badge {
