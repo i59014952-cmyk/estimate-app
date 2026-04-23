@@ -528,20 +528,45 @@ async function extractPdfText(arrayBuffer) {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const Y_TOLERANCE = 2;
     let out = '';
     for (let i = 1; i <= doc.numPages; i++) {
         const page = await doc.getPage(i);
         const tc = await page.getTextContent();
-        const byLine = new Map();
-        for (const it of tc.items) {
-            const y = Math.round(it.transform[5]);
-            if (!byLine.has(y)) byLine.set(y, []);
-            byLine.get(y).push(it.str);
+        const items = tc.items
+            .filter(it => it && typeof it.str === 'string')
+            .map(it => ({
+                x: it.transform[4],
+                y: it.transform[5],
+                str: it.str,
+                width: it.width || 0,
+            }))
+            .sort((a, b) => b.y - a.y || a.x - b.x);
+        const lines = [];
+        for (const it of items) {
+            const prev = lines[lines.length - 1];
+            if (prev && Math.abs(prev.y - it.y) <= Y_TOLERANCE) {
+                prev.items.push(it);
+            } else {
+                lines.push({ y: it.y, items: [it] });
+            }
         }
-        const lines = Array.from(byLine.entries())
-            .sort((a, b) => b[0] - a[0])
-            .map(([_, arr]) => arr.join(' '));
-        out += lines.join('\n') + '\n';
+        for (const line of lines) {
+            line.items.sort((a, b) => a.x - b.x);
+            let text = '';
+            let lastEnd = -Infinity;
+            for (const it of line.items) {
+                if (it.str === '') continue;
+                const gap = it.x - lastEnd;
+                if (text && gap > 1 && !text.endsWith(' ') && !it.str.startsWith(' ')) {
+                    text += ' ';
+                }
+                text += it.str;
+                lastEnd = it.x + it.width;
+            }
+            text = text.replace(/\s+/g, ' ').trim();
+            if (text) out += text + '\n';
+        }
     }
     return out;
 }
