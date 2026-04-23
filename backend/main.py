@@ -409,23 +409,40 @@ async def _kolorit_fetch(url: str) -> str:
         return r.text
 
 
+def _kolorit_extract_price(card) -> Optional[float]:
+    """Try structured price selectors, then fall back to any text ending with ₽."""
+    for sel in (
+        ".price-item__sum.price-discount",
+        ".price-item__sum.price-regular",
+        ".price-item__sum",
+        ".catalog-item__price",
+    ):
+        el = card.select_one(sel)
+        if not el:
+            continue
+        value = _parse_price(el.get_text(" ", strip=True))
+        if value is not None and value > 0:
+            return value
+    # Last-resort: scan card text for "NNN ₽"
+    text = card.get_text(" ", strip=True)
+    m = re.search(r"(\d[\d\s]{0,8})\s*₽", text)
+    if m:
+        value = _parse_price(m.group(1))
+        if value is not None and value > 0:
+            return value
+    return None
+
+
 def _kolorit_parse(html: str, limit: int) -> list[PriceItem]:
     """Parse a Kolorit catalog/search page. Real product cards are div.catalog-item
-    that contain .price-item__sum — other .catalog-item elements are category tiles."""
+    that expose a product name via a.link-head and a recognisable price."""
     soup = BeautifulSoup(html, "lxml")
     items: list[PriceItem] = []
     for card in soup.select("div.catalog-item"):
         if len(items) >= limit:
             break
-        price_el = (
-            card.select_one(".price-item__sum.price-discount")
-            or card.select_one(".price-item__sum.price-regular")
-            or card.select_one(".price-item__sum")
-        )
-        if not price_el:
-            continue
-        price = _parse_price(price_el.get_text(" ", strip=True))
-        if price is None or price <= 0:
+        price = _kolorit_extract_price(card)
+        if price is None:
             continue
         name_el = card.select_one("a.link-head") or card.select_one(".catalog-item__head a")
         if not name_el:
@@ -452,6 +469,35 @@ def _kolorit_parse(html: str, limit: int) -> list[PriceItem]:
     return items
 
 
+async def _kolorit_search_merged(query: str, limit: int) -> tuple[list[PriceItem], list[str]]:
+    """Try multiple Kolorit search URLs, merge unique results by URL."""
+    q = query.strip().replace(" ", "+")
+    urls_to_try = [
+        f"https://kolorit.ru/catalog/?q={q}",
+        f"https://kolorit.ru/search/?q={q}",
+    ]
+    merged: list[PriceItem] = []
+    seen: set[str] = set()
+    tried: list[str] = []
+    for url in urls_to_try:
+        try:
+            html = await _kolorit_fetch(url)
+        except Exception:
+            tried.append(f"{url} -> fetch error")
+            continue
+        chunk = _kolorit_parse(html, limit)
+        tried.append(f"{url} -> {len(chunk)} items")
+        for item in chunk:
+            key = item.url or item.name
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= limit:
+                return merged, tried
+    return merged[:limit], tried
+
+
 @app.get("/kolorit/search", response_model=SearchResponse)
 async def kolorit_search(
     query: str = Query(..., min_length=2, max_length=200),
@@ -461,14 +507,12 @@ async def kolorit_search(
     cached = _cache_get(key)
     if cached:
         return SearchResponse(query=query, city="kolorit", strategy_used="cache", cached=True, results=cached)
-    url = f"https://kolorit.ru/catalog/?q={query.strip().replace(' ', '+')}"
     try:
-        html = await _kolorit_fetch(url)
+        items, tried = await _kolorit_search_merged(query, limit)
     except Exception as e:
         raise HTTPException(502, f"kolorit fetch failed: {e!s}"[:200])
-    items = _kolorit_parse(html, limit)
     _cache_set(key, items)
-    return SearchResponse(query=query, city="kolorit", strategy_used="http", cached=False, results=items)
+    return SearchResponse(query=query, city="kolorit", strategy_used="http", cached=False, results=items, trail=tried)
 
 
 @app.get("/kolorit/debug")
