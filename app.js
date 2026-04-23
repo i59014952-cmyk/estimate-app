@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-looser-filters';
+const APP_VERSION = 'v2026-04-23-clean-names';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -579,6 +579,16 @@ async function extractDocxText(arrayBuffer) {
     return res.value || '';
 }
 
+function cleanName(s) {
+    return String(s)
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s\d.,:;\-–—№)(]+/u, '')
+        .replace(/[\s.,:;\-–—·•]+$/u, '')
+        .replace(/\.{2,}/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function textToRows(text) {
     const rows = [];
     const qtyRx = /(\d+(?:[.,]\d+)?)\s*(шт\.?|м\.?п\.?|м2|м²|м3|кг|т|л|компл\.?|упак\.?)?\s*$/i;
@@ -587,11 +597,11 @@ function textToRows(text) {
         if (!line) continue;
         const m = line.match(qtyRx);
         if (m) {
-            const name = line.slice(0, m.index).trim().replace(/[–—\-·•:;,]+$/u, '').trim();
+            const name = cleanName(line.slice(0, m.index));
             const qty = m[1];
             if (name) { rows.push([name, qty]); continue; }
         }
-        rows.push([line, '']);
+        rows.push([cleanName(line), '']);
     }
     return rows;
 }
@@ -632,7 +642,7 @@ function extractNameAndQty(row) {
         break;
     }
     if (nameIdx === -1) return { name: '', qty: NaN };
-    const name = cells[nameIdx];
+    const name = cleanName(cells[nameIdx]);
     let qty = NaN;
     for (let i = nameIdx + 1; i < cells.length; i++) {
         const n = toNumber(cells[i]);
