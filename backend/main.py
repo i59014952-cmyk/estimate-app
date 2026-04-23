@@ -53,6 +53,7 @@ class SearchResponse(BaseModel):
     strategy_used: str
     cached: bool
     results: list[PriceItem]
+    trail: Optional[list[str]] = None
 
 
 class BatchRequest(BaseModel):
@@ -216,72 +217,79 @@ async def _extract_cards(page, limit: int, city: str) -> list[PriceItem]:
     return out
 
 
-async def _search_via_url(ctx: BrowserContext, query: str, limit: int, city: str) -> tuple[list[PriceItem], str]:
-    """Try /catalog/search/?search=... — this is actually a 404 page with related products,
-    but its product-card-catalog-slim elements reflect the query. Returns (items, strategy)."""
+async def _search_via_url(ctx: BrowserContext, query: str, limit: int, city: str, trail: list[str]) -> tuple[list[PriceItem], str]:
+    t0 = time.time()
     page = await ctx.new_page()
     try:
         url = f"https://petrovich.ru/catalog/search/?search={query.strip().replace(' ', '+')}"
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
-        except Exception:
+        except Exception as e:
+            trail.append(f"url_catalog: goto failed: {e!s}"[:140])
             return [], "url_failed"
-        # Give the SPA time to hydrate — DOM is empty until React renders.
         await page.wait_for_timeout(HYDRATION_WAIT_MS)
         try:
             await page.wait_for_selector(CARD_SEL, timeout=SELECTOR_TIMEOUT_MS)
         except Exception:
+            cnt = await page.locator(CARD_SEL).count()
+            dt_count = await page.evaluate("() => document.querySelectorAll('[data-test]').length")
+            trail.append(f"url_catalog: no_cards ({int(time.time()-t0)}s, cards={cnt}, data-tests={dt_count})")
             return [], "url_no_cards"
         items = await _extract_cards(page, limit, city)
+        trail.append(f"url_catalog: got {len(items)} items in {int(time.time()-t0)}s")
         return items, "url_catalog"
     finally:
         await page.close()
 
 
-async def _search_via_form(ctx: BrowserContext, query: str, limit: int, city: str) -> tuple[list[PriceItem], str]:
-    """Open homepage, fill search input, submit, wait for cards."""
+async def _search_via_form(ctx: BrowserContext, query: str, limit: int, city: str, trail: list[str]) -> tuple[list[PriceItem], str]:
+    t0 = time.time()
     page = await ctx.new_page()
     try:
         try:
             await page.goto("https://petrovich.ru/", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
-        except Exception:
+        except Exception as e:
+            trail.append(f"form_submit: goto failed: {e!s}"[:140])
             return [], "form_goto_failed"
         await page.wait_for_timeout(HYDRATION_WAIT_MS)
-        input_sel = (
-            '[data-test="main-search-form"] input, '
-            'form[role="search"] input, '
-            'input[name="q"], input[name="search"], '
-            'input[placeholder*="Поиск" i], input[placeholder*="Найти" i]'
-        )
+        input_sel = 'input[name="q"]'
         try:
-            await page.wait_for_selector(input_sel, timeout=SELECTOR_TIMEOUT_MS)
+            await page.wait_for_selector(input_sel, timeout=SELECTOR_TIMEOUT_MS, state="attached")
         except Exception:
+            in_cnt = await page.evaluate("() => document.querySelectorAll('input').length")
+            form_cnt = await page.evaluate("() => document.querySelectorAll('[data-test=\"main-search-form\"]').length")
+            trail.append(f"form_submit: no_input ({int(time.time()-t0)}s, inputs={in_cnt}, forms={form_cnt})")
             return [], "form_no_input"
         inp = page.locator(input_sel).first
         try:
-            await inp.click(timeout=3000)
-            await inp.fill(query, timeout=3000)
-            await inp.press("Enter", timeout=3000)
-        except Exception:
+            await inp.click(timeout=5000)
+            await inp.fill(query, timeout=5000)
+            await inp.press("Enter", timeout=5000)
+        except Exception as e:
+            trail.append(f"form_submit: type failed: {e!s}"[:140])
             return [], "form_type_failed"
         try:
             await page.wait_for_selector(CARD_SEL, timeout=SELECTOR_TIMEOUT_MS)
         except Exception:
+            url_now = page.url
+            trail.append(f"form_submit: no_cards after submit ({int(time.time()-t0)}s, url={url_now[:120]})")
             return [], "form_no_cards"
         items = await _extract_cards(page, limit, city)
+        trail.append(f"form_submit: got {len(items)} items in {int(time.time()-t0)}s")
         return items, "form_submit"
     finally:
         await page.close()
 
 
-async def _search_impl(query: str, city: str, limit: int) -> tuple[list[PriceItem], str]:
+async def _search_impl(query: str, city: str, limit: int) -> tuple[list[PriceItem], str, list[str]]:
+    trail: list[str] = []
     ctx = await _new_context(city)
     try:
-        items, strat = await _search_via_url(ctx, query, limit, city)
+        items, strat = await _search_via_url(ctx, query, limit, city, trail)
         if items:
-            return items, strat
-        items, strat = await _search_via_form(ctx, query, limit, city)
-        return items, strat
+            return items, strat, trail
+        items, strat = await _search_via_form(ctx, query, limit, city, trail)
+        return items, strat, trail
     finally:
         await ctx.close()
 
@@ -305,11 +313,11 @@ async def search(
     if cached:
         return SearchResponse(query=query, city=city, strategy_used="cache", cached=True, results=cached)
     try:
-        items, strategy = await _search_impl(query, city, limit)
+        items, strategy, trail = await _search_impl(query, city, limit)
     except Exception as e:
         raise HTTPException(502, f"scrape failed: {e!s}"[:200])
     _cache_set(key, items)
-    return SearchResponse(query=query, city=city, strategy_used=strategy, cached=False, results=items)
+    return SearchResponse(query=query, city=city, strategy_used=strategy, cached=False, results=items, trail=trail)
 
 
 @app.post("/batch", response_model=BatchResponse)
@@ -330,7 +338,7 @@ async def batch(req: BatchRequest):
             results.append(BatchItemResult(query=q, found=bool(item), item=item, cached=True, strategy_used="cache"))
             continue
         try:
-            items, strategy = await _search_impl(q, city, req.limit)
+            items, strategy, _ = await _search_impl(q, city, req.limit)
             _cache_set(key, items)
             item = items[0] if items else None
             results.append(BatchItemResult(query=q, found=bool(item), item=item, strategy_used=strategy))
