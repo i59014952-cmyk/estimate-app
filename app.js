@@ -1,6 +1,25 @@
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
 const SKIP_WORDS = ['итого', 'ндс'];
+const HIDDEN_CATEGORIES = new Set([
+    'электроснабжение и освещение',
+    'индивидуальный тепловой пункт (тм)',
+    'кондиционирование',
+    'вентиляция',
+    'напольное отопление',
+    'радиаторное отопление',
+    'канализация',
+    'водоснабжение',
+]);
+function isHiddenCategory(name) {
+    const normalized = String(name)
+        .toLowerCase()
+        .replace(/^[\s\d.,:;)("'«»\-–—№]+/u, '')
+        .replace(/[\s.,:;)("'«»\-–—]+$/u, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return HIDDEN_CATEGORIES.has(normalized);
+}
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
 const PRICES_BACKEND = 'https://petrovich-proxy.onrender.com';
@@ -68,6 +87,7 @@ function extractItems(data) {
         if (!row || typeof row !== 'object') continue;
         const name = pickName(row);
         if (!name) continue;
+        if (isHiddenCategory(name)) continue;
         const qty = toNumber(row.Column4);
         if (isNaN(qty) || qty === 0) continue;
         const lower = name.toLowerCase();
@@ -165,6 +185,10 @@ function renderResults(query) {
 }
 
 function addRow({ name, unit, unitPrice, qty, notFound, source, url }) {
+    if (isHiddenCategory(name)) {
+        console.log(`[addRow] заблокирована скрытая категория: "${name}"`);
+        return;
+    }
     estimate.push({
         id: nextId++,
         name,
@@ -586,6 +610,7 @@ function extractNameAndQty(row) {
 function shouldSkipName(name) {
     if (!name) return true;
     if (!/\p{L}{3,}/u.test(name)) return true;
+    if (isHiddenCategory(name)) return true;
     const lower = name.toLowerCase();
     for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
     const firstWord = (lower.match(/[\p{L}\p{N}/]+/u) || [''])[0];
@@ -601,7 +626,11 @@ function importRows(rows) {
     let skipped = 0;
     for (const row of rows) {
         const { name, qty } = extractNameAndQty(row);
-        if (!name || shouldSkipName(name)) { skipped++; continue; }
+        if (!name || shouldSkipName(name)) {
+            if (name) console.log(`[Импорт] пропущено: "${name}"`);
+            skipped++;
+            continue;
+        }
         const q = isFinite(qty) && qty > 0 ? qty : 1;
         const match = fuzzyFind(name);
         console.log(`[Поиск] "${name}" (qty=${q}) -> ${match ? 'найдено: ' + match.name : 'НЕ найдено'}`);
@@ -733,6 +762,7 @@ function extractDdcItems(rows) {
         const resName = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : '';
         const displayName = section || resName;
         if (!displayName) continue;
+        if (isHiddenCategory(displayName)) continue;
         if (sections.has(displayName)) continue;
         const price = toNumber(row[priceIdx]);
         if (isNaN(price) || price <= 0) continue;
