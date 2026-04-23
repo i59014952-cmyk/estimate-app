@@ -14,8 +14,8 @@ const HIDDEN_CATEGORIES = new Set([
 function isHiddenCategory(name) {
     const normalized = String(name)
         .toLowerCase()
-        .replace(/^[\s\d.,:;)("'«»\-–—№]+/u, '')
-        .replace(/[\s.,:;)("'«»\-–—]+$/u, '')
+        .replace(/^[\s\d.,:;\-–—№]+/u, '')
+        .replace(/[\s.,:;]+$/u, '')
         .replace(/\s+/g, ' ')
         .trim();
     return HIDDEN_CATEGORIES.has(normalized);
