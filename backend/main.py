@@ -515,6 +515,24 @@ async def kolorit_debug(query: str = "краска", path: str = "/search/?q="):
     # find search form
     form = soup.select_one("form[action*='search'], form[name='search']")
     form_html = str(form)[:500] if form else None
+    # Try to find product card by price element and walk up to a likely wrapper
+    sample_cards = []
+    for price_el in soup.select(".catalog-item__price, .price-item__sum")[:3]:
+        walker = price_el
+        for _ in range(6):
+            walker = walker.parent
+            if walker is None:
+                break
+            if walker.name in ("article", "li") or any(
+                c in (walker.get("class") or [])
+                for c in ("catalog-item", "catalog-item__wrap", "product", "product-item")
+            ):
+                break
+        sample_cards.append({
+            "tag": walker.name if walker else None,
+            "class": walker.get("class") if walker else None,
+            "html": (str(walker)[:2000] if walker else None),
+        })
     return {
         "url": url,
         "html_len": len(html),
@@ -523,6 +541,7 @@ async def kolorit_debug(query: str = "краска", path: str = "/search/?q="):
         "selector_counts": counts,
         "top_classes": top_classes,
         "form_html": form_html,
+        "sample_cards": sample_cards,
     }
 
 
