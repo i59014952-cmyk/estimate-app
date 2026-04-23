@@ -492,8 +492,8 @@ async def kolorit_search(
 
 
 @app.get("/kolorit/debug")
-async def kolorit_debug(query: str = "краска"):
-    url = f"https://kolorit.ru/search/?q={query.strip().replace(' ', '+')}"
+async def kolorit_debug(query: str = "краска", path: str = "/search/?q="):
+    url = f"https://kolorit.ru{path}{query.strip().replace(' ', '+')}"
     html = await _kolorit_fetch(url)
     soup = BeautifulSoup(html, "lxml")
     body_text = soup.get_text("\n", strip=True)[:3000]
