@@ -600,6 +600,7 @@ function extractNameAndQty(row) {
 function shouldSkipName(name) {
     if (!name) return true;
     if (!/\p{L}{3,}/u.test(name)) return true;
+    if (isHiddenCategory(name)) return true;
     const lower = name.toLowerCase();
     for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
     const firstWord = (lower.match(/[\p{L}\p{N}/]+/u) || [''])[0];
