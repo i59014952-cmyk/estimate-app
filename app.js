@@ -1,17 +1,11 @@
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
-const PETROVICH_BACKEND = 'https://petrovich-proxy.onrender.com';
-const PETROVICH_CITY = 'moscow';
-const PETROVICH_CONCURRENCY = 3;
-const LEMANAPRO_BACKEND = 'https://lemanapro-price-parser-production-3fce.up.railway.app';
-const LEMANAPRO_CITY = 'moscow';
-const LEMANAPRO_CONCURRENCY = 3;
 const SKIP_WORDS = ['итого', 'ндс'];
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
 const KOLORIT_BACKEND = 'https://petrovich-proxy.onrender.com';
 const KOLORIT_CONCURRENCY = 3;
-const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', petrovich: 'Петрович', lemanapro: 'Лемана', kolorit: 'Колорит', none: '—' };
+const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', kolorit: 'Колорит', none: '—' };
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -22,9 +16,6 @@ const vatEl = document.getElementById('vat');
 const grandEl = document.getElementById('grand');
 const exportBtn = document.getElementById('export-btn');
 const uploadBtn = document.getElementById('upload-btn');
-const templateBtn = document.getElementById('template-btn');
-const petrovichBtn = document.getElementById('petrovich-btn');
-const lemanaproBtn = document.getElementById('lemanapro-btn');
 const koloritBtn = document.getElementById('kolorit-btn');
 const fileInput = document.getElementById('file-input');
 const uploadSummary = document.getElementById('upload-summary');
@@ -231,8 +222,6 @@ function renderTotals() {
     grandEl.textContent = formatMoney(subtotal + vat);
     exportBtn.disabled = estimate.length === 0;
     const anyNotFound = estimate.some(r => r.notFound);
-    petrovichBtn.disabled = !anyNotFound || petrovichBtn.dataset.busy === '1';
-    lemanaproBtn.disabled = !anyNotFound || lemanaproBtn.dataset.busy === '1';
     koloritBtn.disabled = !anyNotFound || koloritBtn.dataset.busy === '1';
 }
 
@@ -275,13 +264,6 @@ function exportCsv() {
     rows.push(['', '', '', 'НДС 20%', vat.toFixed(2), '']);
     rows.push(['', '', '', 'Итого с НДС', (subtotal + vat).toFixed(2), '']);
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
-}
-
-function downloadTemplate() {
-    downloadCsv([
-        ['# Заполните только реальные наименования работ и количество'],
-        ['Наименование', 'Количество'],
-    ], 'template.csv');
 }
 
 function parseCsv(text) {
@@ -680,141 +662,6 @@ async function fetchKoloritPrices() {
     }
 }
 
-async function fetchLemanaproPrices() {
-    const targets = estimate.filter(r => r.notFound);
-    if (targets.length === 0) return;
-    lemanaproBtn.dataset.busy = '1';
-    lemanaproBtn.disabled = true;
-    const prevLabel = lemanaproBtn.textContent;
-    lemanaproBtn.textContent = 'Запрос к Лемане…';
-    uploadSummary.classList.remove('error');
-    uploadSummary.textContent = `Запрос ${targets.length} позиций у Леманы…`;
-
-    let updated = 0;
-    let done = 0;
-    let failed = 0;
-    const reportProgress = () => {
-        uploadSummary.textContent = `Лемана: ${done}/${targets.length} (обновлено ${updated})`;
-    };
-
-    async function searchOne(name) {
-        const url = `${LEMANAPRO_BACKEND}/search?query=${encodeURIComponent(name)}&city=${encodeURIComponent(LEMANAPRO_CITY)}&limit=1`;
-        try {
-            const r = await fetch(url);
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const j = await r.json();
-            console.log(`[Лемана] "${name}" -> ${j.results?.length || 0} шт. strategy=${j.strategy_used}`);
-            return (j.results && j.results[0]) || null;
-        } catch (err) {
-            console.warn('[Лемана] ошибка', name, err.message);
-            failed++;
-            return null;
-        }
-    }
-
-    async function worker(queue) {
-        while (queue.length > 0) {
-            const row = queue.shift();
-            if (!row) return;
-            const hit = await searchOne(row.name);
-            done++;
-            if (hit && hit.price) {
-                row.name = hit.name || row.name;
-                row.unitPrice = hit.price;
-                row.unit = hit.unit || row.unit || 'шт.';
-                row.notFound = false;
-                row.source = 'lemanapro';
-                row.url = hit.url || '';
-                updated++;
-            }
-            reportProgress();
-        }
-    }
-
-    const queue = targets.slice();
-    const workers = Array.from({ length: LEMANAPRO_CONCURRENCY }, () => worker(queue));
-    try {
-        await Promise.all(workers);
-        uploadSummary.textContent = `Лемана: распознано ${updated} из ${targets.length} (ошибок: ${failed})`;
-        renderEstimate();
-    } catch (err) {
-        console.error('[Лемана] сбой', err);
-        uploadSummary.textContent = `Лемана недоступна: ${err.message}`;
-        uploadSummary.classList.add('error');
-    } finally {
-        delete lemanaproBtn.dataset.busy;
-        lemanaproBtn.textContent = prevLabel;
-        renderTotals();
-    }
-}
-
-async function fetchPetrovichPrices() {
-    const targets = estimate.filter(r => r.notFound);
-    if (targets.length === 0) return;
-    petrovichBtn.dataset.busy = '1';
-    petrovichBtn.disabled = true;
-    const prevLabel = petrovichBtn.textContent;
-    petrovichBtn.textContent = 'Запрос к Петровичу…';
-    uploadSummary.classList.remove('error');
-    uploadSummary.textContent = `Запрос ${targets.length} позиций у Петровича (первый раз может занять до минуты)…`;
-
-    let updated = 0;
-    let done = 0;
-    let failed = 0;
-    const reportProgress = () => {
-        uploadSummary.textContent = `Петрович: ${done}/${targets.length} (обновлено ${updated})`;
-    };
-
-    async function searchOne(name) {
-        const url = `${PETROVICH_BACKEND}/search?query=${encodeURIComponent(name)}&city=${encodeURIComponent(PETROVICH_CITY)}&limit=1`;
-        try {
-            const r = await fetch(url);
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const j = await r.json();
-            console.log(`[Петрович] "${name}" -> ${j.results?.length || 0} шт. strategy=${j.strategy_used}`);
-            return (j.results && j.results[0]) || null;
-        } catch (err) {
-            console.warn('[Петрович] ошибка', name, err.message);
-            failed++;
-            return null;
-        }
-    }
-
-    async function worker(queue) {
-        while (queue.length > 0) {
-            const row = queue.shift();
-            if (!row) return;
-            const hit = await searchOne(row.name);
-            done++;
-            if (hit && hit.price) {
-                row.name = hit.name || row.name;
-                row.unitPrice = hit.price;
-                row.unit = hit.unit || row.unit || 'шт.';
-                row.notFound = false;
-                row.source = 'petrovich';
-                row.url = hit.url || '';
-                updated++;
-            }
-            reportProgress();
-        }
-    }
-
-    const queue = targets.slice();
-    const workers = Array.from({ length: PETROVICH_CONCURRENCY }, () => worker(queue));
-    try {
-        await Promise.all(workers);
-        uploadSummary.textContent = `Петрович: распознано ${updated} из ${targets.length} (ошибок: ${failed})`;
-        renderEstimate();
-    } catch (err) {
-        console.error('[Петрович] сбой', err);
-        uploadSummary.textContent = `Петрович недоступен: ${err.message}`;
-        uploadSummary.classList.add('error');
-    } finally {
-        delete petrovichBtn.dataset.busy;
-        petrovichBtn.textContent = prevLabel;
-        renderTotals();
-    }
-}
 
 function loadCatalog() {
     statusEl.textContent = 'Загрузка каталогов…';
@@ -841,15 +688,12 @@ document.addEventListener('click', e => {
     if (!e.target.closest('.search-block')) resultsEl.classList.remove('open');
 });
 exportBtn.addEventListener('click', exportCsv);
-templateBtn.addEventListener('click', downloadTemplate);
 uploadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => {
     const file = e.target.files[0];
     if (file) handleFile(file);
     e.target.value = '';
 });
-petrovichBtn.addEventListener('click', fetchPetrovichPrices);
-lemanaproBtn.addEventListener('click', fetchLemanaproPrices);
 koloritBtn.addEventListener('click', fetchKoloritPrices);
 
 renderEstimate();
