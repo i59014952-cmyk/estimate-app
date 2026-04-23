@@ -183,13 +183,32 @@ function updateQty(id, qty) {
     if (totalCell) totalCell.textContent = row.notFound ? '—' : formatMoney(row.qty * row.unitPrice);
 }
 
+const EMPTY_STATE_HTML = `
+    <tr class="empty"><td colspan="7">
+        <div class="empty-state">
+            <div class="empty-state__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="9" y1="13" x2="15" y2="13"/>
+                    <line x1="9" y1="17" x2="15" y2="17"/>
+                </svg>
+            </div>
+            <div class="empty-state__title">Смета пуста</div>
+            <div class="empty-state__hint">Загрузите коммерческое предложение (CSV, Excel, PDF, Word, JPEG) или начните поиск работы через строку выше.</div>
+        </div>
+    </td></tr>`;
+
+const LINK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+
 function renderEstimate() {
     if (estimate.length === 0) {
-        bodyEl.innerHTML = '<tr class="empty"><td colspan="7">Ничего не добавлено</td></tr>';
+        bodyEl.innerHTML = EMPTY_STATE_HTML;
     } else {
         bodyEl.innerHTML = estimate.map(r => {
             const nameCell = r.url
-                ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" class="product-link">${escapeHtml(r.name)}</a>`
+                ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" class="product-link">${escapeHtml(r.name)}${LINK_ICON}</a>`
                 : escapeHtml(r.name);
             return `
             <tr data-id="${r.id}" class="${r.notFound ? 'not-found' : ''}">
@@ -199,7 +218,7 @@ function renderEstimate() {
                 <td class="num">${r.notFound ? '<span class="price-missing">цена не найдена</span>' : formatMoney(r.unitPrice)}</td>
                 <td class="num row-total">${r.notFound ? '—' : formatMoney(r.qty * r.unitPrice)}</td>
                 <td><span class="src-badge ${r.source}">${SOURCE_LABELS[r.source] || '—'}</span></td>
-                <td><button type="button" class="del-btn">Удалить</button></td>
+                <td><button type="button" class="del-btn" aria-label="Удалить">${TRASH_ICON}</button></td>
             </tr>
         `;
         }).join('');
@@ -580,6 +599,25 @@ function loadLocalCatalog() {
     });
 }
 
+function setCatalogStatus() {
+    const total = catalog.length + ddcCatalog.length;
+    statusEl.textContent = `Каталог: ${total.toLocaleString('ru-RU')} позиций (своя база ${catalog.length}, DDC ${ddcCatalog.length})`;
+    statusEl.classList.remove('error');
+}
+
+function initTheme() {
+    const saved = localStorage.getItem('theme');
+    const preferred = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', preferred);
+    const btn = document.getElementById('theme-toggle');
+    btn.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme');
+        const next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+    });
+}
+
 function loadDdcCatalog() {
     return fetch(DDC_URL).then(r => {
         if (!r.ok) throw new Error(`DDC: ${r.status}`);
@@ -665,9 +703,10 @@ async function fetchKoloritPrices() {
 
 function loadCatalog() {
     statusEl.textContent = 'Загрузка каталогов…';
+    statusEl.classList.remove('error');
     Promise.all([loadLocalCatalog(), loadDdcCatalog()])
         .then(() => {
-            statusEl.textContent = `Своя база: ${catalog.length}, DDC база: ${ddcCatalog.length}`;
+            setCatalogStatus();
             searchInput.disabled = false;
             uploadBtn.disabled = false;
             renderTotals();
@@ -696,5 +735,6 @@ fileInput.addEventListener('change', e => {
 });
 koloritBtn.addEventListener('click', fetchKoloritPrices);
 
+initTheme();
 renderEstimate();
 loadCatalog();

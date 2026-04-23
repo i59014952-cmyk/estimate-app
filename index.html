@@ -3,33 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Калькулятор сметы</title>
-    <link rel="stylesheet" href="styles.css?v=14">
+    <title>Смета.Про — калькулятор ремонтных смет</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
-    <div class="container">
-        <h1>Калькулятор сметы</h1>
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand__mark">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <path d="M9 3v18"/>
+                        <path d="M3 9h6"/>
+                        <path d="M3 15h6"/>
+                        <path d="M15 7v6"/>
+                        <path d="M12 10h6"/>
+                    </svg>
+                </div>
+                <div class="brand__text">
+                    <div class="brand__name">Смета.Про</div>
+                    <div class="brand__subtitle">Калькулятор ремонтных смет</div>
+                </div>
+            </div>
+            <div class="app-header__tools">
+                <button id="theme-toggle" class="icon-btn" type="button" aria-label="Сменить тему" title="Сменить тему">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="4"/>
+                        <path d="M12 2v2"/><path d="M12 20v2"/>
+                        <path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
+                        <path d="M2 12h2"/><path d="M20 12h2"/>
+                        <path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/>
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
 
-        <div id="status" class="status"></div>
-
-        <section class="search-block">
-            <label for="search">Поиск работы</label>
-            <input type="text" id="search" placeholder="Начните вводить название…" autocomplete="off" disabled>
+    <main class="container">
+        <section class="search-block card">
+            <label for="search">Поиск по каталогу</label>
+            <div class="search-field">
+                <svg class="search-field__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" id="search" placeholder="Начните вводить название работы или материала…" autocomplete="off" disabled>
+            </div>
             <div id="results" class="results"></div>
         </section>
 
-        <section class="upload-block">
-            <button id="upload-btn" type="button" disabled>Загрузить КП</button>
-            <button id="kolorit-btn" type="button" disabled>Запрос цен</button>
+        <section class="actions card">
+            <button id="upload-btn" class="btn btn--primary" type="button" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Загрузить КП
+            </button>
+            <button id="kolorit-btn" class="btn btn--outline" type="button" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 4v6h-6"/>
+                    <path d="M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
+                    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
+                </svg>
+                Запрос цен
+            </button>
             <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.pdf,.docx,.jpg,.jpeg,.png" hidden>
             <div id="upload-summary" class="upload-summary"></div>
         </section>
 
-        <section class="estimate">
-            <div class="estimate-header">
-                <h2>Смета</h2>
-                <button id="export-btn" type="button">Экспорт в CSV</button>
-            </div>
+        <section class="estimate card">
+            <header class="estimate__header">
+                <div>
+                    <h2 class="estimate__title">Смета</h2>
+                    <div id="status" class="estimate__meta"></div>
+                </div>
+                <button id="export-btn" class="btn btn--outline btn--sm" type="button" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Экспорт CSV
+                </button>
+            </header>
             <table id="estimate-table">
                 <thead>
                     <tr>
@@ -43,19 +108,19 @@
                     </tr>
                 </thead>
                 <tbody id="estimate-body">
-                    <tr class="empty"><td colspan="7">Ничего не добавлено</td></tr>
+                    <tr class="empty"><td colspan="7"></td></tr>
                 </tbody>
             </table>
-
-            <div class="totals">
-                <div class="total-row"><span>Сумма:</span> <span id="subtotal">0</span> ₽</div>
-                <div class="total-row"><span>НДС 20%:</span> <span id="vat">0</span> ₽</div>
-                <div class="total-row grand"><span>Итого с НДС:</span> <span id="grand">0</span> ₽</div>
-            </div>
         </section>
-    </div>
+
+        <section class="totals-hero" aria-label="Итоги сметы">
+            <div class="totals-row"><span>Стоимость работ</span> <span><span id="subtotal">0</span> ₽</span></div>
+            <div class="totals-row"><span>НДС 20%</span> <span><span id="vat">0</span> ₽</span></div>
+            <div class="totals-row totals-row--grand"><span>Итого с НДС</span> <span><span id="grand">0</span> ₽</span></div>
+        </section>
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js?v=14"></script>
+    <script src="app.js?v=15"></script>
 </body>
 </html>
