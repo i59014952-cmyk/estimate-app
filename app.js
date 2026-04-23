@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-ambiguous-headers';
+const APP_VERSION = 'v2026-04-23-qty-meters';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -632,7 +632,7 @@ function cleanName(s) {
 
 function textToRows(text) {
     const rows = [];
-    const qtyRx = /(\d+(?:[.,]\d+)?)\s*(шт\.?|м\.?п\.?|м2|м²|м3|кг|т|л|компл\.?|упак\.?)?\s*$/i;
+    const qtyRx = /\s(\d+(?:[.,]\d+)?)(?:\s+(шт\.?|м\.?п\.?|п\.?м\.?|м2|м²|м3|м³|мм|см|м|кг|т|л|компл\.?|упак\.?|пог\.?м?\.?))?\s*$/i;
     for (const raw of text.split(/\r?\n/)) {
         const line = raw.replace(/\s+/g, ' ').trim();
         if (!line) continue;
