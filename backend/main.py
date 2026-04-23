@@ -631,9 +631,7 @@ def _krepmast_parse(html: str, limit: int) -> list[PriceItem]:
 async def _krepmast_search_merged(query: str, limit: int) -> tuple[list[PriceItem], list[str]]:
     q = query.strip().replace(" ", "+")
     urls_to_try = [
-        f"https://krepmast.ru/search/?q={q}",
-        f"https://krepmast.ru/search/?search={q}",
-        f"https://krepmast.ru/catalog/search/?q={q}",
+        f"https://krepmast.ru/search/?find={q}",
     ]
     merged: list[PriceItem] = []
     seen: set[str] = set()
