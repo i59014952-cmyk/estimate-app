@@ -12,7 +12,13 @@ const HIDDEN_CATEGORIES = new Set([
     'водоснабжение',
 ]);
 function isHiddenCategory(name) {
-    return HIDDEN_CATEGORIES.has(String(name).trim().toLowerCase());
+    const normalized = String(name)
+        .toLowerCase()
+        .replace(/^[\s\d.,:;)("'«»\-–—№]+/u, '')
+        .replace(/[\s.,:;)("'«»\-–—]+$/u, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return HIDDEN_CATEGORIES.has(normalized);
 }
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
@@ -616,7 +622,11 @@ function importRows(rows) {
     let skipped = 0;
     for (const row of rows) {
         const { name, qty } = extractNameAndQty(row);
-        if (!name || shouldSkipName(name)) { skipped++; continue; }
+        if (!name || shouldSkipName(name)) {
+            if (name) console.log(`[Импорт] пропущено: "${name}"`);
+            skipped++;
+            continue;
+        }
         const q = isFinite(qty) && qty > 0 ? qty : 1;
         const match = fuzzyFind(name);
         console.log(`[Поиск] "${name}" (qty=${q}) -> ${match ? 'найдено: ' + match.name : 'НЕ найдено'}`);
