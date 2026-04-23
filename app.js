@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-strict-relevance';
+const APP_VERSION = 'v2026-04-23-empty-state-upload';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -121,15 +121,33 @@ function normalizeYo(s) {
     return String(s).toLowerCase().replace(/ё/g, 'е');
 }
 
+const CONNECTOR_WORDS = new Set([
+    'с', 'со', 'для', 'из', 'на', 'под', 'над', 'без', 'в', 'во',
+    'и', 'а', 'но', 'к', 'ко', 'по', 'о', 'об', 'за', 'при',
+]);
+
+const ADJECTIVE_ENDING = /(?:ый|ий|ой|ая|яя|ое|ее|ые|ие|ого|его|ому|ему|ыми|ими|ых|их|ую|юю)$/u;
+
 function isRelevantCandidate(query, candidate) {
     const qTokens = tokenize(normalizeYo(query));
     if (qTokens.length === 0) return true;
     const cName = normalizeYo(candidate && candidate.name || '');
     if (!cName) return false;
-    const cTokens = cName.match(/\p{L}+/gu) || [];
-    if (cTokens.length === 0) return false;
+    const allTokens = cName.match(/\p{L}+/gu) || [];
+    if (allTokens.length === 0) return false;
     const qStems = qTokens.map(stemToken);
-    return qStems.some(s => cTokens.some(ct => ct.startsWith(s)));
+    let matchIdx = -1;
+    for (let i = 0; i < allTokens.length; i++) {
+        if (qStems.some(s => allTokens[i].startsWith(s))) { matchIdx = i; break; }
+    }
+    if (matchIdx === -1) return false;
+    if (ADJECTIVE_ENDING.test(allTokens[matchIdx])) return false;
+    for (let i = 0; i < matchIdx; i++) {
+        const t = allTokens[i];
+        if (CONNECTOR_WORDS.has(t)) return false;
+        if (!ADJECTIVE_ENDING.test(t)) return false;
+    }
+    return true;
 }
 
 function fuzzyFindIn(qTokens, pool) {
@@ -257,6 +275,14 @@ const EMPTY_STATE_HTML = `
             </div>
             <div class="empty-state__title">Смета пуста</div>
             <div class="empty-state__hint">Загрузите коммерческое предложение (Excel, PDF, Word) или начните поиск работы через строку выше.</div>
+            <button id="empty-upload-btn" class="btn btn--primary" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Загрузить КП
+            </button>
         </div>
     </td></tr>`;
 
@@ -267,6 +293,8 @@ function renderEstimate() {
     const prevScrollY = window.scrollY;
     if (estimate.length === 0) {
         bodyEl.innerHTML = EMPTY_STATE_HTML;
+        const emptyUploadBtn = bodyEl.querySelector('#empty-upload-btn');
+        if (emptyUploadBtn) emptyUploadBtn.addEventListener('click', () => fileInput.click());
     } else {
         bodyEl.innerHTML = estimate.map(r => {
             const nameCell = r.url
