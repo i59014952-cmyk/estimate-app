@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-clean-names';
+const APP_VERSION = 'v2026-04-23-strict-relevance';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -111,14 +111,25 @@ function tokenize(s) {
         .filter(w => w.length >= 3);
 }
 
+function stemToken(t) {
+    if (t.length <= 4) return t;
+    if (t.length === 5) return t.slice(0, 4);
+    return t.slice(0, Math.min(t.length - 1, 6));
+}
+
+function normalizeYo(s) {
+    return String(s).toLowerCase().replace(/ё/g, 'е');
+}
+
 function isRelevantCandidate(query, candidate) {
-    const qTokens = tokenize(query);
-    const significant = qTokens.filter(t => t.length >= 5);
-    const pool = significant.length > 0 ? significant : qTokens;
-    if (pool.length === 0) return true;
-    const cName = String(candidate && candidate.name || '').toLowerCase();
+    const qTokens = tokenize(normalizeYo(query));
+    if (qTokens.length === 0) return true;
+    const cName = normalizeYo(candidate && candidate.name || '');
     if (!cName) return false;
-    return pool.some(qt => cName.includes(qt.slice(0, 5)));
+    const cTokens = cName.match(/\p{L}+/gu) || [];
+    if (cTokens.length === 0) return false;
+    const qStems = qTokens.map(stemToken);
+    return qStems.some(s => cTokens.some(ct => ct.startsWith(s)));
 }
 
 function fuzzyFindIn(qTokens, pool) {
@@ -910,7 +921,8 @@ async function fetchPricesForNotFound() {
             const rawCandidates = await searchOne(row.name);
             const candidates = rawCandidates.filter(c => isRelevantCandidate(row.name, c));
             if (rawCandidates.length !== candidates.length) {
-                console.log(`[Запрос цен] "${row.name}": отфильтровано нерелевантных ${rawCandidates.length - candidates.length}`);
+                const rejected = rawCandidates.filter(c => !isRelevantCandidate(row.name, c)).map(c => c.name);
+                console.log(`[Запрос цен] "${row.name}": отклонено нерелевантных ${rejected.length}:`, rejected);
             }
             done++;
             row.candidates = candidates;
