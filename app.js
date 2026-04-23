@@ -303,7 +303,7 @@ function renderEstimate() {
                 input.addEventListener('keydown', e => {
                     if (e.key === 'Enter') { e.preventDefault(); applyManualPrice(id, input.value); }
                 });
-                input.focus();
+                input.focus({ preventScroll: true });
             }
         });
     }
