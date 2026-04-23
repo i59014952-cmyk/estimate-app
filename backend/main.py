@@ -252,14 +252,32 @@ async def _search_via_form(ctx: BrowserContext, query: str, limit: int, city: st
             trail.append(f"form_submit: goto failed: {e!s}"[:140])
             return [], "form_goto_failed"
         await page.wait_for_timeout(HYDRATION_WAIT_MS)
-        input_sel = 'input[name="q"]'
-        try:
-            await page.wait_for_selector(input_sel, timeout=SELECTOR_TIMEOUT_MS, state="attached")
-        except Exception:
-            in_cnt = await page.evaluate("() => document.querySelectorAll('input').length")
-            form_cnt = await page.evaluate("() => document.querySelectorAll('[data-test=\"main-search-form\"]').length")
-            trail.append(f"form_submit: no_input ({int(time.time()-t0)}s, inputs={in_cnt}, forms={form_cnt})")
+        input_candidates = [
+            'input.header-search-input',
+            '[data-test="main-search-form"] input[type="text"]',
+            'form[name="search"] input[type="text"]',
+            'input[name="q"][type="text"]',
+            'input[name="q"]',
+        ]
+        input_sel = None
+        for cand in input_candidates:
+            try:
+                await page.wait_for_selector(cand, timeout=5000, state="attached")
+                input_sel = cand
+                break
+            except Exception:
+                continue
+        if not input_sel:
+            inputs_dump = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('input')).slice(0,40).map(i => ({
+                    type: i.type, name: i.name, placeholder: (i.placeholder||'').slice(0,40),
+                    cls: (i.className||'').slice(0,60), dt: i.getAttribute('data-test')||''
+                }))
+            """)
+            trail.append(f"form_submit: no_input ({int(time.time()-t0)}s, inputs={len(inputs_dump)})")
+            trail.append(f"form_submit: inputs_dump={inputs_dump[:5]}")
             return [], "form_no_input"
+        trail.append(f"form_submit: matched '{input_sel}' ({int(time.time()-t0)}s)")
         inp = page.locator(input_sel).first
         try:
             await inp.click(timeout=5000)
