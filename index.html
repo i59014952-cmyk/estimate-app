@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Калькулятор сметы</title>
-    <link rel="stylesheet" href="styles.css?v=10">
+    <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
     <div class="container">
@@ -22,6 +22,7 @@
             <button id="upload-btn" type="button" disabled>Загрузить список работ</button>
             <button id="template-btn" type="button">Скачать шаблон</button>
             <button id="petrovich-btn" type="button" disabled>Подтянуть цены с Петровича</button>
+            <button id="lemanapro-btn" type="button" disabled>Подтянуть цены с Леманы</button>
             <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.pdf,.docx,.jpg,.jpeg,.png" hidden>
             <div id="upload-summary" class="upload-summary"></div>
         </section>
@@ -57,6 +58,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
 </body>
 </html>
