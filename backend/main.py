@@ -386,6 +386,18 @@ async def debug_home():
                 return el ? el.outerHTML.slice(0, 2000) : null;
             }
         """)
-        return {"inputs": inputs, "forms": forms, "main_search_html": main_search_html}
+        meta = await page.evaluate("""
+            () => ({
+                url: location.href,
+                title: document.title,
+                htmlLen: document.documentElement.outerHTML.length,
+                bodyText: document.body ? document.body.innerText.slice(0, 1500) : null,
+                dataTests: Array.from(new Set(
+                    Array.from(document.querySelectorAll('[data-test]'))
+                        .map(e => e.getAttribute('data-test'))
+                )).slice(0, 40),
+            })
+        """)
+        return {"meta": meta, "inputs": inputs, "forms": forms, "main_search_html": main_search_html}
     finally:
         await ctx.close()
