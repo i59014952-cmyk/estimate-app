@@ -357,6 +357,39 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
 
 .upload-summary.error { color: var(--danger); }
 
+.upload-summary.busy {
+    color: var(--text);
+}
+
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    vertical-align: -3px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.btn .spinner {
+    border-color: rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    margin-right: 0;
+    vertical-align: middle;
+}
+
+.btn--outline .spinner {
+    border-color: var(--border-strong);
+    border-top-color: var(--primary);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 /* === Estimate === */
 
 .estimate { padding: 20px 24px 24px; }

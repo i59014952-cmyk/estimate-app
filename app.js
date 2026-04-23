@@ -595,19 +595,30 @@ function importRows(rows) {
 
 function reportImport(prefix, rows) {
     const { imported, notFoundCount, skipped } = importRows(rows);
-    uploadSummary.textContent = `${prefix}: загружено ${imported}, без цены ${notFoundCount}, пропущено ${skipped}`;
+    setStatus('done', `${prefix}: загружено ${imported}, без цены ${notFoundCount}, пропущено ${skipped}`);
+}
+
+function setStatus(kind, text) {
+    uploadSummary.classList.remove('error', 'busy');
+    if (kind === 'busy') {
+        uploadSummary.classList.add('busy');
+        uploadSummary.innerHTML = `<span class="spinner"></span>${escapeHtml(text)}`;
+    } else if (kind === 'error') {
+        uploadSummary.classList.add('error');
+        uploadSummary.textContent = text;
+    } else {
+        uploadSummary.textContent = text;
+    }
 }
 
 function handleFile(file) {
-    uploadSummary.classList.remove('error');
-    uploadSummary.textContent = `Обработка: ${file.name}…`;
+    setStatus('busy', `Обработка: ${file.name}…`);
     const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
     const mime = (file.type || '').toLowerCase();
 
     const failAsync = err => {
         console.error('[handleFile]', err);
-        uploadSummary.textContent = `Ошибка разбора: ${err.message || err}`;
-        uploadSummary.classList.add('error');
+        setStatus('error', `Ошибка разбора: ${err.message || err}`);
     };
 
     const readBuffer = () => new Promise((resolve, reject) => {
@@ -634,7 +645,7 @@ function handleFile(file) {
     }
 
     if (ext === 'pdf' || mime === 'application/pdf') {
-        uploadSummary.textContent = 'PDF: загрузка библиотеки и разбор…';
+        setStatus('busy', 'PDF: загрузка библиотеки и разбор…');
         readBuffer()
             .then(extractPdfText)
             .then(text => {
@@ -647,7 +658,7 @@ function handleFile(file) {
     }
 
     if (ext === 'docx' || mime.includes('wordprocessingml')) {
-        uploadSummary.textContent = 'DOCX: извлекаю текст…';
+        setStatus('busy', 'DOCX: извлекаю текст…');
         readBuffer()
             .then(extractDocxText)
             .then(text => {
@@ -660,9 +671,9 @@ function handleFile(file) {
     }
 
     if (['jpg', 'jpeg', 'png', 'webp'].includes(ext) || mime.startsWith('image/')) {
-        uploadSummary.textContent = 'Изображение: загружаю OCR (первый раз ~5–10 МБ)…';
+        setStatus('busy', 'Изображение: загружаю OCR (первый раз ~5–10 МБ)…');
         extractImageText(file, (status, progress) => {
-            uploadSummary.textContent = `OCR ${status}: ${Math.round(progress * 100)}%`;
+            setStatus('busy', `OCR ${status}: ${Math.round(progress * 100)}%`);
         })
             .then(text => {
                 console.log('[OCR] распознано символов:', text.length);
@@ -782,11 +793,10 @@ async function fetchPricesForNotFound() {
     koloritBtn.disabled = true;
     const prevLabel = koloritBtn.textContent;
     koloritBtn.textContent = 'Запрос цен…';
-    uploadSummary.classList.remove('error');
-    uploadSummary.textContent = `Поиск вариантов для ${targets.length} позиций…`;
+    setStatus('busy', `Поиск вариантов для ${targets.length} позиций…`);
     let filled = 0, done = 0, failed = 0, ambiguous = 0;
     const reportProgress = () => {
-        uploadSummary.textContent = `Запрос цен: ${done}/${targets.length} (с вариантами ${ambiguous})`;
+        setStatus('busy', `Запрос цен: ${done}/${targets.length} (с вариантами ${ambiguous})`);
     };
     async function searchOne(name) {
         const url = `${PRICES_BACKEND}/prices/search?query=${encodeURIComponent(name)}&limit=6`;
@@ -834,12 +844,11 @@ async function fetchPricesForNotFound() {
     const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker(queue));
     try {
         await Promise.all(workers);
-        uploadSummary.textContent = `Запрос цен: обработано ${done}, новых цен ${filled}, с альтернативами ${ambiguous}, ошибок ${failed}`;
+        setStatus('done', `Запрос цен: обработано ${done}, новых цен ${filled}, с альтернативами ${ambiguous}, ошибок ${failed}`);
         renderEstimate();
     } catch (err) {
         console.error('[Запрос цен] сбой', err);
-        uploadSummary.textContent = `Сервис цен недоступен: ${err.message}`;
-        uploadSummary.classList.add('error');
+        setStatus('error', `Сервис цен недоступен: ${err.message}`);
     } finally {
         delete koloritBtn.dataset.busy;
         koloritBtn.textContent = prevLabel;
