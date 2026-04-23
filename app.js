@@ -983,6 +983,15 @@ fileInput.addEventListener('change', e => {
 });
 koloritBtn.addEventListener('click', fetchPricesForNotFound);
 
+const brandEl = document.getElementById('brand');
+if (brandEl) {
+    const reload = () => location.reload();
+    brandEl.addEventListener('click', reload);
+    brandEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reload(); }
+    });
+}
+
 initTheme();
 renderEstimate();
 loadCatalog();
