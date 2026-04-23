@@ -820,9 +820,9 @@ async function fetchPricesForNotFound() {
                     row.notFound = false;
                     filled++;
                 }
-                // Expand the picker so the user can pick any of the top variants.
-                row.expanded = true;
-                ambiguous++;
+                // Keep picker collapsed by default — user opens it via "Заменить (N)".
+                row.expanded = false;
+                if (candidates.length > 1) ambiguous++;
             } else {
                 row.expanded = false;
             }
