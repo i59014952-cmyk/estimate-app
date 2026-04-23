@@ -250,6 +250,7 @@ const LINK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
 
 function renderEstimate() {
+    const prevScrollY = window.scrollY;
     if (estimate.length === 0) {
         bodyEl.innerHTML = EMPTY_STATE_HTML;
     } else {
@@ -307,6 +308,10 @@ function renderEstimate() {
             }
         });
     }
+    if (window.scrollY !== prevScrollY) window.scrollTo(0, prevScrollY);
+    requestAnimationFrame(() => {
+        if (window.scrollY !== prevScrollY) window.scrollTo(0, prevScrollY);
+    });
     renderTotals();
 }
 
