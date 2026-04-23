@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-docs-only';
+const APP_VERSION = 'v2026-04-23-looser-filters';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -597,26 +597,19 @@ function textToRows(text) {
 }
 
 const SKIP_PHRASES = [
-    'смета', '№№', 'п/п', 'наименование',
-    'итого', 'ндс', 'всего с ндс', 'всего без ндс',
+    '№№', 'п/п',
+    'всего с ндс', 'всего без ндс', 'итого с ндс', 'итого без ндс',
     'примечания:', 'примечание:',
-    'заказчик:', 'подрядчик:', 'исполнитель:', 'подпись',
+    'заказчик:', 'подрядчик:', 'исполнитель:',
 ];
 
 const HEADER_FIRST_WORDS = new Set([
     'смета', 'сметы',
-    'объект', 'объекта', 'объекту',
-    'адрес', 'адреса',
-    'основание', 'основания',
     'наименование', 'наименования',
-    'примечание', 'примечания',
     'заказчик', 'заказчика',
     'подрядчик', 'подрядчика',
     'исполнитель', 'исполнителя',
     'подпись', 'подписи',
-    'участок', 'участка',
-    'раздел', 'раздела',
-    'часть', 'части',
     'дата', 'утверждаю', 'согласовано', 'руководитель',
     'итого', 'всего',
     'приложение',
@@ -645,18 +638,24 @@ function extractNameAndQty(row) {
         const n = toNumber(cells[i]);
         if (!isNaN(n) && n > 0) { qty = n; break; }
     }
+    if (isNaN(qty)) {
+        for (let i = 0; i < nameIdx; i++) {
+            const n = toNumber(cells[i]);
+            if (!isNaN(n) && n > 0) { qty = n; break; }
+        }
+    }
     return { name, qty };
 }
 
-function shouldSkipName(name) {
-    if (!name) return true;
-    if (!/\p{L}{3,}/u.test(name)) return true;
-    if (isHiddenCategory(name)) return true;
+function skipReason(name) {
+    if (!name) return 'пустое имя';
+    if (!/\p{L}{3,}/u.test(name)) return 'нет слова из 3+ букв';
+    if (isHiddenCategory(name)) return 'скрытая категория';
     const lower = name.toLowerCase();
-    for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
+    for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return `содержит "${phrase}"`;
     const firstWord = (lower.match(/[\p{L}\p{N}/]+/u) || [''])[0];
-    if (HEADER_FIRST_WORDS.has(firstWord)) return true;
-    return false;
+    if (HEADER_FIRST_WORDS.has(firstWord)) return `заголовок ("${firstWord}")`;
+    return '';
 }
 
 function importRows(rows) {
@@ -667,8 +666,10 @@ function importRows(rows) {
     let skipped = 0;
     for (const row of rows) {
         const { name, qty } = extractNameAndQty(row);
-        if (!name || shouldSkipName(name)) {
-            if (name) console.log(`[Импорт] пропущено: "${name}"`);
+        const reason = skipReason(name);
+        if (reason) {
+            const preview = row.map(c => String(c ?? '').trim()).filter(Boolean).join(' | ').slice(0, 120);
+            console.log(`[Импорт] пропущено (${reason}): "${name || '—'}" ⟵ ${preview}`);
             skipped++;
             continue;
         }
