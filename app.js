@@ -1,6 +1,19 @@
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
 const SKIP_WORDS = ['итого', 'ндс'];
+const HIDDEN_CATEGORIES = new Set([
+    'электроснабжение и освещение',
+    'индивидуальный тепловой пункт (тм)',
+    'кондиционирование',
+    'вентиляция',
+    'напольное отопление',
+    'радиаторное отопление',
+    'канализация',
+    'водоснабжение',
+]);
+function isHiddenCategory(name) {
+    return HIDDEN_CATEGORIES.has(String(name).trim().toLowerCase());
+}
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
 const PRICES_BACKEND = 'https://petrovich-proxy.onrender.com';
@@ -68,6 +81,7 @@ function extractItems(data) {
         if (!row || typeof row !== 'object') continue;
         const name = pickName(row);
         if (!name) continue;
+        if (isHiddenCategory(name)) continue;
         const qty = toNumber(row.Column4);
         if (isNaN(qty) || qty === 0) continue;
         const lower = name.toLowerCase();
@@ -733,6 +747,7 @@ function extractDdcItems(rows) {
         const resName = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : '';
         const displayName = section || resName;
         if (!displayName) continue;
+        if (isHiddenCategory(displayName)) continue;
         if (sections.has(displayName)) continue;
         const price = toNumber(row[priceIdx]);
         if (isNaN(price) || price <= 0) continue;
