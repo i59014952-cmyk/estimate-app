@@ -1,7 +1,8 @@
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
 const PETROVICH_BACKEND = 'https://petrovich-proxy.onrender.com';
-const PETROVICH_BATCH = 20;
+const PETROVICH_CITY = 'moscow';
+const PETROVICH_CONCURRENCY = 3;
 const LEMANAPRO_BACKEND = 'https://lemanapro-price-parser-production-3fce.up.railway.app';
 const LEMANAPRO_CITY = 'moscow';
 const LEMANAPRO_CONCURRENCY = 3;
@@ -692,38 +693,56 @@ async function fetchPetrovichPrices() {
     petrovichBtn.textContent = 'Запрос к Петровичу…';
     uploadSummary.classList.remove('error');
     uploadSummary.textContent = `Запрос ${targets.length} позиций у Петровича (первый раз может занять до минуты)…`;
-    try {
-        const names = targets.map(r => r.name);
-        const results = [];
-        for (let i = 0; i < names.length; i += PETROVICH_BATCH) {
-            const batch = names.slice(i, i + PETROVICH_BATCH);
-            const r = await fetch(`${PETROVICH_BACKEND}/prices`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ names: batch }),
-            });
+
+    let updated = 0;
+    let done = 0;
+    let failed = 0;
+    const reportProgress = () => {
+        uploadSummary.textContent = `Петрович: ${done}/${targets.length} (обновлено ${updated})`;
+    };
+
+    async function searchOne(name) {
+        const url = `${PETROVICH_BACKEND}/search?query=${encodeURIComponent(name)}&city=${encodeURIComponent(PETROVICH_CITY)}&limit=1`;
+        try {
+            const r = await fetch(url);
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const part = await r.json();
-            results.push(...part);
-            console.log('[Петрович] батч ответ:', part);
+            const j = await r.json();
+            console.log(`[Петрович] "${name}" -> ${j.results?.length || 0} шт. strategy=${j.strategy_used}`);
+            return (j.results && j.results[0]) || null;
+        } catch (err) {
+            console.warn('[Петрович] ошибка', name, err.message);
+            failed++;
+            return null;
         }
-        let updated = 0;
-        for (let i = 0; i < targets.length; i++) {
-            const row = targets[i];
-            const res = results[i];
-            if (!res || !res.found || !res.price) continue;
-            row.name = res.title || row.name;
-            row.unitPrice = res.price;
-            row.unit = row.unit || 'шт.';
-            row.notFound = false;
-            row.source = 'petrovich';
-            row.url = res.url || '';
-            updated++;
+    }
+
+    async function worker(queue) {
+        while (queue.length > 0) {
+            const row = queue.shift();
+            if (!row) return;
+            const hit = await searchOne(row.name);
+            done++;
+            if (hit && hit.price) {
+                row.name = hit.name || row.name;
+                row.unitPrice = hit.price;
+                row.unit = hit.unit || row.unit || 'шт.';
+                row.notFound = false;
+                row.source = 'petrovich';
+                row.url = hit.url || '';
+                updated++;
+            }
+            reportProgress();
         }
-        uploadSummary.textContent = `Петрович: распознано ${updated} из ${targets.length}`;
+    }
+
+    const queue = targets.slice();
+    const workers = Array.from({ length: PETROVICH_CONCURRENCY }, () => worker(queue));
+    try {
+        await Promise.all(workers);
+        uploadSummary.textContent = `Петрович: распознано ${updated} из ${targets.length} (ошибок: ${failed})`;
         renderEstimate();
     } catch (err) {
-        console.error('[Петрович] ошибка:', err);
+        console.error('[Петрович] сбой', err);
         uploadSummary.textContent = `Петрович недоступен: ${err.message}`;
         uploadSummary.classList.add('error');
     } finally {

@@ -1,10 +1,11 @@
 import asyncio
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright, Browser, BrowserContext
@@ -13,55 +14,120 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
-SEARCH_URL = "https://petrovich.ru/catalog/search/?search={q}"
-MAX_ITEMS = 50
+DEFAULT_CITY = os.environ.get("DEFAULT_CITY", "moscow")
+CITY_COOKIES = {
+    "moscow": "1",
+    "spb": "2",
+    "kazan": "26",
+    "ekaterinburg": "4",
+}
 PAGE_TIMEOUT_MS = 30000
-SELECTOR_TIMEOUT_MS = 12000
-PER_QUERY_DELAY_S = 0.4
+SELECTOR_TIMEOUT_MS = 15000
+CACHE_TTL_S = 3600
+CACHE_MAX = 5000
+BATCH_MAX = 100
+PER_QUERY_DELAY_S = 0.3
 
-CARD_SELECTOR = ",".join([
-    '[data-test="product-snippet"]',
-    '[data-test="product-card"]',
-    'article.product-card',
-    '.pt-product-snippet',
-    '.product-snippet',
-])
-TITLE_SELECTOR = ",".join([
-    '[data-test="product-title"]',
-    '[itemprop="name"]',
-    '.product-card__title',
-    '.pt-product-title',
-])
-PRICE_SELECTOR = ",".join([
-    '[data-test="product-gold-price"]',
-    '[data-test="product-price"]',
-    '[itemprop="price"]',
-    '.pt-price__value',
-    '.product-card__price',
-])
-LINK_SELECTOR = ",".join([
-    'a.product-snippet__name',
-    'a.product-card__link',
-    '[data-test="product-card"] a',
-    'article.product-card a',
-])
+CARD_SEL = '[data-test="product-card-catalog-slim"]'
+TITLE_SEL = '[data-test="product-title"]'
+PRICE_SEL = '[data-test="product-gold-price"], [data-test="product-retail-price"]'
+LINK_SEL = '[data-test="product-link"], a[href*="/catalog/"]'
+CODE_SEL = '[data-test="product-code"]'
 
 
-class Req(BaseModel):
-    names: list[str] = Field(..., max_length=MAX_ITEMS)
-    city: Optional[str] = None
+class PriceItem(BaseModel):
+    name: str
+    sku: Optional[str] = None
+    price: Optional[float] = None
+    currency: str = "RUB"
+    unit: Optional[str] = None
+    in_stock: Optional[bool] = None
+    city: str
+    url: Optional[str] = None
 
 
-class Item(BaseModel):
+class SearchResponse(BaseModel):
+    query: str
+    city: str
+    strategy_used: str
+    cached: bool
+    results: list[PriceItem]
+
+
+class BatchRequest(BaseModel):
+    queries: list[str] = Field(..., min_length=1, max_length=BATCH_MAX)
+    city: str = DEFAULT_CITY
+    limit: int = Field(1, ge=1, le=5)
+
+
+class BatchItemResult(BaseModel):
     query: str
     found: bool
-    title: Optional[str] = None
-    price: Optional[float] = None
-    url: Optional[str] = None
+    strategy_used: Optional[str] = None
+    cached: bool = False
+    item: Optional[PriceItem] = None
     error: Optional[str] = None
 
 
-state: dict = {"browser": None, "pw": None}
+class BatchResponse(BaseModel):
+    city: str
+    count: int
+    items: list[BatchItemResult]
+
+
+class HealthResponse(BaseModel):
+    status: str = "ok"
+    version: str = "0.2.0"
+    playwright_available: bool = True
+    site: str = "petrovich.ru"
+
+
+class CacheStats(BaseModel):
+    size: int
+    max_size: int
+    ttl_seconds: int
+    hits: int
+    misses: int
+
+
+state: dict = {"browser": None, "pw": None, "cache": {}, "hits": 0, "misses": 0}
+
+
+def _parse_price(text: str) -> Optional[float]:
+    if not text:
+        return None
+    cleaned = re.sub(r"[^\d,\.]", "", text).replace(",", ".")
+    cleaned = re.sub(r"(\.\d+)\.", r"\1", cleaned)
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _cache_key(city: str, query: str, limit: int) -> str:
+    return f"{city}|{limit}|{query.lower().strip()}"
+
+
+def _cache_get(key: str):
+    entry = state["cache"].get(key)
+    if not entry:
+        state["misses"] += 1
+        return None
+    ts, value = entry
+    if time.time() - ts > CACHE_TTL_S:
+        state["cache"].pop(key, None)
+        state["misses"] += 1
+        return None
+    state["hits"] += 1
+    return value
+
+
+def _cache_set(key: str, value):
+    if len(state["cache"]) >= CACHE_MAX:
+        # drop oldest
+        oldest = min(state["cache"].items(), key=lambda kv: kv[1][0])[0]
+        state["cache"].pop(oldest, None)
+    state["cache"][key] = (time.time(), value)
 
 
 @asynccontextmanager
@@ -80,7 +146,7 @@ async def lifespan(_: FastAPI):
         await pw.stop()
 
 
-app = FastAPI(title="Petrovich price proxy", lifespan=lifespan)
+app = FastAPI(title="Petrovich price parser", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,180 +156,198 @@ app.add_middleware(
 )
 
 
-def parse_price(text: str) -> Optional[float]:
-    if not text:
-        return None
-    digits = re.sub(r"[^\d,\.]", "", text).replace(",", ".")
-    digits = re.sub(r"(\.\d+)\.", r"\1", digits)
-    try:
-        return float(digits)
-    except ValueError:
-        return None
+async def _new_context(city: str) -> BrowserContext:
+    ctx = await state["browser"].new_context(
+        user_agent=USER_AGENT,
+        locale="ru-RU",
+        viewport={"width": 1366, "height": 900},
+    )
+    city_id = CITY_COOKIES.get(city, CITY_COOKIES[DEFAULT_CITY])
+    await ctx.add_cookies([
+        {"name": "CityID", "value": city_id, "domain": ".petrovich.ru", "path": "/"},
+        {"name": "city", "value": city_id, "domain": ".petrovich.ru", "path": "/"},
+    ])
+    return ctx
 
 
-async def search_one(context: BrowserContext, query: str) -> Item:
-    page = await context.new_page()
-    try:
-        url = SEARCH_URL.format(q=query.strip().replace(" ", "+"))
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
-        except Exception as e:
-            return Item(query=query, found=False, error=f"goto: {e!s}"[:200])
-        try:
-            await page.wait_for_selector(CARD_SELECTOR, timeout=SELECTOR_TIMEOUT_MS)
-        except Exception:
-            return Item(query=query, found=False, error="no product cards on page")
-
-        card = page.locator(CARD_SELECTOR).first
+async def _extract_cards(page, limit: int, city: str) -> list[PriceItem]:
+    cards = page.locator(CARD_SEL)
+    count = await cards.count()
+    out: list[PriceItem] = []
+    for i in range(min(count, limit)):
+        card = cards.nth(i)
         title = ""
         try:
-            title = (await card.locator(TITLE_SELECTOR).first.inner_text(timeout=3000)).strip()
+            title = (await card.locator(TITLE_SEL).first.inner_text(timeout=2000)).strip()
         except Exception:
             pass
         price_text = ""
         try:
-            price_text = (await card.locator(PRICE_SELECTOR).first.inner_text(timeout=3000)).strip()
+            price_text = (await card.locator(PRICE_SEL).first.inner_text(timeout=2000)).strip()
         except Exception:
             pass
-        link = ""
+        href = None
         try:
-            href = await card.locator(LINK_SELECTOR).first.get_attribute("href", timeout=3000)
-            if href:
-                link = href if href.startswith("http") else f"https://petrovich.ru{href}"
+            href = await card.locator(LINK_SEL).first.get_attribute("href", timeout=2000)
         except Exception:
             pass
+        sku = None
+        try:
+            code_text = await card.locator(CODE_SEL).first.inner_text(timeout=1000)
+            m = re.search(r"\d{4,}", code_text or "")
+            if m:
+                sku = m.group(0)
+        except Exception:
+            pass
+        url = None
+        if href:
+            url = href if href.startswith("http") else f"https://petrovich.ru{href}"
+        if not title:
+            continue
+        out.append(PriceItem(
+            name=title,
+            sku=sku,
+            price=_parse_price(price_text),
+            unit=None,
+            city=city,
+            url=url,
+        ))
+    return out
 
-        if not title and not price_text:
-            return Item(query=query, found=False, error="card found but empty")
-        return Item(
-            query=query,
-            found=True,
-            title=title or None,
-            price=parse_price(price_text),
-            url=link or None,
-        )
+
+async def _search_via_url(ctx: BrowserContext, query: str, limit: int, city: str) -> tuple[list[PriceItem], str]:
+    """Try /catalog/?search=... then wait for cards. Returns (items, strategy)."""
+    page = await ctx.new_page()
+    try:
+        url = f"https://petrovich.ru/catalog/?search={query.strip().replace(' ', '+')}"
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+        except Exception:
+            return [], "url_failed"
+        try:
+            await page.wait_for_selector(CARD_SEL, timeout=SELECTOR_TIMEOUT_MS)
+        except Exception:
+            return [], "url_no_cards"
+        items = await _extract_cards(page, limit, city)
+        return items, "url_catalog"
     finally:
         await page.close()
 
 
-@app.post("/prices", response_model=list[Item])
-async def prices(req: Req):
-    browser: Browser = state["browser"]
-    if browser is None:
-        raise HTTPException(503, "browser not initialised")
-    context = await browser.new_context(
-        user_agent=USER_AGENT,
-        locale="ru-RU",
-        viewport={"width": 1366, "height": 900},
-    )
+async def _search_via_form(ctx: BrowserContext, query: str, limit: int, city: str) -> tuple[list[PriceItem], str]:
+    """Open homepage, fill search input, submit, wait for cards."""
+    page = await ctx.new_page()
     try:
-        results: list[Item] = []
-        for name in req.names[:MAX_ITEMS]:
-            if not name or not name.strip():
-                continue
-            item = await search_one(context, name.strip())
-            results.append(item)
-            await asyncio.sleep(PER_QUERY_DELAY_S)
-        return results
-    finally:
-        await context.close()
-
-
-@app.get("/health")
-def health():
-    return {"ok": True, "browser": state["browser"] is not None}
-
-
-@app.get("/debug")
-async def debug(q: str = "цемент", path: str = "/catalog/search/?search="):
-    browser: Browser = state["browser"]
-    if browser is None:
-        raise HTTPException(503, "browser not initialised")
-    context = await browser.new_context(
-        user_agent=USER_AGENT,
-        locale="ru-RU",
-        viewport={"width": 1366, "height": 900},
-    )
-    page = await context.new_page()
-    try:
-        url = f"https://petrovich.ru{path}{q.strip().replace(' ', '+')}"
-        await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
-        await page.wait_for_timeout(2000)
-        final_url = page.url
-        html = await page.content()
-        # sample all data-test values and class names for guidance
-        data_tests = await page.evaluate(
-            "() => Array.from(new Set(Array.from(document.querySelectorAll('[data-test]')).map(e=>e.getAttribute('data-test'))))"
-        )
-        classes = await page.evaluate(
-            "() => { const c = new Map(); document.querySelectorAll('*').forEach(e => e.classList.forEach(cl => c.set(cl,(c.get(cl)||0)+1))); return Array.from(c.entries()).sort((a,b)=>b[1]-a[1]).slice(0,40); }"
-        )
-        selector_counts = {}
-        for sel in [
-            '[data-test="product-snippet"]',
-            '[data-test="product-card"]',
-            '[data-test*="product"]',
-            'article',
-            '.product-card',
-            '.pt-product-snippet',
-            '.product-snippet',
-            '[class*="product"]',
-            '[class*="snippet"]',
-            '[class*="catalog-item"]',
-        ]:
-            selector_counts[sel] = await page.locator(sel).count()
         try:
-            await page.wait_for_selector('[class*="product"], [class*="Product"], [class*="snippet"], [class*="catalog"]', timeout=8000)
+            await page.goto("https://petrovich.ru/", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
         except Exception:
-            pass
-        html = await page.content()
-        body_text = await page.evaluate("() => document.body.innerText.slice(0, 4000)")
-        json_scripts = await page.evaluate("""
-            () => Array.from(document.querySelectorAll('script')).filter(s =>
-                s.type && (s.type.includes('json') || s.type.includes('ld'))
-            ).map(s => ({type: s.type, id: s.id, len: (s.textContent||'').length, preview: (s.textContent||'').slice(0, 200)}))
-        """)
-        # search HTML for hints
-        hints = {}
-        for term in ['goods', 'product', 'search_result', 'searchResults', 'catalog-item', 'price_with_discount', 'price_list', '__NUXT__', '__NEXT_DATA__', 'apollo', 'PRELOADED_STATE', 'item-card', 'ym:', 'nothingFound']:
-            idx = html.find(term)
-            hints[term] = idx
-        html_slices = {}
-        for term in ['product', 'Product', 'goods', 'snippet', '__LOADABLE_REQUIRED_CHUNKS___ext', 'data-product', 'article', 'ld+json', 'pet4Data']:
-            idx = html.find(term)
-            if idx != -1:
-                html_slices[term] = html[max(0, idx-200):idx+600]
-        # wait longer for Diginetica XHR search and collect detailed DOM info
-        await page.wait_for_timeout(10000)
-        late_counts = {}
-        for sel in ['[data-test]', 'a[href*="/catalog/"]', '[class*="Card"]', '[class*="Item"]', '[class*="SearchResult"]', '[class*="Good"]', 'img', 'a[href^="/catalog/"]', '[class*="snippet"]', '[class*="Snippet"]', '.ddtc-product', '[id^="dgn"]']:
-            late_counts[sel] = await page.locator(sel).count()
-        late_data_tests = await page.evaluate(
-            "() => Array.from(new Set(Array.from(document.querySelectorAll('[data-test]')).map(e=>e.getAttribute('data-test')))).slice(0, 120)"
+            return [], "form_goto_failed"
+        input_sel = (
+            '[data-test="main-search-form"] input, '
+            'form[role="search"] input, '
+            'input[name="q"], input[name="search"], '
+            'input[placeholder*="Поиск" i], input[placeholder*="Найти" i]'
         )
-        late_classes = await page.evaluate(
-            "() => { const c = new Map(); document.querySelectorAll('*').forEach(e => e.classList.forEach(cl => c.set(cl,(c.get(cl)||0)+1))); return Array.from(c.entries()).sort((a,b)=>b[1]-a[1]).slice(0,60); }"
-        )
-        # intercept network: what requests were made?
-        # Look for catalog-card links specifically
-        catalog_links = await page.evaluate(
-            "() => Array.from(document.querySelectorAll('a[href^=\"/catalog/\"]')).slice(0,10).map(a => ({href: a.href, text: (a.innerText||'').slice(0,100)}))"
-        )
-        return {
-            "final_url": final_url,
-            "html_len": len(html),
-            "body_text": body_text,
-            "late_body_text": (await page.evaluate("() => document.body.innerText.slice(0, 4000)")),
-            "data_tests": data_tests[:50],
-            "late_data_tests": late_data_tests,
-            "top_classes": classes[:40],
-            "late_top_classes": late_classes,
-            "catalog_links": catalog_links,
-            "selector_counts": selector_counts,
-            "late_counts": late_counts,
-            "json_scripts": json_scripts,
-            "html_hints": hints,
-            "html_slices": html_slices,
-        }
+        try:
+            await page.wait_for_selector(input_sel, timeout=8000)
+        except Exception:
+            return [], "form_no_input"
+        inp = page.locator(input_sel).first
+        try:
+            await inp.click(timeout=3000)
+            await inp.fill(query, timeout=3000)
+            await inp.press("Enter", timeout=3000)
+        except Exception:
+            return [], "form_type_failed"
+        try:
+            await page.wait_for_selector(CARD_SEL, timeout=SELECTOR_TIMEOUT_MS)
+        except Exception:
+            return [], "form_no_cards"
+        items = await _extract_cards(page, limit, city)
+        return items, "form_submit"
     finally:
-        await context.close()
+        await page.close()
+
+
+async def _search_impl(query: str, city: str, limit: int) -> tuple[list[PriceItem], str]:
+    ctx = await _new_context(city)
+    try:
+        items, strat = await _search_via_url(ctx, query, limit, city)
+        if items:
+            return items, strat
+        items, strat = await _search_via_form(ctx, query, limit, city)
+        return items, strat
+    finally:
+        await ctx.close()
+
+
+@app.get("/health", response_model=HealthResponse)
+def health():
+    return HealthResponse(playwright_available=state["browser"] is not None)
+
+
+@app.get("/search", response_model=SearchResponse)
+async def search(
+    query: str = Query(..., min_length=2, max_length=200, description="Строка поиска"),
+    city: Optional[str] = Query(None, description="Город (slug)"),
+    limit: int = Query(5, ge=1, le=30),
+):
+    if state["browser"] is None:
+        raise HTTPException(503, "browser not initialised")
+    city = (city or DEFAULT_CITY).lower()
+    key = _cache_key(city, query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city=city, strategy_used="cache", cached=True, results=cached)
+    try:
+        items, strategy = await _search_impl(query, city, limit)
+    except Exception as e:
+        raise HTTPException(502, f"scrape failed: {e!s}"[:200])
+    _cache_set(key, items)
+    return SearchResponse(query=query, city=city, strategy_used=strategy, cached=False, results=items)
+
+
+@app.post("/batch", response_model=BatchResponse)
+async def batch(req: BatchRequest):
+    if state["browser"] is None:
+        raise HTTPException(503, "browser not initialised")
+    city = (req.city or DEFAULT_CITY).lower()
+    results: list[BatchItemResult] = []
+    for q in req.queries:
+        q = (q or "").strip()
+        if not q:
+            results.append(BatchItemResult(query=q, found=False, error="empty"))
+            continue
+        key = _cache_key(city, q, req.limit)
+        cached = _cache_get(key)
+        if cached is not None:
+            item = cached[0] if cached else None
+            results.append(BatchItemResult(query=q, found=bool(item), item=item, cached=True, strategy_used="cache"))
+            continue
+        try:
+            items, strategy = await _search_impl(q, city, req.limit)
+            _cache_set(key, items)
+            item = items[0] if items else None
+            results.append(BatchItemResult(query=q, found=bool(item), item=item, strategy_used=strategy))
+        except Exception as e:
+            results.append(BatchItemResult(query=q, found=False, error=str(e)[:200]))
+        await asyncio.sleep(PER_QUERY_DELAY_S)
+    return BatchResponse(city=city, count=len(results), items=results)
+
+
+@app.get("/cache/stats", response_model=CacheStats)
+def cache_stats():
+    return CacheStats(
+        size=len(state["cache"]),
+        max_size=CACHE_MAX,
+        ttl_seconds=CACHE_TTL_S,
+        hits=state["hits"],
+        misses=state["misses"],
+    )
+
+
+@app.delete("/cache")
+def cache_clear():
+    before = len(state["cache"])
+    state["cache"].clear()
+    return {"cleared": before}
