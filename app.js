@@ -9,7 +9,9 @@ const LEMANAPRO_CONCURRENCY = 3;
 const SKIP_WORDS = ['итого', 'ндс'];
 const VAT_RATE = 0.20;
 const MAX_RESULTS = 20;
-const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', petrovich: 'Петрович', lemanapro: 'Лемана', none: '—' };
+const KOLORIT_BACKEND = 'https://petrovich-proxy.onrender.com';
+const KOLORIT_CONCURRENCY = 3;
+const SOURCE_LABELS = { local: 'Своя база', ddc: 'DDC база', petrovich: 'Петрович', lemanapro: 'Лемана', kolorit: 'Колорит', none: '—' };
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -23,6 +25,7 @@ const uploadBtn = document.getElementById('upload-btn');
 const templateBtn = document.getElementById('template-btn');
 const petrovichBtn = document.getElementById('petrovich-btn');
 const lemanaproBtn = document.getElementById('lemanapro-btn');
+const koloritBtn = document.getElementById('kolorit-btn');
 const fileInput = document.getElementById('file-input');
 const uploadSummary = document.getElementById('upload-summary');
 
@@ -230,6 +233,7 @@ function renderTotals() {
     const anyNotFound = estimate.some(r => r.notFound);
     petrovichBtn.disabled = !anyNotFound || petrovichBtn.dataset.busy === '1';
     lemanaproBtn.disabled = !anyNotFound || lemanaproBtn.dataset.busy === '1';
+    koloritBtn.disabled = !anyNotFound || koloritBtn.dataset.busy === '1';
 }
 
 function csvCell(value) {
@@ -616,6 +620,66 @@ function loadDdcCatalog() {
     });
 }
 
+async function fetchKoloritPrices() {
+    const targets = estimate.filter(r => r.notFound);
+    if (targets.length === 0) return;
+    koloritBtn.dataset.busy = '1';
+    koloritBtn.disabled = true;
+    const prevLabel = koloritBtn.textContent;
+    koloritBtn.textContent = 'Запрос к Колориту…';
+    uploadSummary.classList.remove('error');
+    uploadSummary.textContent = `Запрос ${targets.length} позиций у Колорита…`;
+    let updated = 0, done = 0, failed = 0;
+    const reportProgress = () => { uploadSummary.textContent = `Колорит: ${done}/${targets.length} (обновлено ${updated})`; };
+    async function searchOne(name) {
+        const url = `${KOLORIT_BACKEND}/kolorit/search?query=${encodeURIComponent(name)}&limit=1`;
+        try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            console.log(`[Колорит] "${name}" -> ${j.results?.length || 0} шт.`);
+            return (j.results && j.results[0]) || null;
+        } catch (err) {
+            console.warn('[Колорит] ошибка', name, err.message);
+            failed++;
+            return null;
+        }
+    }
+    async function worker(queue) {
+        while (queue.length > 0) {
+            const row = queue.shift();
+            if (!row) return;
+            const hit = await searchOne(row.name);
+            done++;
+            if (hit && hit.price) {
+                row.name = hit.name || row.name;
+                row.unitPrice = hit.price;
+                row.unit = hit.unit || row.unit || 'шт.';
+                row.notFound = false;
+                row.source = 'kolorit';
+                row.url = hit.url || '';
+                updated++;
+            }
+            reportProgress();
+        }
+    }
+    const queue = targets.slice();
+    const workers = Array.from({ length: KOLORIT_CONCURRENCY }, () => worker(queue));
+    try {
+        await Promise.all(workers);
+        uploadSummary.textContent = `Колорит: распознано ${updated} из ${targets.length} (ошибок: ${failed})`;
+        renderEstimate();
+    } catch (err) {
+        console.error('[Колорит] сбой', err);
+        uploadSummary.textContent = `Колорит недоступен: ${err.message}`;
+        uploadSummary.classList.add('error');
+    } finally {
+        delete koloritBtn.dataset.busy;
+        koloritBtn.textContent = prevLabel;
+        renderTotals();
+    }
+}
+
 async function fetchLemanaproPrices() {
     const targets = estimate.filter(r => r.notFound);
     if (targets.length === 0) return;
@@ -786,6 +850,7 @@ fileInput.addEventListener('change', e => {
 });
 petrovichBtn.addEventListener('click', fetchPetrovichPrices);
 lemanaproBtn.addEventListener('click', fetchLemanaproPrices);
+koloritBtn.addEventListener('click', fetchKoloritPrices);
 
 renderEstimate();
 loadCatalog();

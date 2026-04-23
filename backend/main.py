@@ -410,63 +410,37 @@ async def _kolorit_fetch(url: str) -> str:
 
 
 def _kolorit_parse(html: str, limit: int) -> list[PriceItem]:
-    """Parse Kolorit Bitrix catalog/search HTML. Try several common selectors."""
+    """Parse a Kolorit catalog/search page. Cards use div.catalog-item."""
     soup = BeautifulSoup(html, "lxml")
     items: list[PriceItem] = []
-    card_selectors = [
-        ".catalog-section-item",
-        ".bx_catalog_item",
-        ".product-item",
-        ".js-product-card",
-        "[data-product-id]",
-        "[data-entity='items-row'] .item",
-        "li.product",
-    ]
-    cards = []
-    for sel in card_selectors:
-        cards = soup.select(sel)
-        if cards:
-            break
-    if not cards:
-        # last resort: any <a> inside a div that contains a ruble sign
-        for link in soup.select('a[href^="/catalog/"]'):
-            parent = link.find_parent(["div", "li"])
-            if parent and ("₽" in parent.get_text() or "руб" in parent.get_text().lower()):
-                cards.append(parent)
-                if len(cards) >= limit * 3:
-                    break
-    for card in cards[: limit * 2]:
-        if len(items) >= limit:
-            break
-        link = card.find("a", href=lambda h: h and "/catalog/" in h)
-        if not link:
+    for card in soup.select("div.catalog-item")[:limit]:
+        name_el = card.select_one("a.link-head") or card.select_one(".catalog-item__head a")
+        if not name_el:
             continue
-        href = link.get("href") or ""
-        name = (link.get("title") or link.get_text(" ", strip=True))[:300]
+        name = name_el.get_text(" ", strip=True)
         if not name:
             continue
-        # Try to find price text in card
-        price_el = None
-        for psel in [
-            ".price",
-            ".product-price",
-            ".catalog-item-price",
-            ".bx_price",
-            "[itemprop='price']",
-            "[data-entity='price']",
-        ]:
-            price_el = card.select_one(psel)
-            if price_el:
-                break
-        price_text = price_el.get_text(" ", strip=True) if price_el else card.get_text(" ", strip=True)
-        price = _parse_price(price_text)
+        href = (name_el.get("href") or "").strip()
         url_ = href if href.startswith("http") else f"https://kolorit.ru{href}"
+        sku = None
+        sku_el = card.select_one(".catalog-item__top")
+        if sku_el:
+            m = re.search(r"\d{6,}", sku_el.get_text())
+            if m:
+                sku = m.group(0)
+        price_el = (
+            card.select_one(".price-item__sum.price-discount")
+            or card.select_one(".price-item__sum.price-regular s")
+            or card.select_one(".price-item__sum")
+            or card.select_one(".catalog-item__price")
+        )
+        price = _parse_price(price_el.get_text(" ", strip=True)) if price_el else None
         items.append(PriceItem(
             name=name,
-            sku=None,
+            sku=sku,
             price=price,
             unit=None,
-            city="msk",
+            city="kazan",
             url=url_,
         ))
     return items
@@ -481,7 +455,7 @@ async def kolorit_search(
     cached = _cache_get(key)
     if cached:
         return SearchResponse(query=query, city="kolorit", strategy_used="cache", cached=True, results=cached)
-    url = f"https://kolorit.ru/search/?q={query.strip().replace(' ', '+')}"
+    url = f"https://kolorit.ru/catalog/?q={query.strip().replace(' ', '+')}"
     try:
         html = await _kolorit_fetch(url)
     except Exception as e:

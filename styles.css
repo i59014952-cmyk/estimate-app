@@ -228,6 +228,32 @@ tr.not-found .price-missing {
     color: #991b1b;
 }
 
+.src-badge.kolorit {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+#kolorit-btn {
+    background: #fff;
+    color: #3730a3;
+    border: 1px solid #818cf8;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+#kolorit-btn:hover:not(:disabled) {
+    background: #eef2ff;
+}
+
+#kolorit-btn:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+    border-color: #e5e7eb;
+    cursor: not-allowed;
+}
+
 #lemanapro-btn {
     background: #fff;
     color: #991b1b;
