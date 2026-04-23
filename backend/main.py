@@ -410,10 +410,23 @@ async def _kolorit_fetch(url: str) -> str:
 
 
 def _kolorit_parse(html: str, limit: int) -> list[PriceItem]:
-    """Parse a Kolorit catalog/search page. Cards use div.catalog-item."""
+    """Parse a Kolorit catalog/search page. Real product cards are div.catalog-item
+    that contain .price-item__sum — other .catalog-item elements are category tiles."""
     soup = BeautifulSoup(html, "lxml")
     items: list[PriceItem] = []
-    for card in soup.select("div.catalog-item")[:limit]:
+    for card in soup.select("div.catalog-item"):
+        if len(items) >= limit:
+            break
+        price_el = (
+            card.select_one(".price-item__sum.price-discount")
+            or card.select_one(".price-item__sum.price-regular")
+            or card.select_one(".price-item__sum")
+        )
+        if not price_el:
+            continue
+        price = _parse_price(price_el.get_text(" ", strip=True))
+        if price is None or price <= 0:
+            continue
         name_el = card.select_one("a.link-head") or card.select_one(".catalog-item__head a")
         if not name_el:
             continue
@@ -428,13 +441,6 @@ def _kolorit_parse(html: str, limit: int) -> list[PriceItem]:
             m = re.search(r"\d{6,}", sku_el.get_text())
             if m:
                 sku = m.group(0)
-        price_el = (
-            card.select_one(".price-item__sum.price-discount")
-            or card.select_one(".price-item__sum.price-regular s")
-            or card.select_one(".price-item__sum")
-            or card.select_one(".catalog-item__price")
-        )
-        price = _parse_price(price_el.get_text(" ", strip=True)) if price_el else None
         items.append(PriceItem(
             name=name,
             sku=sku,
