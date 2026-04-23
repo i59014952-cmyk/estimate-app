@@ -674,6 +674,25 @@ async def krepmast_search(
     return SearchResponse(query=query, city="krepmast", strategy_used="http", cached=False, results=items, trail=tried)
 
 
+@app.get("/krepmast/home-form")
+async def krepmast_home_form():
+    try:
+        html = await _kolorit_fetch("https://krepmast.ru/")
+    except Exception as e:
+        return {"error": str(e)[:200]}
+    soup = BeautifulSoup(html, "lxml")
+    forms = []
+    for f in soup.find_all("form"):
+        action = f.get("action")
+        method = f.get("method")
+        inputs = []
+        for i in f.find_all("input"):
+            inputs.append({"name": i.get("name"), "type": i.get("type"), "placeholder": i.get("placeholder"), "id": i.get("id")})
+        forms.append({"action": action, "method": method, "inputs": inputs, "html": str(f)[:500]})
+    search_links = [a.get("href") for a in soup.find_all("a") if a.get("href") and "search" in (a.get("href") or "").lower()]
+    return {"forms": forms, "search_links": list(set(search_links))[:10]}
+
+
 @app.get("/krepmast/debug")
 async def krepmast_debug(query: str = "саморезы", path: str = "/catalog/krepezh/samorezy/"):
     url = f"https://krepmast.ru{path}"
