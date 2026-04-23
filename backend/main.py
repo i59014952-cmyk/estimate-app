@@ -21,8 +21,9 @@ CITY_COOKIES = {
     "kazan": "26",
     "ekaterinburg": "4",
 }
-PAGE_TIMEOUT_MS = 30000
-SELECTOR_TIMEOUT_MS = 15000
+PAGE_TIMEOUT_MS = 45000
+SELECTOR_TIMEOUT_MS = 25000
+HYDRATION_WAIT_MS = 8000
 CACHE_TTL_S = 3600
 CACHE_MAX = 5000
 BATCH_MAX = 100
@@ -216,14 +217,17 @@ async def _extract_cards(page, limit: int, city: str) -> list[PriceItem]:
 
 
 async def _search_via_url(ctx: BrowserContext, query: str, limit: int, city: str) -> tuple[list[PriceItem], str]:
-    """Try /catalog/?search=... then wait for cards. Returns (items, strategy)."""
+    """Try /catalog/search/?search=... — this is actually a 404 page with related products,
+    but its product-card-catalog-slim elements reflect the query. Returns (items, strategy)."""
     page = await ctx.new_page()
     try:
-        url = f"https://petrovich.ru/catalog/?search={query.strip().replace(' ', '+')}"
+        url = f"https://petrovich.ru/catalog/search/?search={query.strip().replace(' ', '+')}"
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
         except Exception:
             return [], "url_failed"
+        # Give the SPA time to hydrate — DOM is empty until React renders.
+        await page.wait_for_timeout(HYDRATION_WAIT_MS)
         try:
             await page.wait_for_selector(CARD_SEL, timeout=SELECTOR_TIMEOUT_MS)
         except Exception:
@@ -242,6 +246,7 @@ async def _search_via_form(ctx: BrowserContext, query: str, limit: int, city: st
             await page.goto("https://petrovich.ru/", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
         except Exception:
             return [], "form_goto_failed"
+        await page.wait_for_timeout(HYDRATION_WAIT_MS)
         input_sel = (
             '[data-test="main-search-form"] input, '
             'form[role="search"] input, '
@@ -249,7 +254,7 @@ async def _search_via_form(ctx: BrowserContext, query: str, limit: int, city: st
             'input[placeholder*="Поиск" i], input[placeholder*="Найти" i]'
         )
         try:
-            await page.wait_for_selector(input_sel, timeout=8000)
+            await page.wait_for_selector(input_sel, timeout=SELECTOR_TIMEOUT_MS)
         except Exception:
             return [], "form_no_input"
         inp = page.locator(input_sel).first
@@ -360,8 +365,8 @@ async def debug_home():
     ctx = await _new_context(DEFAULT_CITY)
     page = await ctx.new_page()
     try:
-        await page.goto("https://petrovich.ru/", wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
-        await page.wait_for_timeout(3000)
+        await page.goto("https://petrovich.ru/", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+        await page.wait_for_timeout(HYDRATION_WAIT_MS)
         inputs = await page.evaluate("""
             () => Array.from(document.querySelectorAll('input')).slice(0, 30).map(i => ({
                 type: i.type,
