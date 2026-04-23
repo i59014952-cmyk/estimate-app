@@ -375,8 +375,7 @@ function renderTotals() {
     vatEl.textContent = formatMoney(vat);
     grandEl.textContent = formatMoney(subtotal + vat);
     exportBtn.disabled = estimate.length === 0;
-    const anyNotFound = estimate.some(r => r.notFound);
-    koloritBtn.disabled = !anyNotFound || koloritBtn.dataset.busy === '1';
+    koloritBtn.disabled = estimate.length === 0 || koloritBtn.dataset.busy === '1';
 }
 
 function csvCell(value) {
@@ -776,7 +775,7 @@ function loadDdcCatalog() {
 }
 
 async function fetchPricesForNotFound() {
-    const targets = estimate.filter(r => r.notFound);
+    const targets = estimate.slice();
     if (targets.length === 0) return;
     koloritBtn.dataset.busy = '1';
     koloritBtn.disabled = true;
@@ -784,9 +783,9 @@ async function fetchPricesForNotFound() {
     koloritBtn.textContent = 'Запрос цен…';
     uploadSummary.classList.remove('error');
     uploadSummary.textContent = `Поиск вариантов для ${targets.length} позиций…`;
-    let updated = 0, done = 0, failed = 0, ambiguous = 0;
+    let filled = 0, done = 0, failed = 0, ambiguous = 0;
     const reportProgress = () => {
-        uploadSummary.textContent = `Запрос цен: ${done}/${targets.length} (найдено ${updated}, с выбором ${ambiguous})`;
+        uploadSummary.textContent = `Запрос цен: ${done}/${targets.length} (с вариантами ${ambiguous})`;
     };
     async function searchOne(name) {
         const url = `${PRICES_BACKEND}/prices/search?query=${encodeURIComponent(name)}&limit=6`;
@@ -808,18 +807,24 @@ async function fetchPricesForNotFound() {
             if (!row) return;
             const candidates = await searchOne(row.name);
             done++;
+            row.candidates = candidates;
             if (candidates.length > 0) {
-                const c = candidates[0];
-                row.name = c.name || row.name;
-                row.unitPrice = c.price;
-                row.unit = c.unit || row.unit || 'шт.';
-                row.source = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
-                row.url = c.url || '';
-                row.notFound = false;
-                row.candidates = candidates;
-                row.expanded = candidates.length > 1;
-                updated++;
-                if (candidates.length > 1) ambiguous++;
+                // Only apply as default for rows without a price yet.
+                if (row.notFound) {
+                    const c = candidates[0];
+                    row.name = c.name || row.name;
+                    row.unitPrice = c.price;
+                    row.unit = c.unit || row.unit || 'шт.';
+                    row.source = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
+                    row.url = c.url || '';
+                    row.notFound = false;
+                    filled++;
+                }
+                // Expand the picker so the user can pick any of the top variants.
+                row.expanded = true;
+                ambiguous++;
+            } else {
+                row.expanded = false;
             }
             reportProgress();
         }
@@ -828,8 +833,7 @@ async function fetchPricesForNotFound() {
     const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker(queue));
     try {
         await Promise.all(workers);
-        const ambLabel = ambiguous > 0 ? `, с альтернативами: ${ambiguous}` : '';
-        uploadSummary.textContent = `Запрос цен: найдено ${updated} из ${targets.length} (ошибок: ${failed}${ambLabel})`;
+        uploadSummary.textContent = `Запрос цен: обработано ${done}, новых цен ${filled}, с альтернативами ${ambiguous}, ошибок ${failed}`;
         renderEstimate();
     } catch (err) {
         console.error('[Запрос цен] сбой', err);
