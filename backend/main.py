@@ -672,6 +672,54 @@ async def krepmast_search(
     return SearchResponse(query=query, city="krepmast", strategy_used="http", cached=False, results=items, trail=tried)
 
 
+@app.get("/voltkin/debug")
+async def voltkin_debug(query: str = "розетка", path: str = "/rozetki-i-vykljuchateli"):
+    url = f"https://voltkin.ru{path}"
+    if "?" in path:
+        url = url + query.strip().replace(" ", "+")
+    try:
+        html = await _kolorit_fetch(url)
+    except Exception as e:
+        return {"error": str(e)[:200], "url": url}
+    soup = BeautifulSoup(html, "lxml")
+    body_text = soup.get_text("\n", strip=True)[:2500]
+    candidates = [
+        ".product-thumb", ".product-layout", ".product-card", ".product-item",
+        ".catalog-item", "[data-product-id]", ".product",
+        "[itemtype*='Product']", ".item", "article",
+        "a[href*='/product']", "a[href*='/rozetk']",
+    ]
+    counts = {sel: len(soup.select(sel)) for sel in candidates}
+    cls_freq: dict[str, int] = {}
+    for el in soup.select("[class]"):
+        for cl in el.get("class") or []:
+            cls_freq[cl] = cls_freq.get(cl, 0) + 1
+    top_classes = sorted(cls_freq.items(), key=lambda kv: -kv[1])[:40]
+    forms = []
+    for f in soup.find_all("form"):
+        forms.append({
+            "action": f.get("action"),
+            "method": f.get("method"),
+            "inputs": [{"name": i.get("name"), "type": i.get("type"), "placeholder": i.get("placeholder")} for i in f.find_all("input")],
+        })
+    first_card = None
+    for sel in ("[itemtype*='Product']", ".product-thumb", ".product-layout"):
+        el = soup.select_one(sel)
+        if el:
+            first_card = str(el)[:3000]
+            break
+    return {
+        "url": url,
+        "html_len": len(html),
+        "title": soup.title.string.strip() if soup.title and soup.title.string else None,
+        "body_snippet": body_text,
+        "selector_counts": counts,
+        "top_classes": top_classes,
+        "forms": forms,
+        "first_card_html": first_card,
+    }
+
+
 @app.get("/krepmast/home-form")
 async def krepmast_home_form():
     try:
