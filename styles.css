@@ -558,6 +558,7 @@ td a.product-link:hover svg { color: var(--primary); }
 .src-badge.ddc { background: var(--success-soft); color: var(--success); }
 .src-badge.kolorit { background: var(--accent-indigo-soft); color: var(--accent-indigo); }
 .src-badge.krepmast { background: var(--success-soft); color: var(--success); }
+.src-badge.voltkin { background: #fef3c7; color: #854d0e; }
 .src-badge.manual { background: var(--warn-soft); color: var(--warn); }
 .src-badge.none { background: var(--surface-3); color: var(--text-muted); }
 

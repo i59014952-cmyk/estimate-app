@@ -10,9 +10,11 @@ const SOURCE_LABELS = {
     ddc: 'DDC база',
     kolorit: 'Колорит',
     krepmast: 'Крепмаст',
+    voltkin: 'Вольткин',
     manual: 'Вручную',
     none: '—',
 };
+const KNOWN_SOURCES = new Set(['kolorit', 'krepmast', 'voltkin']);
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');
@@ -284,7 +286,7 @@ function renderPicker(r) {
         list = '<div class="picker__empty">В каталоге Колорит ничего не нашлось — введите цену вручную ниже.</div>';
     } else {
         list = r.candidates.map((c, i) => {
-            const src = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
+            const src = KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit';
             return `
             <button type="button" class="picker__item" data-candidate="${i}">
                 <span class="picker__item-name">${escapeHtml(c.name || '')}</span>
@@ -349,7 +351,7 @@ function applyCandidate(id, idx) {
     row.unit = c.unit || row.unit || 'шт.';
     row.unitPrice = c.price;
     row.url = c.url || '';
-    row.source = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
+    row.source = KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit';
     row.notFound = false;
     row.expanded = false;
     renderEstimate();
@@ -826,7 +828,7 @@ async function fetchPricesForNotFound() {
                     row.name = c.name || row.name;
                     row.unitPrice = c.price;
                     row.unit = c.unit || row.unit || 'шт.';
-                    row.source = c.city === 'krepmast' ? 'krepmast' : 'kolorit';
+                    row.source = KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit';
                     row.url = c.url || '';
                     row.notFound = false;
                     filled++;

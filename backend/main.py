@@ -520,13 +520,13 @@ async def prices_search(
     query: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(6, ge=1, le=30),
 ):
-    """Combined search: Kolorit + Krepmast in parallel, merged by URL."""
+    """Combined search: Kolorit + Krepmast + Voltkin in parallel, merged by URL."""
     key = _cache_key("combined", query, limit)
     cached = _cache_get(key)
     if cached:
         return SearchResponse(query=query, city="combined", strategy_used="cache", cached=True, results=cached)
 
-    per_source = max(3, (limit + 1) // 2)
+    per_source = max(3, (limit + 2) // 3)
 
     async def k():
         try:
@@ -542,42 +542,42 @@ async def prices_search(
         except Exception as e:
             return [], [f"krepmast: error: {e!s}"[:140]]
 
-    (k_items, k_trail), (m_items, m_trail) = await asyncio.gather(k(), m())
+    async def v():
+        try:
+            items, tr = await _voltkin_search_merged(query, per_source)
+            return items, [f"voltkin: {t}" for t in tr]
+        except Exception as e:
+            return [], [f"voltkin: error: {e!s}"[:140]]
 
-    # Tag source via city field so frontend can colour-code
-    for it in k_items:
-        it.city = "kolorit"
-    for it in m_items:
-        it.city = "krepmast"
+    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail) = await asyncio.gather(k(), m(), v())
+
+    for it in k_items: it.city = "kolorit"
+    for it in m_items: it.city = "krepmast"
+    for it in v_items: it.city = "voltkin"
 
     merged: list[PriceItem] = []
     seen: set[str] = set()
-    # Interleave kolorit and krepmast for balanced diversity
-    for pair in zip(k_items, m_items):
-        for it in pair:
+    # Round-robin between sources so results look diverse
+    source_lists = [k_items, m_items, v_items]
+    idx = 0
+    empty_streak = 0
+    while len(merged) < limit and empty_streak < len(source_lists):
+        lst = source_lists[idx]
+        if lst:
+            it = lst.pop(0)
             key_ = it.url or it.name
-            if key_ in seen:
-                continue
-            seen.add(key_)
-            merged.append(it)
-            if len(merged) >= limit:
-                break
-        if len(merged) >= limit:
-            break
-    # Add any leftovers
-    for it in k_items + m_items:
-        if len(merged) >= limit:
-            break
-        key_ = it.url or it.name
-        if key_ in seen:
-            continue
-        seen.add(key_)
-        merged.append(it)
+            if key_ not in seen:
+                seen.add(key_)
+                merged.append(it)
+            empty_streak = 0
+        else:
+            empty_streak += 1
+        idx = (idx + 1) % len(source_lists)
 
     _cache_set(key, merged)
     return SearchResponse(
         query=query, city="combined", strategy_used="http", cached=False,
-        results=merged, trail=k_trail + m_trail,
+        results=merged, trail=k_trail + m_trail + v_trail,
     )
 
 
@@ -653,6 +653,90 @@ async def _krepmast_search_merged(query: str, limit: int) -> tuple[list[PriceIte
             if len(merged) >= limit:
                 return merged, tried
     return merged[:limit], tried
+
+
+def _voltkin_parse(html: str, limit: int) -> list[PriceItem]:
+    """Voltkin.ru runs on OpenCart: .product-thumb card, div.name > a, p.price."""
+    soup = BeautifulSoup(html, "lxml")
+    items: list[PriceItem] = []
+    for card in soup.select(".product-thumb"):
+        if len(items) >= limit:
+            break
+        name_el = card.select_one("div.name a") or card.select_one(".caption a")
+        if not name_el:
+            continue
+        name = name_el.get_text(" ", strip=True)
+        if not name:
+            continue
+        href = (name_el.get("href") or "").strip()
+        url_ = href if href.startswith("http") else f"https://voltkin.ru{href.lstrip('/')}" if not href.startswith("/") else f"https://voltkin.ru{href}"
+        price = None
+        price_el = card.select_one("p.price, .price")
+        if price_el:
+            price = _parse_price(price_el.get_text(" ", strip=True))
+        if price is None or price <= 0:
+            continue
+        sku = None
+        for dotted in card.select(".dotted"):
+            label = dotted.select_one(".filter-name-cat")
+            val = dotted.select_one(".filter-value")
+            if label and val and "артикул" in label.get_text(strip=True).lower():
+                sku = val.get_text(strip=True)
+                break
+        items.append(PriceItem(
+            name=name,
+            sku=sku,
+            price=price,
+            unit=None,
+            city="kazan",
+            url=url_,
+        ))
+    return items
+
+
+async def _voltkin_search_merged(query: str, limit: int) -> tuple[list[PriceItem], list[str]]:
+    q = query.strip().replace(" ", "+")
+    urls_to_try = [
+        f"https://voltkin.ru/index.php?route=product/search&search={q}",
+        f"https://voltkin.ru/search?search={q}",
+    ]
+    merged: list[PriceItem] = []
+    seen: set[str] = set()
+    tried: list[str] = []
+    for url in urls_to_try:
+        try:
+            html = await _kolorit_fetch(url)
+        except Exception as e:
+            tried.append(f"{url} -> error: {e!s}"[:140])
+            continue
+        chunk = _voltkin_parse(html, limit)
+        tried.append(f"{url} -> {len(chunk)} items")
+        for item in chunk:
+            key = item.url or item.name
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= limit:
+                return merged, tried
+    return merged[:limit], tried
+
+
+@app.get("/voltkin/search", response_model=SearchResponse)
+async def voltkin_search(
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(5, ge=1, le=30),
+):
+    key = _cache_key("voltkin", query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city="voltkin", strategy_used="cache", cached=True, results=cached)
+    try:
+        items, tried = await _voltkin_search_merged(query, limit)
+    except Exception as e:
+        raise HTTPException(502, f"voltkin fetch failed: {e!s}"[:200])
+    _cache_set(key, items)
+    return SearchResponse(query=query, city="voltkin", strategy_used="http", cached=False, results=items, trail=tried)
 
 
 @app.get("/krepmast/search", response_model=SearchResponse)
