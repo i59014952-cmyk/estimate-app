@@ -515,6 +515,61 @@ async def kolorit_search(
     return SearchResponse(query=query, city="kolorit", strategy_used="http", cached=False, results=items, trail=tried)
 
 
+@app.get("/krepmast/debug")
+async def krepmast_debug(query: str = "саморезы", path: str = "/catalog/krepezh/samorezy/"):
+    url = f"https://krepmast.ru{path}"
+    if "?" in path:
+        url = url.rstrip("&") + query.strip().replace(" ", "+")
+    try:
+        html = await _kolorit_fetch(url)
+    except Exception as e:
+        return {"error": str(e)[:200], "url": url}
+    soup = BeautifulSoup(html, "lxml")
+    body_text = soup.get_text("\n", strip=True)[:3000]
+    candidates = [
+        ".catalog-item", ".product-card", ".product-item", ".item-card",
+        ".b-card", "[itemtype*='Product']", "[data-product-id]",
+        ".catalog__item", ".products-list__item", ".card-product",
+        "article", "li.product", ".grid__item", "div[class*='product']",
+        "div[class*='Product']", "a[href*='/catalog/']",
+    ]
+    counts = {sel: len(soup.select(sel)) for sel in candidates}
+    cls_freq: dict[str, int] = {}
+    for el in soup.select("[class]"):
+        for cl in el.get("class") or []:
+            cls_freq[cl] = cls_freq.get(cl, 0) + 1
+    top_classes = sorted(cls_freq.items(), key=lambda kv: -kv[1])[:40]
+    # Find an element containing "₽" and walk up to a card-like wrapper
+    sample_cards = []
+    for el in soup.find_all(string=lambda s: s and "₽" in s):
+        walker = el.parent
+        for _ in range(8):
+            if walker is None:
+                break
+            classes = walker.get("class") or []
+            if walker.name in ("article", "li") or any(
+                c for c in classes if any(x in c.lower() for x in ("card", "item", "product"))
+            ):
+                break
+            walker = walker.parent
+        sample_cards.append({
+            "tag": walker.name if walker else None,
+            "class": walker.get("class") if walker else None,
+            "html": str(walker)[:2000] if walker else None,
+        })
+        if len(sample_cards) >= 3:
+            break
+    return {
+        "url": url,
+        "html_len": len(html),
+        "title": soup.title.string.strip() if soup.title and soup.title.string else None,
+        "body_snippet": body_text,
+        "selector_counts": counts,
+        "top_classes": top_classes,
+        "sample_cards": sample_cards,
+    }
+
+
 @app.get("/kolorit/debug")
 async def kolorit_debug(query: str = "краска", path: str = "/search/?q="):
     url = f"https://kolorit.ru{path}{query.strip().replace(' ', '+')}"
