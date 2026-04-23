@@ -200,6 +200,10 @@ function addRow({ name, unit, unitPrice, qty, notFound, source, url }) {
         console.log(`[addRow] заблокирована скрытая категория: "${name}"`);
         return;
     }
+    if (looksLikeOcrNoise(name)) {
+        console.log(`[addRow] заблокирован OCR-шум: "${name}"`);
+        return;
+    }
     estimate.push({
         id: nextId++,
         name,
