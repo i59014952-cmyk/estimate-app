@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-no-top-upload';
+const APP_VERSION = 'v2026-04-23-ambiguous-headers';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -667,6 +667,20 @@ const HEADER_FIRST_WORDS = new Set([
     'паспорт',
 ]);
 
+// These words CAN start real item names ("Участок трубопровода",
+// "Основание под плитку"). Skip only if context looks like a header:
+// colon in name, or nothing but numbers/codes after the word.
+const AMBIGUOUS_HEADERS = new Set([
+    'объект', 'объекта', 'объекту',
+    'адрес', 'адреса',
+    'участок', 'участка',
+    'основание', 'основания',
+    'часть', 'части',
+    'раздел', 'раздела',
+    'подраздел', 'подраздела',
+    'этап', 'этапа',
+]);
+
 function isPureNumber(s) {
     return /^\s*\d+([.,]\d+)?\s*$/.test(s);
 }
@@ -706,6 +720,12 @@ function skipReason(name) {
     for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return `содержит "${phrase}"`;
     const firstWord = (lower.match(/[\p{L}\p{N}/]+/u) || [''])[0];
     if (HEADER_FIRST_WORDS.has(firstWord)) return `заголовок ("${firstWord}")`;
+    if (AMBIGUOUS_HEADERS.has(firstWord)) {
+        if (/:/.test(name)) return `заголовок с ":" ("${firstWord}")`;
+        const rest = name.slice(firstWord.length).trim();
+        if (!rest) return `одинокое слово "${firstWord}"`;
+        if (/^[\d\s.,№#)(/\\_-]+$/.test(rest)) return `заголовок с номером ("${firstWord}")`;
+    }
     return '';
 }
 
