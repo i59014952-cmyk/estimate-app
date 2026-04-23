@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2026-04-23-ocr-noise-filter';
+const APP_VERSION = 'v2026-04-23-docs-only';
 console.log(`%c Смета.Про ${APP_VERSION} `, 'background:#5b5bf1;color:#fff;font-weight:bold;padding:2px 6px;border-radius:4px');
 const FILES = ['one.json', 'two.json', 'th.json'];
 const DDC_URL = 'https://raw.githubusercontent.com/datadrivenconstruction/OpenConstructionEstimate-DDC-CWICR/main/RU___DDC_CWICR/DDC_CWICR_RU_STPETERSBURG_Catalog.csv';
@@ -202,10 +202,6 @@ function addRow({ name, unit, unitPrice, qty, notFound, source, url }) {
         console.log(`[addRow] заблокирована скрытая категория: "${name}"`);
         return;
     }
-    if (looksLikeOcrNoise(name)) {
-        console.log(`[addRow] заблокирован OCR-шум: "${name}"`);
-        return;
-    }
     estimate.push({
         id: nextId++,
         name,
@@ -249,7 +245,7 @@ const EMPTY_STATE_HTML = `
                 </svg>
             </div>
             <div class="empty-state__title">Смета пуста</div>
-            <div class="empty-state__hint">Загрузите коммерческое предложение (CSV, Excel, PDF, Word, JPEG) или начните поиск работы через строку выше.</div>
+            <div class="empty-state__hint">Загрузите коммерческое предложение (Excel, PDF, Word) или начните поиск работы через строку выше.</div>
         </div>
     </td></tr>`;
 
@@ -583,18 +579,6 @@ async function extractDocxText(arrayBuffer) {
     return res.value || '';
 }
 
-async function extractImageText(file, onProgress) {
-    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
-    const { data } = await Tesseract.recognize(file, 'rus+eng', {
-        logger: m => {
-            if (onProgress && m.status && typeof m.progress === 'number') {
-                onProgress(m.status, m.progress);
-            }
-        },
-    });
-    return data.text || '';
-}
-
 function textToRows(text) {
     const rows = [];
     const qtyRx = /(\d+(?:[.,]\d+)?)\s*(шт\.?|м\.?п\.?|м2|м²|м3|кг|т|л|компл\.?|упак\.?)?\s*$/i;
@@ -664,24 +648,10 @@ function extractNameAndQty(row) {
     return { name, qty };
 }
 
-function looksLikeOcrNoise(name) {
-    if (/[|¢]/.test(name)) return true;
-    if (/[\[\]{}]/.test(name)) return true;
-    const lettersOnly = (name.match(/\p{L}/gu) || []).join('');
-    if (lettersOnly.length < 8) return true;
-    const words = name.match(/\p{L}{4,}/gu) || [];
-    if (words.length < 2 && name.length < 40) return true;
-    const alnumTokens = (name.match(/[\p{L}\p{N}]+/gu) || []).filter(t => t.length >= 2);
-    const shortJunk = alnumTokens.filter(t => t.length <= 2).length;
-    if (alnumTokens.length > 0 && shortJunk / alnumTokens.length > 0.5) return true;
-    return false;
-}
-
 function shouldSkipName(name) {
     if (!name) return true;
     if (!/\p{L}{3,}/u.test(name)) return true;
     if (isHiddenCategory(name)) return true;
-    if (looksLikeOcrNoise(name)) return true;
     const lower = name.toLowerCase();
     for (const phrase of SKIP_PHRASES) if (lower.includes(phrase)) return true;
     const firstWord = (lower.match(/[\p{L}\p{N}/]+/u) || [''])[0];
@@ -751,12 +721,6 @@ function handleFile(file) {
         r.onerror = () => reject(new Error('не удалось прочитать файл'));
         r.readAsArrayBuffer(file);
     });
-    const readText = () => new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(new Error('не удалось прочитать файл'));
-        r.readAsText(file, 'utf-8');
-    });
 
     if (ext === 'xlsx' || ext === 'xls' || mime.includes('spreadsheet')) {
         if (typeof XLSX === 'undefined') {
@@ -794,24 +758,7 @@ function handleFile(file) {
         return;
     }
 
-    if (['jpg', 'jpeg', 'png', 'webp'].includes(ext) || mime.startsWith('image/')) {
-        setStatus('busy', 'Изображение: загружаю OCR (первый раз ~5–10 МБ)…');
-        extractImageText(file, (status, progress) => {
-            setStatus('busy', `OCR ${status}: ${Math.round(progress * 100)}%`);
-        })
-            .then(text => {
-                console.log('[OCR] распознано символов:', text.length);
-                console.log('[OCR] фрагмент:', text.slice(0, 400));
-                reportImport('OCR', textToRows(text));
-            })
-            .catch(failAsync);
-        return;
-    }
-
-    // default: CSV / plain text
-    readText()
-        .then(text => reportImport('CSV', parseCsv(text)))
-        .catch(failAsync);
+    failAsync(new Error('поддерживаются только Excel (.xlsx/.xls), PDF и Word (.docx)'));
 }
 
 function extractDdcItems(rows) {
