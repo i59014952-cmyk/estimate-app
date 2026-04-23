@@ -384,6 +384,148 @@ def cache_clear():
     return {"cleared": before}
 
 
+import httpx
+from bs4 import BeautifulSoup
+
+
+KOLORIT_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+async def _kolorit_fetch(url: str) -> str:
+    async with httpx.AsyncClient(
+        headers={
+            "User-Agent": KOLORIT_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+        },
+        follow_redirects=True,
+        timeout=25.0,
+    ) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+        return r.text
+
+
+def _kolorit_parse(html: str, limit: int) -> list[PriceItem]:
+    """Parse Kolorit Bitrix catalog/search HTML. Try several common selectors."""
+    soup = BeautifulSoup(html, "lxml")
+    items: list[PriceItem] = []
+    card_selectors = [
+        ".catalog-section-item",
+        ".bx_catalog_item",
+        ".product-item",
+        ".js-product-card",
+        "[data-product-id]",
+        "[data-entity='items-row'] .item",
+        "li.product",
+    ]
+    cards = []
+    for sel in card_selectors:
+        cards = soup.select(sel)
+        if cards:
+            break
+    if not cards:
+        # last resort: any <a> inside a div that contains a ruble sign
+        for link in soup.select('a[href^="/catalog/"]'):
+            parent = link.find_parent(["div", "li"])
+            if parent and ("₽" in parent.get_text() or "руб" in parent.get_text().lower()):
+                cards.append(parent)
+                if len(cards) >= limit * 3:
+                    break
+    for card in cards[: limit * 2]:
+        if len(items) >= limit:
+            break
+        link = card.find("a", href=lambda h: h and "/catalog/" in h)
+        if not link:
+            continue
+        href = link.get("href") or ""
+        name = (link.get("title") or link.get_text(" ", strip=True))[:300]
+        if not name:
+            continue
+        # Try to find price text in card
+        price_el = None
+        for psel in [
+            ".price",
+            ".product-price",
+            ".catalog-item-price",
+            ".bx_price",
+            "[itemprop='price']",
+            "[data-entity='price']",
+        ]:
+            price_el = card.select_one(psel)
+            if price_el:
+                break
+        price_text = price_el.get_text(" ", strip=True) if price_el else card.get_text(" ", strip=True)
+        price = _parse_price(price_text)
+        url_ = href if href.startswith("http") else f"https://kolorit.ru{href}"
+        items.append(PriceItem(
+            name=name,
+            sku=None,
+            price=price,
+            unit=None,
+            city="msk",
+            url=url_,
+        ))
+    return items
+
+
+@app.get("/kolorit/search", response_model=SearchResponse)
+async def kolorit_search(
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(5, ge=1, le=30),
+):
+    key = _cache_key("kolorit", query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city="kolorit", strategy_used="cache", cached=True, results=cached)
+    url = f"https://kolorit.ru/search/?q={query.strip().replace(' ', '+')}"
+    try:
+        html = await _kolorit_fetch(url)
+    except Exception as e:
+        raise HTTPException(502, f"kolorit fetch failed: {e!s}"[:200])
+    items = _kolorit_parse(html, limit)
+    _cache_set(key, items)
+    return SearchResponse(query=query, city="kolorit", strategy_used="http", cached=False, results=items)
+
+
+@app.get("/kolorit/debug")
+async def kolorit_debug(query: str = "краска"):
+    url = f"https://kolorit.ru/search/?q={query.strip().replace(' ', '+')}"
+    html = await _kolorit_fetch(url)
+    soup = BeautifulSoup(html, "lxml")
+    body_text = soup.get_text("\n", strip=True)[:3000]
+    # count candidate selectors
+    candidates = [
+        ".catalog-section-item", ".bx_catalog_item", ".product-item",
+        ".js-product-card", "[data-product-id]", "[itemprop='itemListElement']",
+        "[data-entity='items-row']", "li.product", ".item",
+        ".bx_catalog_item_container", "[itemprop='offers']",
+        "a[href*='/catalog/']",
+    ]
+    counts = {sel: len(soup.select(sel)) for sel in candidates}
+    # look at top classes
+    cls_freq: dict[str, int] = {}
+    for el in soup.select("[class]"):
+        for cl in el.get("class") or []:
+            cls_freq[cl] = cls_freq.get(cl, 0) + 1
+    top_classes = sorted(cls_freq.items(), key=lambda kv: -kv[1])[:40]
+    # find search form
+    form = soup.select_one("form[action*='search'], form[name='search']")
+    form_html = str(form)[:500] if form else None
+    return {
+        "url": url,
+        "html_len": len(html),
+        "title": soup.title.string.strip() if soup.title and soup.title.string else None,
+        "body_snippet": body_text,
+        "selector_counts": counts,
+        "top_classes": top_classes,
+        "form_html": form_html,
+    }
+
+
 @app.get("/debug/home")
 async def debug_home():
     if state["browser"] is None:
