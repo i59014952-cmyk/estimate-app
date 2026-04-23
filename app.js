@@ -418,7 +418,14 @@ function renderTotals() {
     subtotalEl.textContent = formatMoney(subtotal);
     vatEl.textContent = formatMoney(vat);
     grandEl.textContent = formatMoney(subtotal + vat);
-    totalsEl.hidden = subtotal === 0;
+    if (totalsEl) {
+        const shouldHide = subtotal === 0;
+        totalsEl.hidden = shouldHide;
+        totalsEl.style.display = shouldHide ? 'none' : '';
+        console.log(`[Итоги] subtotal=${subtotal}, hidden=${shouldHide}`);
+    } else {
+        console.warn('[Итоги] элемент #totals-hero не найден — HTML не обновился');
+    }
     exportBtn.disabled = estimate.length === 0;
     const anyNotFound = estimate.some(r => r.notFound);
     koloritBtn.disabled = !anyNotFound || koloritBtn.dataset.busy === '1';
