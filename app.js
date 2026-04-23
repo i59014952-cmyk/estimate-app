@@ -854,17 +854,25 @@ async function fetchPricesForNotFound() {
     };
     async function searchOne(name) {
         const url = `${PRICES_BACKEND}/prices/search?query=${encodeURIComponent(name)}&limit=6`;
-        try {
-            const r = await fetch(url);
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const j = await r.json();
-            console.log(`[Запрос цен] "${name}" -> ${j.results?.length || 0} вариантов`);
-            return (j.results || []).filter(x => x && x.price);
-        } catch (err) {
-            console.warn('[Запрос цен] ошибка', name, err.message);
-            failed++;
-            return [];
+        const delays = [0, 800, 2000];
+        let lastErr = null;
+        for (let attempt = 0; attempt < delays.length; attempt++) {
+            if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+            try {
+                const r = await fetch(url);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const j = await r.json();
+                const hits = (j.results || []).filter(x => x && x.price);
+                console.log(`[Запрос цен] "${name}" -> ${j.results?.length || 0} вариантов (с ценой ${hits.length}, попытка ${attempt + 1})`);
+                return hits;
+            } catch (err) {
+                lastErr = err;
+                console.warn(`[Запрос цен] попытка ${attempt + 1} провалилась для "${name}":`, err.message);
+            }
         }
+        console.warn('[Запрос цен] все попытки провалились', name, lastErr && lastErr.message);
+        failed++;
+        return [];
     }
     async function worker(queue) {
         while (queue.length > 0) {
