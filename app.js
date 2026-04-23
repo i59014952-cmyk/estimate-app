@@ -42,6 +42,7 @@ const statusEl = document.getElementById('status');
 const subtotalEl = document.getElementById('subtotal');
 const vatEl = document.getElementById('vat');
 const grandEl = document.getElementById('grand');
+const totalsEl = document.getElementById('totals-hero');
 const exportBtn = document.getElementById('export-btn');
 const uploadBtn = document.getElementById('upload-btn');
 const koloritBtn = document.getElementById('kolorit-btn');
@@ -417,6 +418,7 @@ function renderTotals() {
     subtotalEl.textContent = formatMoney(subtotal);
     vatEl.textContent = formatMoney(vat);
     grandEl.textContent = formatMoney(subtotal + vat);
+    totalsEl.hidden = subtotal === 0;
     exportBtn.disabled = estimate.length === 0;
     const anyNotFound = estimate.some(r => r.notFound);
     koloritBtn.disabled = !anyNotFound || koloritBtn.dataset.busy === '1';
