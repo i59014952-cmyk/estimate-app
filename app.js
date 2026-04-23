@@ -185,6 +185,10 @@ function renderResults(query) {
 }
 
 function addRow({ name, unit, unitPrice, qty, notFound, source, url }) {
+    if (isHiddenCategory(name)) {
+        console.log(`[addRow] заблокирована скрытая категория: "${name}"`);
+        return;
+    }
     estimate.push({
         id: nextId++,
         name,
