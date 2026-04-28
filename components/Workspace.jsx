@@ -630,6 +630,7 @@ function StatusBar() {
 function Workspace({ embedded = false, onTheme, theme }) {
   const [tab, setTab] = useState("all");
   const [navActive, setNavActive] = useState("estimates");
+  const [khModalTab, setKhModalTab] = useState(null);
   const est = useEstimate();
   const fileInputRef = React.useRef(null);
 
@@ -654,7 +655,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
       />
       <TopBar onTheme={onTheme} theme={theme} />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
-        <Sidebar active={navActive} onPick={setNavActive} />
+        <Sidebar active={navActive} onPick={(id) => { setNavActive(id); setKhModalTab(id); }} />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
           <HeroBlock est={est} />
           <div style={{ position: "relative" }}>
@@ -690,6 +691,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
       </div>
       <StatusBar />
       <StatusToast status={est.state.status} />
+      <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} />
     </div>
   );
 }
