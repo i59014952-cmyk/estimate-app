@@ -8,6 +8,7 @@ function useEstimate() {
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
   const [pricesBusy, setPricesBusy] = React.useState(false);
+  const [pricesProgress, setPricesProgress] = React.useState({ done: 0, total: 0, filled: 0, failed: 0 });
   const nextIdRef = React.useRef(1);
   const estimateRef = React.useRef([]);
   React.useEffect(() => { estimateRef.current = estimate; }, [estimate]);
@@ -224,7 +225,7 @@ function useEstimate() {
     const targetIds = estimateRef.current.filter(r => r.notFound).map(r => r.id);
     if (targetIds.length === 0) return;
     setPricesBusy(true);
-    setStatus({ kind: "busy", text: `Поиск вариантов для ${targetIds.length} позиций…` });
+    setPricesProgress({ done: 0, total: targetIds.length, filled: 0, failed: 0 });
     let done = 0, filled = 0, failed = 0, ambiguous = 0;
     const queue = targetIds.slice();
 
@@ -264,13 +265,12 @@ function useEstimate() {
         } else {
           setEstimate(prev => prev.map(r => r.id === id ? { ...r, candidates: [], expanded: false } : r));
         }
-        setStatus({ kind: "busy", text: `Запрос цен: ${done}/${targetIds.length} (с вариантами ${ambiguous})` });
+        setPricesProgress({ done, total: targetIds.length, filled, failed });
       }
     }
     const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker());
     try {
       await Promise.all(workers);
-      setStatus({ kind: "done", text: `Запрос цен: обработано ${done}, новых цен ${filled}, с альтернативами ${ambiguous}, ошибок ${failed}` });
     } catch (err) {
       setStatus({ kind: "error", text: `Сервис цен недоступен: ${err.message}` });
     } finally {
@@ -301,7 +301,7 @@ function useEstimate() {
   }, [addRow]);
 
   return {
-    state: { catalog, ddcCatalog, catalogReady, estimate, query, status, pricesBusy, searchResults, totals, anyNotFound },
+    state: { catalog, ddcCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
       setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, addBlankRow,

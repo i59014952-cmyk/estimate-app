@@ -142,6 +142,90 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
 .btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:99px}
 .btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none}
 
+/* === Kub-House: модалка загрузки цен === */
+.kh-prices-backdrop{
+  position:fixed; inset:0; z-index:1100;
+  background:rgba(20,16,12,.42);
+  backdrop-filter:blur(3px);
+  display:flex; align-items:center; justify-content:center;
+  animation:kh-fade-in .22s ease-out;
+}
+@keyframes kh-fade-in{from{opacity:0}to{opacity:1}}
+.kh-prices-card{
+  width:min(420px, calc(100vw - 48px));
+  background:var(--paper-card);
+  border:1px solid var(--rule);
+  padding:32px 36px 28px;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  animation:kh-pop-in .35s cubic-bezier(.2,.9,.3,1.2);
+  box-shadow:0 30px 80px -20px rgba(20,16,12,.45);
+}
+@keyframes kh-pop-in{
+  from{transform:translateY(8px) scale(.96); opacity:0}
+  to{transform:translateY(0) scale(1); opacity:1}
+}
+.kh-prices-title{
+  font-size:26px; line-height:1.1; letter-spacing:-0.015em;
+  text-align:center; margin-top:4px;
+}
+.kh-prices-sources{
+  color:var(--ink-3); letter-spacing:.16em; font-size:10px;
+  margin-bottom:6px;
+}
+.kh-prices-progress{
+  width:100%; height:3px; background:var(--rule); border-radius:99px;
+  overflow:hidden; position:relative;
+}
+.kh-prices-progress__bar{
+  height:100%; background:var(--coffee);
+  border-radius:99px;
+  transition:width .35s ease-out;
+  position:relative;
+}
+.kh-prices-progress__bar::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
+  animation:kh-shimmer 1.6s linear infinite;
+}
+@keyframes kh-shimmer{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(100%)}
+}
+
+/* анимированная кладка кирпичей */
+.kh-prices-bricks{
+  position:relative; width:88px; height:88px;
+  margin:6px 0 4px;
+  display:block;
+}
+.kh-prices-bricks .kh-brick{
+  position:absolute; left:50%; transform:translateX(-50%);
+  width:64px; height:14px; border:1px solid var(--ink);
+  background:var(--coffee);
+  background-image:
+    linear-gradient(90deg, rgba(255,255,255,.10) 0 1px, transparent 1px 32px, rgba(255,255,255,.10) 32px 33px),
+    linear-gradient(0deg, rgba(0,0,0,.10), rgba(0,0,0,.10));
+  border-radius:1px;
+  opacity:0;
+  animation:kh-brick-rise 1.6s cubic-bezier(.32,.72,.36,1) infinite;
+  box-shadow:inset 0 -2px 0 rgba(0,0,0,.12);
+}
+.kh-prices-bricks .kh-brick--1{bottom:0;  width:72px; animation-delay:.0s}
+.kh-prices-bricks .kh-brick--2{bottom:16px; width:64px; animation-delay:.12s}
+.kh-prices-bricks .kh-brick--3{bottom:32px; width:56px; animation-delay:.24s}
+.kh-prices-bricks .kh-brick--4{bottom:48px; width:48px; animation-delay:.36s}
+.kh-prices-bricks .kh-brick--5{bottom:64px; width:40px; animation-delay:.48s; background:var(--moss)}
+@keyframes kh-brick-rise{
+  0%   {opacity:0; transform:translate(-50%,-14px) scale(.92)}
+  18%  {opacity:1; transform:translate(-50%,0)     scale(1)}
+  72%  {opacity:1; transform:translate(-50%,0)     scale(1)}
+  100% {opacity:0; transform:translate(-50%,-4px)  scale(.94)}
+}
+@media (prefers-reduced-motion: reduce){
+  .kh-prices-bricks .kh-brick{animation-duration:0s;opacity:1;transform:translateX(-50%)}
+  .kh-prices-progress__bar::after{animation:none}
+}
+
 /* Тонкие линии-засечки в углах кадра — как на PDF */
 .frame{position:relative}
 .frame::before,

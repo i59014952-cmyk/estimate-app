@@ -582,25 +582,58 @@ function RightPanel({ est }) {
   );
 }
 
-function StatusToast({ status }) {
-  if (!status || status.kind === "idle" || !status.text) return null;
-  const colors = {
-    busy:  { bg: "rgba(110,123,79,.10)", border: "var(--moss)",     text: "var(--ink)" },
-    done:  { bg: "rgba(110,123,79,.10)", border: "var(--moss)",     text: "var(--ink)" },
-    error: { bg: "rgba(194,88,66,.10)",  border: "var(--rust)",     text: "var(--rust)" },
-  };
-  const c = colors[status.kind] || colors.done;
+function ErrorToast({ status }) {
+  if (!status || status.kind !== "error" || !status.text) return null;
   return (
     <div style={{
       position: "fixed", bottom: 36, left: "50%", transform: "translateX(-50%)",
       padding: "10px 18px", borderRadius: 99,
-      background: c.bg, border: `1px solid ${c.border}`, color: c.text,
+      background: "rgba(194,88,66,.10)", border: "1px solid var(--rust)", color: "var(--rust)",
       fontSize: 12, fontFamily: "var(--mono)", letterSpacing: ".04em",
       zIndex: 50, maxWidth: "80%",
       boxShadow: "0 4px 12px rgba(0,0,0,.08)",
     }}>
-      {status.kind === "busy" && <span style={{ marginRight: 8 }}>⟳</span>}
       {status.text}
+    </div>
+  );
+}
+
+function PricesLoader({ open, progress }) {
+  if (!open) return null;
+  const total = Math.max(progress.total || 0, 1);
+  const done = Math.min(progress.done || 0, total);
+  const pct = Math.round((done / total) * 100);
+  return (
+    <div className="kh-prices-backdrop">
+      <div className="kh-prices-card frame">
+        <div className="frame-bl" /><div className="frame-br" />
+        <div className="kh-prices-bricks" aria-hidden="true">
+          <span className="kh-brick kh-brick--1" />
+          <span className="kh-brick kh-brick--2" />
+          <span className="kh-brick kh-brick--3" />
+          <span className="kh-brick kh-brick--4" />
+          <span className="kh-brick kh-brick--5" />
+        </div>
+        <div className="eyebrow" style={{ textAlign: "center" }}>
+          <span className="dot" />Запрос цен
+        </div>
+        <div className="serif kh-prices-title">
+          Подбираем <span className="serif-it" style={{ fontStyle: "italic" }}>лучшие цены</span>
+        </div>
+        <div className="mono tiny kh-prices-sources">
+          КОЛОРИТ <span style={{ opacity: .35 }}>·</span> КРЕПМАСТ <span style={{ opacity: .35 }}>·</span> ВОЛЬТКИН
+        </div>
+        <div className="kh-prices-progress">
+          <div className="kh-prices-progress__bar" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="row between mono tiny" style={{ width: "100%" }}>
+          <span style={{ color: "var(--ink-3)" }}>{done} из {total}</span>
+          <span style={{ color: "var(--ink-3)" }}>
+            {progress.filled > 0 && <>найдено <b style={{ color: "var(--moss)" }}>{progress.filled}</b></>}
+            {progress.failed > 0 && <> · ошибок <b style={{ color: "var(--rust)" }}>{progress.failed}</b></>}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -690,7 +723,8 @@ function Workspace({ embedded = false, onTheme, theme }) {
         <RightPanel est={est} />
       </div>
       <StatusBar />
-      <StatusToast status={est.state.status} />
+      <ErrorToast status={est.state.status} />
+      <PricesLoader open={est.state.pricesBusy} progress={est.state.pricesProgress} />
       <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} />
     </div>
   );
