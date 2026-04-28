@@ -140,6 +140,7 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
 .btn-ghost{border-color:transparent}
 .btn-sm{padding:7px 12px;font-size:12px}
 .btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:99px}
+.btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none}
 
 /* Тонкие линии-засечки в углах кадра — как на PDF */
 .frame{position:relative}

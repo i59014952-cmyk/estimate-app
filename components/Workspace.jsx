@@ -112,7 +112,19 @@ function Sidebar({ active, onPick }) {
   );
 }
 
-function HeroBlock() {
+function HeroBlock({ est }) {
+  const stats = React.useMemo(() => {
+    const localCount = est.state.catalog.length;
+    const ddcCount = est.state.ddcCatalog.length;
+    const total = localCount + ddcCount;
+    return [
+      { k: "Каталог", v: fmt(total), u: "позиций", d: est.state.catalogReady ? "Загружено" : "Загрузка…", live: !est.state.catalogReady, dir: "up" },
+      { k: "Своя база", v: fmt(localCount), u: "материалов", d: "JSON" },
+      { k: "DDC цены", v: fmt(ddcCount), u: "записей", d: "Синх. активна", live: true },
+      { k: "Маржа проекта", v: "18.4", u: "%", d: "−2.1 п.п.", dir: "down" },
+    ];
+  }, [est.state.catalog.length, est.state.ddcCatalog.length, est.state.catalogReady]);
+
   return (
     <div className="frame" style={{ position: "relative", padding: "30px 40px 28px", borderTop: "1px solid var(--rule-2)", borderBottom: "1px solid var(--rule-2)" }}>
       <div className="frame-bl" /><div className="frame-br" />
@@ -139,8 +151,8 @@ function HeroBlock() {
       </div>
 
       <div className="row" style={{ marginTop: 28, gap: 0 }}>
-        {ESTIMATE.stats.map((s, i) => (
-          <div key={i} className="row" style={{ flex: 1, paddingRight: 24, borderRight: i < ESTIMATE.stats.length - 1 ? "1px dashed var(--rule)" : 0, paddingLeft: i ? 24 : 0 }}>
+        {stats.map((s, i) => (
+          <div key={i} className="row" style={{ flex: 1, paddingRight: 24, borderRight: i < stats.length - 1 ? "1px dashed var(--rule)" : 0, paddingLeft: i ? 24 : 0 }}>
             <StatCell {...s} />
           </div>
         ))}
@@ -382,7 +394,7 @@ function HouseSketch() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onUpload, onAddRow, catalogReady }) {
   return (
     <div className="col center" style={{ padding: "40px 32px 44px", alignItems: "center", textAlign: "center" }}>
       <HouseSketch />
@@ -393,9 +405,12 @@ function EmptyState() {
         Загрузите коммерческое предложение — распознаем позиции, сопоставим с каталогом KUB·HOUSE и рассчитаем смету. Или добавьте материалы из правой панели.
       </p>
       <div className="row center gap-3" style={{ marginBottom: 16, flexWrap: "wrap", justifyContent: "center" }}>
-        <button className="btn btn-primary"><Icon name="upload" size={13} /> Загрузить КП</button>
-        <button className="btn"><Icon name="cal" size={13} /> Начать по шаблону</button>
-        <button className="btn"><Icon name="plus" size={13} /> Добавить строку</button>
+        <button className="btn btn-primary" onClick={onUpload} disabled={!catalogReady}>
+          <Icon name="upload" size={13} /> Загрузить КП
+        </button>
+        <button className="btn" onClick={onAddRow}>
+          <Icon name="plus" size={13} /> Добавить строку
+        </button>
       </div>
       <div className="row center gap-2 mono tiny" style={{ color: "var(--ink-4)", letterSpacing: ".08em" }}>
         {["XLSX","PDF","DOCX","CSV"].map(f => (
@@ -406,7 +421,9 @@ function EmptyState() {
   );
 }
 
-function PositionsHeader() {
+function PositionsHeader({ est }) {
+  const rowCount = est.state.estimate.length;
+  const grand = est.state.totals.grand;
   return (
     <div className="row between" style={{ padding: "14px 32px 12px", flexWrap:"wrap", gap:12, alignItems: "flex-end" }}>
       <div className="col gap-2">
@@ -417,16 +434,26 @@ function PositionsHeader() {
           <span className="mono tiny" style={{ color:"var(--ink-4)", padding:"2px 8px", border:"1px solid var(--rule)", borderRadius:99 }}>R3.0</span>
         </div>
         <div className="mono tiny muted" style={{ whiteSpace: "nowrap" }}>
-          <b style={{ color:"var(--ink)" }}>0</b> строк
+          <b style={{ color:"var(--ink)" }}>{rowCount}</b> строк
           <span style={{ margin: "0 8px", color:"var(--ink-4)" }}>·</span>
-          <b style={{ color:"var(--ink)" }}>0</b> разделов
-          <span style={{ margin: "0 8px", color:"var(--ink-4)" }}>·</span>
-          итого — <b className="serif" style={{ color:"var(--ink)", fontSize:15 }}>— ₽</b>
+          итого <b className="serif" style={{ color:"var(--ink)", fontSize:15 }}>{grand > 0 ? fmtMoney(grand) : "— ₽"}</b>
         </div>
       </div>
       <div className="row gap-2 center">
-        <button className="btn btn-sm"><Icon name="refresh" size={13} /> Обновить цены</button>
-        <button className="btn btn-sm"><Icon name="export" size={13} /> Экспорт</button>
+        <button
+          className="btn btn-sm"
+          onClick={est.actions.fetchPricesForNotFound}
+          disabled={!est.state.anyNotFound || est.state.pricesBusy}
+        >
+          <Icon name="refresh" size={13} /> {est.state.pricesBusy ? "Запрос…" : "Обновить цены"}
+        </button>
+        <button
+          className="btn btn-sm"
+          onClick={est.actions.exportCsv}
+          disabled={rowCount === 0}
+        >
+          <Icon name="export" size={13} /> Экспорт
+        </button>
       </div>
     </div>
   );
@@ -446,29 +473,36 @@ function ColumnsHeader() {
   );
 }
 
-function BudgetCard() {
-  const items = ["Материалы", "Работы", "Накладные", "НДС 20%"];
+function BudgetCard({ est }) {
+  const { subtotal, vat, grand } = est.state.totals;
+  const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
+  const items = [
+    { label: "Сумма без НДС", value: subtotal },
+    { label: "НДС 20%", value: vat },
+  ];
   return (
     <div className="frame" style={{ padding:"18px 18px 16px", border:"1px solid var(--rule)", background:"var(--paper-card)", position:"relative" }}>
       <div className="frame-bl" /><div className="frame-br" />
       <div className="eyebrow" style={{ marginBottom:14 }}>Бюджет</div>
       <div className="col" style={{ gap:10 }}>
-        {items.map((l,i) => (
+        {items.map((it,i) => (
           <div key={i} className="row between center" style={{ borderBottom: "1px dashed var(--rule)", paddingBottom:8 }}>
-            <span style={{ fontSize:13, color:"var(--ink-2)" }}>{l}</span>
-            <span className="mono muted" style={{ fontSize: 13 }}>— ₽</span>
+            <span style={{ fontSize:13, color:"var(--ink-2)" }}>{it.label}</span>
+            <span className="mono" style={{ fontSize: 13, color: it.value > 0 ? "var(--ink)" : "var(--ink-4)" }}>{fmtCell(it.value)}</span>
           </div>
         ))}
       </div>
       <div className="row between center" style={{ marginTop:16 }}>
         <span className="serif-it" style={{ fontSize: 22, fontStyle:"italic" }}>Итого</span>
-        <span className="serif" style={{ fontSize: 30, letterSpacing: "-0.02em" }}>— <span className="mono tiny muted">₽</span></span>
+        <span className="serif" style={{ fontSize: 28, letterSpacing: "-0.02em", color: grand > 0 ? "var(--ink)" : "var(--ink-4)" }}>
+          {grand > 0 ? fmt(Math.round(grand)) : "—"} <span className="mono tiny muted">₽</span>
+        </span>
       </div>
     </div>
   );
 }
 
-function PopularMaterials() {
+function PopularMaterials({ onAdd }) {
   return (
     <div>
       <div className="row between center" style={{ padding: "0 0 12px" }}>
@@ -492,7 +526,14 @@ function PopularMaterials() {
                 {fmt(m.price)} ₽ / {m.unit} <span style={{ color:"var(--ink-4)" }}>·</span> {m.note}
               </div>
             </div>
-            <button className="btn btn-icon" style={{ width: 28, height: 28 }}><Icon name="plus" size={12} /></button>
+            <button
+              className="btn btn-icon"
+              style={{ width: 28, height: 28 }}
+              onClick={() => onAdd && onAdd({ name: m.name + (m.note ? `, ${m.note}` : ''), unit: m.unit, unitPrice: m.price, qty: 1, notFound: false, source: 'manual' })}
+              title="Добавить в смету"
+            >
+              <Icon name="plus" size={12} />
+            </button>
           </div>
         ))}
       </div>
@@ -524,7 +565,7 @@ function HistoryFeed() {
   );
 }
 
-function RightPanel() {
+function RightPanel({ est }) {
   return (
     <aside className="col" style={{
       width: 320, padding: "20px 22px 24px", gap: 24,
@@ -533,11 +574,34 @@ function RightPanel() {
     }}>
       <div>
         <div className="eyebrow" style={{ marginBottom: 10 }}>Бюджет объекта</div>
-        <BudgetCard />
+        <BudgetCard est={est} />
       </div>
-      <PopularMaterials />
+      <PopularMaterials onAdd={est.actions.addRow} />
       <HistoryFeed />
     </aside>
+  );
+}
+
+function StatusToast({ status }) {
+  if (!status || status.kind === "idle" || !status.text) return null;
+  const colors = {
+    busy:  { bg: "rgba(110,123,79,.10)", border: "var(--moss)",     text: "var(--ink)" },
+    done:  { bg: "rgba(110,123,79,.10)", border: "var(--moss)",     text: "var(--ink)" },
+    error: { bg: "rgba(194,88,66,.10)",  border: "var(--rust)",     text: "var(--rust)" },
+  };
+  const c = colors[status.kind] || colors.done;
+  return (
+    <div style={{
+      position: "fixed", bottom: 36, left: "50%", transform: "translateX(-50%)",
+      padding: "10px 18px", borderRadius: 99,
+      background: c.bg, border: `1px solid ${c.border}`, color: c.text,
+      fontSize: 12, fontFamily: "var(--mono)", letterSpacing: ".04em",
+      zIndex: 50, maxWidth: "80%",
+      boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+    }}>
+      {status.kind === "busy" && <span style={{ marginRight: 8 }}>⟳</span>}
+      {status.text}
+    </div>
   );
 }
 
@@ -565,8 +629,16 @@ function StatusBar() {
 
 function Workspace({ embedded = false, onTheme, theme }) {
   const [tab, setTab] = useState("all");
-  const [query, setQuery] = useState("");
   const [navActive, setNavActive] = useState("estimates");
+  const est = useEstimate();
+  const fileInputRef = React.useRef(null);
+
+  const onUploadClick = () => fileInputRef.current && fileInputRef.current.click();
+  const onFileChange = (e) => {
+    const f = e.target.files[0];
+    if (f) est.actions.handleFile(f);
+    e.target.value = '';
+  };
 
   return (
     <div className="col" style={{
@@ -574,19 +646,50 @@ function Workspace({ embedded = false, onTheme, theme }) {
       minHeight: "100vh",
       width: "100%",
     }}>
+      <input
+        ref={fileInputRef} type="file"
+        accept=".xlsx,.xls,.pdf,.docx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,text/csv"
+        style={{ display: "none" }}
+        onChange={onFileChange}
+      />
       <TopBar onTheme={onTheme} theme={theme} />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
         <Sidebar active={navActive} onPick={setNavActive} />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
-          <HeroBlock />
-          <Toolbar tab={tab} onTab={setTab} query={query} onQuery={setQuery} />
-          <PositionsHeader />
+          <HeroBlock est={est} />
+          <div style={{ position: "relative" }}>
+            <Toolbar tab={tab} onTab={setTab} query={est.state.query} onQuery={est.actions.setQuery} />
+            <SearchResults
+              query={est.state.query}
+              results={est.state.searchResults}
+              catalogReady={est.state.catalogReady}
+              onAdd={(row) => { est.actions.addRow(row); est.actions.setQuery(""); }}
+              onClose={() => est.actions.setQuery("")}
+            />
+          </div>
+          <PositionsHeader est={est} />
           <ColumnsHeader />
-          <EmptyState />
+          {est.state.estimate.length === 0 ? (
+            <EmptyState
+              onUpload={onUploadClick}
+              onAddRow={est.actions.addBlankRow}
+              catalogReady={est.state.catalogReady}
+            />
+          ) : (
+            <EstimateTable
+              rows={est.state.estimate}
+              onUpdateQty={est.actions.updateQty}
+              onRemove={est.actions.removeRow}
+              onTogglePicker={est.actions.togglePicker}
+              onApplyCandidate={est.actions.applyCandidate}
+              onApplyManual={est.actions.applyManualPrice}
+            />
+          )}
         </main>
-        <RightPanel />
+        <RightPanel est={est} />
       </div>
       <StatusBar />
+      <StatusToast status={est.state.status} />
     </div>
   );
 }
