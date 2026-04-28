@@ -58,7 +58,7 @@ function TopBar({ onTheme, theme }) {
   );
 }
 
-function Sidebar({ active, onPick }) {
+function Sidebar({ active, onPick, meta, updateMeta }) {
   const Item = ({ it }) => (
     <button
       onClick={() => onPick && onPick(it.id)}
@@ -100,19 +100,19 @@ function Sidebar({ active, onPick }) {
         <div className="frame-bl" /><div className="frame-br" />
         <div className="eyebrow" style={{ marginBottom: 8 }}>Текущий объект</div>
         <div className="serif-it" style={{ fontSize: 22, lineHeight: 1.05, marginBottom: 10, fontStyle: "italic" }}>
-          Резиденция «{ESTIMATE.title}»
+          {meta.kind || "Резиденция"} «<Editable value={meta.title} onChange={(v) => updateMeta && updateMeta("title", v)} />»
         </div>
         <div className="col tiny mono" style={{ gap: 5, color: "var(--ink-3)" }}>
-          <div><span style={{ color: "var(--ink-4)" }}>Д.</span> Горки, 14 соток</div>
-          <div><span style={{ color: "var(--ink-4)" }}>Площадь</span> 284 м²</div>
-          <div><span style={{ color: "var(--ink-4)" }}>Этап</span> Смета / R3</div>
+          <div><span style={{ color: "var(--ink-4)" }}>Д.</span> <Editable value={meta.location || "Горки, 14 соток"} onChange={(v) => updateMeta && updateMeta("location", v)} /></div>
+          <div><span style={{ color: "var(--ink-4)" }}>Площадь</span> <Editable value={meta.areaText || "284 м²"} onChange={(v) => updateMeta && updateMeta("areaText", v)} /></div>
+          <div><span style={{ color: "var(--ink-4)" }}>Этап</span> <Editable value={meta.stage || "Смета / R3"} onChange={(v) => updateMeta && updateMeta("stage", v)} /></div>
         </div>
       </div>
     </aside>
   );
 }
 
-function HeroBlock({ est }) {
+function HeroBlock({ est, meta, updateMeta }) {
   const stats = React.useMemo(() => {
     const localCount = est.state.catalog.length;
     const ddcCount = est.state.ddcCatalog.length;
@@ -131,22 +131,22 @@ function HeroBlock({ est }) {
       <div className="row between" style={{ alignItems: "flex-start", gap: 24 }}>
         <div className="col gap-3">
           <div className="serif" style={{ fontSize: 60, lineHeight: .92, letterSpacing: "-0.025em", whiteSpace: "nowrap" }}>
-            Смета <span className="serif-it" style={{ fontStyle: "italic" }}>«Сосны»</span>
+            Смета <span className="serif-it" style={{ fontStyle: "italic" }}>«<Editable value={meta.title} onChange={(v) => updateMeta("title", v)} />»</span>
           </div>
           <div className="mono tiny" style={{ color: "var(--ink-3)", letterSpacing: ".08em" }}>
-            <b style={{ color: "var(--ink)" }}>{ESTIMATE.code}</b>
+            <b style={{ color: "var(--ink)" }}><Editable value={meta.code} onChange={(v) => updateMeta("code", v)} /></b>
             <span style={{ margin: "0 8px", color: "var(--ink-4)" }}>·</span>
-            Резиденция
+            <Editable value={meta.kind || "Резиденция"} onChange={(v) => updateMeta("kind", v)} />
             <span style={{ margin: "0 8px", color: "var(--ink-4)" }}>·</span>
-            Деревянный каркас
+            <Editable value={meta.construction || "Деревянный каркас"} onChange={(v) => updateMeta("construction", v)} />
             <span style={{ margin: "0 8px", color: "var(--ink-4)" }}>·</span>
-            284 м²
+            <Editable value={meta.areaText || "284 м²"} onChange={(v) => updateMeta("areaText", v)} />
           </div>
         </div>
         <div className="col mono tiny" style={{ alignItems: "flex-end", gap: 4, color: "var(--ink-3)", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
-          <div>РЕВИЗИЯ <b style={{ color: "var(--ink)" }}>{ESTIMATE.revision}</b></div>
-          <div>ДАТА <b style={{ color: "var(--ink)" }}>{ESTIMATE.date}</b></div>
-          <div>СМЕТЧИК <b style={{ color: "var(--ink)" }}>{ESTIMATE.estimator}</b></div>
+          <div>РЕВИЗИЯ <b style={{ color: "var(--ink)" }}><Editable value={meta.revision} onChange={(v) => updateMeta("revision", v)} /></b></div>
+          <div>ДАТА <b style={{ color: "var(--ink)" }}><Editable value={meta.date} onChange={(v) => updateMeta("date", v)} /></b></div>
+          <div>СМЕТЧИК <b style={{ color: "var(--ink)" }}><Editable value={meta.estimator} onChange={(v) => updateMeta("estimator", v)} /></b></div>
         </div>
       </div>
 
@@ -625,6 +625,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
   const est = useEstimate();
+  const [meta, updateMeta] = useEditableMeta();
   const fileInputRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -656,9 +657,9 @@ function Workspace({ embedded = false, onTheme, theme }) {
       />
       <TopBar onTheme={onTheme} theme={theme} />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
-        <Sidebar active={navActive} onPick={(id) => { setNavActive(id); setKhModalTab(id); }} />
+        <Sidebar active={navActive} onPick={(id) => { setNavActive(id); setKhModalTab(id); }} meta={meta} updateMeta={updateMeta} />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
-          <HeroBlock est={est} />
+          <HeroBlock est={est} meta={meta} updateMeta={updateMeta} />
           <div style={{ position: "relative" }}>
             <Toolbar tab={tab} onTab={setTab} query={est.state.query} onQuery={est.actions.setQuery} />
             <SearchResults

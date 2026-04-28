@@ -142,6 +142,12 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
 .btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:99px}
 .btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none}
 
+/* Inline editable fields */
+.kh-editable{transition:background .15s ease, box-shadow .15s ease}
+.kh-editable:hover:not(.kh-editable--editing){background:rgba(110,123,79,.10);box-shadow:0 0 0 1px rgba(110,123,79,.25)}
+[data-theme="dark"] .kh-editable:hover:not(.kh-editable--editing){background:rgba(156,174,123,.12)}
+.kh-editable--editing{caret-color:var(--moss)}
+
 /* === Kub-House: модалка загрузки цен === */
 .kh-prices-backdrop{
   position:fixed; inset:0; z-index:1100;
