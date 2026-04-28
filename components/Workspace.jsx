@@ -421,7 +421,7 @@ function EmptyState({ onUpload, onAddRow, catalogReady }) {
   );
 }
 
-function PositionsHeader({ est }) {
+function PositionsHeader({ est, onAddRow }) {
   const rowCount = est.state.estimate.length;
   const grand = est.state.totals.grand;
   return (
@@ -440,6 +440,13 @@ function PositionsHeader({ est }) {
         </div>
       </div>
       <div className="row gap-2 center">
+        <button
+          className="btn btn-sm"
+          onClick={onAddRow}
+          title="Добавить новую строку"
+        >
+          <Icon name="plus" size={13} /> Добавить строку
+        </button>
         <button
           className="btn btn-sm"
           onClick={est.actions.fetchPricesForNotFound}
@@ -670,7 +677,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
               onClose={() => est.actions.setQuery("")}
             />
           </div>
-          <PositionsHeader est={est} />
+          <PositionsHeader est={est} onAddRow={est.actions.addBlankRow} />
           <ColumnsHeader />
           {est.state.estimate.length === 0 ? (
             <EmptyState

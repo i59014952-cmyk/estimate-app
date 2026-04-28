@@ -148,6 +148,11 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
 [data-theme="dark"] .kh-editable:hover:not(.kh-editable--editing){background:rgba(156,174,123,.12)}
 .kh-editable--editing{caret-color:var(--moss)}
 
+/* Hide browser-native number-input spin buttons */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type="number"]{-moz-appearance:textfield;appearance:textfield}
+
 /* === Kub-House: модалка загрузки цен === */
 .kh-prices-backdrop{
   position:fixed; inset:0; z-index:1100;
