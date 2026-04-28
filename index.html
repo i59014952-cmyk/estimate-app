@@ -1,118 +1,45 @@
-<!DOCTYPE html>
-<html lang="ru">
+<!doctype html>
+<html lang="ru" data-screen-label="01 Workspace">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Смета.Про — калькулятор смет</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=33">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Kub·House — Смета «Сосны»</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-    <header class="app-header">
-        <div class="app-header__inner">
-            <div class="brand" id="brand" role="button" tabindex="0" title="Обновить страницу">
-                <div class="brand__mark">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2"/>
-                        <path d="M9 3v18"/>
-                        <path d="M3 9h6"/>
-                        <path d="M3 15h6"/>
-                        <path d="M15 7v6"/>
-                        <path d="M12 10h6"/>
-                    </svg>
-                </div>
-                <div class="brand__text">
-                    <div class="brand__name">Смета.Про</div>
-                    <div class="brand__subtitle">Калькулятор смет</div>
-                </div>
-            </div>
-            <div class="app-header__tools">
-                <button id="theme-toggle" class="icon-btn" type="button" aria-label="Сменить тему" title="Сменить тему">
-                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="4"/>
-                        <path d="M12 2v2"/><path d="M12 20v2"/>
-                        <path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
-                        <path d="M2 12h2"/><path d="M20 12h2"/>
-                        <path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/>
-                    </svg>
-                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </header>
+<div id="root"></div>
 
-    <main class="container">
-        <section class="search-block card">
-            <label for="search">Поиск по каталогу</label>
-            <div class="search-field">
-                <svg class="search-field__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"/>
-                    <path d="M21 21l-4.35-4.35"/>
-                </svg>
-                <input type="text" id="search" placeholder="Начните вводить название работы или материала…" autocomplete="off" disabled>
-            </div>
-            <div id="results" class="results"></div>
-        </section>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-        <section class="actions card">
-            <button id="kolorit-btn" class="btn btn--outline" type="button" disabled>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M23 4v6h-6"/>
-                    <path d="M1 20v-6h6"/>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
-                    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
-                </svg>
-                Запрос цен
-            </button>
-            <input type="file" id="file-input" accept=".xlsx,.xls,.pdf,.docx" hidden>
-            <div id="upload-summary" class="upload-summary"></div>
-        </section>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="components/Logo.jsx"></script>
+<script type="text/babel" src="components/Data.jsx"></script>
+<script type="text/babel" src="components/Workspace.jsx"></script>
 
-        <section class="estimate card">
-            <header class="estimate__header">
-                <div>
-                    <h2 class="estimate__title">Смета</h2>
-                    <div id="status" class="estimate__meta"></div>
-                </div>
-                <button id="export-btn" class="btn btn--outline btn--sm" type="button" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    Экспорт CSV
-                </button>
-            </header>
-            <table id="estimate-table">
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Ед. изм.</th>
-                        <th>Кол-во</th>
-                        <th>Цена за ед.</th>
-                        <th>Итого</th>
-                        <th>Источник</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="estimate-body">
-                    <tr class="empty"><td colspan="7"></td></tr>
-                </tbody>
-            </table>
-        </section>
-
-        <section id="totals-hero" class="totals-hero" aria-label="Итоги сметы" hidden>
-            <div class="totals-row"><span>Стоимость работ</span> <span><span id="subtotal">0</span> ₽</span></div>
-            <div class="totals-row"><span>НДС 20%</span> <span><span id="vat">0</span> ₽</span></div>
-            <div class="totals-row totals-row--grand"><span>Итого с НДС</span> <span><span id="grand">0</span> ₽</span></div>
-        </section>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js?v=33"></script>
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light"
+}/*EDITMODE-END*/;
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(() => { document.documentElement.setAttribute("data-theme", t.theme); }, [t.theme]);
+  return (
+    <>
+      <Workspace theme={t.theme} onTheme={() => setTweak("theme", t.theme === "dark" ? "light" : "dark")} />
+      <TweaksPanel>
+        <TweakSection label="Тема" />
+        <TweakRadio label="Палитра" value={t.theme}
+          options={[{value:"light",label:"Свет"},{value:"warm",label:"Тёпл."},{value:"dark",label:"Тьма"}]}
+          onChange={(v) => setTweak("theme", v)} />
+      </TweaksPanel>
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
