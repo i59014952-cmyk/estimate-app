@@ -661,6 +661,11 @@ function StatusBar() {
 }
 
 function Workspace({ embedded = false, onTheme, theme }) {
+  // KH: показать лоадер при смене тарифа
+  React.useEffect(() => {
+    if (window.khShowLoader) window.khShowLoader(1400);
+  }, [activeTariff]);
+
   const [tab, setTab] = useState("all");
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
