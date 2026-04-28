@@ -1,6 +1,6 @@
 // EstimateTable.jsx — list of estimate rows with qty edit, picker, delete.
 
-function EstimateTable({ rows, onUpdateQty, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+function EstimateTable({ rows, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
   return (
     <div className="col">
       {rows.map((r, i) => (
@@ -9,6 +9,7 @@ function EstimateTable({ rows, onUpdateQty, onRemove, onTogglePicker, onApplyCan
           row={r}
           index={i + 1}
           onUpdateQty={onUpdateQty}
+          onUpdateRow={onUpdateRow}
           onRemove={onRemove}
           onTogglePicker={onTogglePicker}
           onApplyCandidate={onApplyCandidate}
@@ -19,10 +20,23 @@ function EstimateTable({ rows, onUpdateQty, onRemove, onTogglePicker, onApplyCan
   );
 }
 
-function EstimateRow({ row, index, onUpdateQty, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
   const total = row.notFound ? null : row.qty * row.unitPrice;
   const hasAlternatives = row.candidates && row.candidates.length > 1;
   const sourceLabel = SOURCE_LABELS[row.source] || '—';
+
+  const updateName = (v) => onUpdateRow && onUpdateRow(row.id, { name: v });
+  const updateUnit = (v) => onUpdateRow && onUpdateRow(row.id, { unit: v });
+  const updatePrice = (raw) => {
+    const n = parseFloat(String(raw).replace(',', '.').replace(/\s/g, ''));
+    if (!isFinite(n) || n < 0) return;
+    if (!onUpdateRow) return;
+    if (n > 0) {
+      onUpdateRow(row.id, { unitPrice: n, notFound: false, source: row.source === 'none' ? 'manual' : row.source });
+    } else {
+      onUpdateRow(row.id, { unitPrice: 0, notFound: true, source: 'none' });
+    }
+  };
 
   return (
     <div style={{ borderBottom: "1px solid var(--rule)" }}>
@@ -34,18 +48,15 @@ function EstimateRow({ row, index, onUpdateQty, onRemove, onTogglePicker, onAppl
         <div className="mono tiny" style={{ width: 56, color: "var(--ink-4)" }}>
           {String(index).padStart(2, "0")}
         </div>
-        <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
-          {row.url ? (
+        <div style={{ flex: 1, minWidth: 0, paddingRight: 12, color: "var(--ink)" }}>
+          <Editable value={row.name} onChange={updateName} placeholder="Название позиции" />
+          {row.url && (
             <a href={row.url} target="_blank" rel="noopener noreferrer"
-               style={{ color: "var(--ink)", textDecoration: "none", borderBottom: "1px dotted var(--ink-3)" }}>
-              {row.name}
-            </a>
-          ) : (
-            <span style={{ color: "var(--ink)" }}>{row.name}</span>
+               style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-3)", textDecoration: "none" }} title="Открыть источник">↗</a>
           )}
         </div>
         <div className="mono tiny" style={{ width: 64, textAlign: "center", color: "var(--ink-3)" }}>
-          {row.unit || "—"}
+          <Editable value={row.unit} onChange={updateUnit} placeholder="ед." />
         </div>
         <div style={{ width: 80, textAlign: "right" }}>
           <input
@@ -60,21 +71,24 @@ function EstimateRow({ row, index, onUpdateQty, onRemove, onTogglePicker, onAppl
           />
         </div>
         <div className="mono" style={{ width: 100, textAlign: "right", color: row.notFound ? "var(--rust)" : "var(--ink)", fontSize: 12 }}>
-          {row.notFound ? (
-            <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 8px", fontSize: 11 }}>
-              {row.expanded ? "Скрыть" : "Подобрать"}
-            </button>
-          ) : (
-            <>
-              {formatMoney(row.unitPrice)}
-              {hasAlternatives && (
-                <div>
-                  <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
-                    {row.expanded ? "Скрыть" : `Заменить (${row.candidates.length})`}
-                  </button>
-                </div>
-              )}
-            </>
+          <Editable
+            value={row.unitPrice > 0 ? formatMoney(row.unitPrice) : ""}
+            onChange={updatePrice}
+            placeholder="0"
+          />
+          {row.notFound && (
+            <div>
+              <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
+                {row.expanded ? "Скрыть" : "Подобрать"}
+              </button>
+            </div>
+          )}
+          {!row.notFound && hasAlternatives && (
+            <div>
+              <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
+                {row.expanded ? "Скрыть" : `Заменить (${row.candidates.length})`}
+              </button>
+            </div>
           )}
         </div>
         <div className="mono serif" style={{ width: 130, textAlign: "right", fontSize: 14 }}>

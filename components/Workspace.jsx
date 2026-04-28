@@ -682,6 +682,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
             <EstimateTable
               rows={est.state.estimate}
               onUpdateQty={est.actions.updateQty}
+              onUpdateRow={est.actions.updateRow}
               onRemove={est.actions.removeRow}
               onTogglePicker={est.actions.togglePicker}
               onApplyCandidate={est.actions.applyCandidate}
