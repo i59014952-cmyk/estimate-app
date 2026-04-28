@@ -598,46 +598,6 @@ function ErrorToast({ status }) {
   );
 }
 
-function PricesLoader({ open, progress }) {
-  if (!open) return null;
-  const total = Math.max(progress.total || 0, 1);
-  const done = Math.min(progress.done || 0, total);
-  const pct = Math.round((done / total) * 100);
-  return (
-    <div className="kh-prices-backdrop">
-      <div className="kh-prices-card frame">
-        <div className="frame-bl" /><div className="frame-br" />
-        <div className="kh-prices-bricks" aria-hidden="true">
-          <span className="kh-brick kh-brick--1" />
-          <span className="kh-brick kh-brick--2" />
-          <span className="kh-brick kh-brick--3" />
-          <span className="kh-brick kh-brick--4" />
-          <span className="kh-brick kh-brick--5" />
-        </div>
-        <div className="eyebrow" style={{ textAlign: "center" }}>
-          <span className="dot" />Запрос цен
-        </div>
-        <div className="serif kh-prices-title">
-          Подбираем <span className="serif-it" style={{ fontStyle: "italic" }}>лучшие цены</span>
-        </div>
-        <div className="mono tiny kh-prices-sources">
-          КОЛОРИТ <span style={{ opacity: .35 }}>·</span> КРЕПМАСТ <span style={{ opacity: .35 }}>·</span> ВОЛЬТКИН
-        </div>
-        <div className="kh-prices-progress">
-          <div className="kh-prices-progress__bar" style={{ width: `${pct}%` }} />
-        </div>
-        <div className="row between mono tiny" style={{ width: "100%" }}>
-          <span style={{ color: "var(--ink-3)" }}>{done} из {total}</span>
-          <span style={{ color: "var(--ink-3)" }}>
-            {progress.filled > 0 && <>найдено <b style={{ color: "var(--moss)" }}>{progress.filled}</b></>}
-            {progress.failed > 0 && <> · ошибок <b style={{ color: "var(--rust)" }}>{progress.failed}</b></>}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function StatusBar() {
   return (
     <div className="row between mono tiny" style={{
@@ -661,16 +621,19 @@ function StatusBar() {
 }
 
 function Workspace({ embedded = false, onTheme, theme }) {
-  // KH: показать лоадер при смене тарифа
-  React.useEffect(() => {
-    if (window.khShowLoader) window.khShowLoader(1400);
-  }, [activeTariff]);
-
   const [tab, setTab] = useState("all");
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
   const est = useEstimate();
   const fileInputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (est.state.pricesBusy) {
+      if (window.khShowLoader) window.khShowLoader(60000);
+    } else {
+      if (window.khHideLoader) window.khHideLoader();
+    }
+  }, [est.state.pricesBusy]);
 
   const onUploadClick = () => fileInputRef.current && fileInputRef.current.click();
   const onFileChange = (e) => {
@@ -729,7 +692,6 @@ function Workspace({ embedded = false, onTheme, theme }) {
       </div>
       <StatusBar />
       <ErrorToast status={est.state.status} />
-      <PricesLoader open={est.state.pricesBusy} progress={est.state.pricesProgress} />
       <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} />
     </div>
   );
