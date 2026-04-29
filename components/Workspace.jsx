@@ -643,6 +643,12 @@ function Workspace({ embedded = false, onTheme, theme }) {
     }
   }, [est.state.pricesBusy]);
 
+  React.useEffect(() => {
+    if (est.state.pricesBusy && window.khSetProgress) {
+      window.khSetProgress(est.state.pricesProgress);
+    }
+  }, [est.state.pricesProgress, est.state.pricesBusy]);
+
   const onUploadClick = () => fileInputRef.current && fileInputRef.current.click();
   const onFileChange = (e) => {
     const f = e.target.files[0];

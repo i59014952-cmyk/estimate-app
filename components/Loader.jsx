@@ -9,7 +9,7 @@
     rust: '#C25842',
   };
 
-  function LoaderOverlay({ visible, onDone }) {
+  function LoaderOverlay({ visible, progress }) {
     React.useEffect(() => {
       if (!visible) return;
       // блокируем скролл, пока лоадер показан
@@ -17,6 +17,11 @@
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
     }, [visible]);
+
+    const total = (progress && progress.total) || 0;
+    const done = (progress && progress.done) || 0;
+    const left = Math.max(total - done, 0);
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
     return (
       <div
@@ -37,29 +42,15 @@
             background: C.paper,
             border: '1px solid rgba(80,60,30,.18)',
             borderRadius: 16,
-            padding: '40px 48px 36px',
+            padding: '40px 48px 32px',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             boxShadow: '0 30px 80px -20px rgba(20,16,12,.45), 0 4px 16px -4px rgba(20,16,12,.18)',
             transform: visible ? 'translateY(0) scale(1)' : 'translateY(8px) scale(.96)',
             transition: 'transform .35s cubic-bezier(.2,.9,.3,1.2)',
             position: 'relative',
+            minWidth: 380,
           }}
         >
-          {/* corner ticks */}
-          {[
-            { top: -1, left: -1, br: '0 0 0 0', borderRight: 0, borderBottom: 0 },
-            { top: -1, right: -1, br: '0 0 0 0', borderLeft: 0, borderBottom: 0 },
-            { bottom: -1, left: -1, br: '0 0 0 0', borderRight: 0, borderTop: 0 },
-            { bottom: -1, right: -1, br: '0 0 0 0', borderLeft: 0, borderTop: 0 },
-          ].map((p, i) => (
-            <span key={i} style={{
-              position: 'absolute',
-              width: 12, height: 12,
-              border: `1px solid ${C.ink}`,
-              ...p,
-            }} />
-          ))}
-
           {/* Рулетка */}
           <div style={{ position: 'relative', width: 280, height: 110 }}>
             {/* корпус */}
@@ -105,8 +96,30 @@
 
           <div style={{
             fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '.18em',
-            textTransform: 'uppercase', color: C.ink3, marginTop: 12,
+            textTransform: 'uppercase', color: C.ink3, marginTop: 10,
           }}>замеряем рынок</div>
+
+          {total > 0 && (
+            <>
+              <div style={{
+                width: '100%', height: 2, background: 'rgba(80,60,30,.15)',
+                borderRadius: 99, overflow: 'hidden', marginTop: 22,
+              }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%', background: C.rust,
+                  borderRadius: 99, transition: 'width .35s ease-out',
+                }} />
+              </div>
+              <div style={{
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
+                color: C.ink3, marginTop: 10,
+                display: 'flex', justifyContent: 'space-between', width: '100%',
+              }}>
+                <span>загружено <b style={{ color: C.ink }}>{done}</b> из {total}</span>
+                <span>осталось <b style={{ color: C.ink }}>{left}</b></span>
+              </div>
+            </>
+          )}
         </div>
 
         <style>{`
@@ -125,8 +138,9 @@
     const root = ReactDOM.createRoot(host);
 
     let visible = false;
+    let progress = { done: 0, total: 0 };
     let timer = null;
-    function render() { root.render(<LoaderOverlay visible={visible}/>); }
+    function render() { root.render(<LoaderOverlay visible={visible} progress={progress}/>); }
 
     window.khShowLoader = function (ms) {
       visible = true;
@@ -138,6 +152,11 @@
     window.khHideLoader = function () {
       if (timer) clearTimeout(timer);
       visible = false;
+      progress = { done: 0, total: 0 };
+      render();
+    };
+    window.khSetProgress = function (p) {
+      progress = { done: p && p.done || 0, total: p && p.total || 0 };
       render();
     };
 
