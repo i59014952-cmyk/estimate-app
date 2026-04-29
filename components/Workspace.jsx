@@ -605,6 +605,41 @@ function ErrorToast({ status }) {
   );
 }
 
+function ScrollToTop() {
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 400);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      title="Наверх"
+      aria-label="Прокрутить наверх"
+      style={{
+        position: "fixed", right: 28, bottom: 60,
+        width: 44, height: 44, borderRadius: "50%",
+        background: "var(--coffee)", color: "#FBF5E7",
+        border: "1px solid rgba(0,0,0,.15)", cursor: "pointer",
+        display: "grid", placeItems: "center",
+        boxShadow: "0 8px 22px -8px rgba(92,58,30,.55)",
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(8px)",
+        pointerEvents: visible ? "auto" : "none",
+        transition: "opacity .25s ease, transform .25s ease",
+        zIndex: 40,
+      }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 19V5M5 12l7-7 7 7"/>
+      </svg>
+    </button>
+  );
+}
+
 function StatusBar() {
   return (
     <div className="row between mono tiny" style={{
@@ -706,6 +741,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
         <RightPanel est={est} />
       </div>
       <StatusBar />
+      <ScrollToTop />
       <ErrorToast status={est.state.status} />
       <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} />
     </div>
