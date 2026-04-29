@@ -95,13 +95,15 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
           {total === null ? "—" : formatMoney(total)}
         </div>
         <div style={{ width: 110, textAlign: "right" }}>
-          <span className="mono tiny" style={{
-            padding: "2px 8px", borderRadius: 99,
-            border: "1px solid var(--rule)",
-            color: row.notFound ? "var(--rust)" : "var(--ink-3)",
-          }}>
-            {sourceLabel}
-          </span>
+          {row.source && row.source !== 'none' && row.source !== 'manual' && (
+            <span className="mono tiny" style={{
+              padding: "2px 8px", borderRadius: 99,
+              border: "1px solid var(--rule)",
+              color: "var(--ink-3)",
+            }}>
+              {sourceLabel}
+            </span>
+          )}
         </div>
         <button
           onClick={() => onRemove(row.id)}
