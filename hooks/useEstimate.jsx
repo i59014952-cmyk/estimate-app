@@ -141,6 +141,7 @@ function useEstimate() {
     let imported = 0, notFoundCount = 0, skipped = 0;
     const additions = [];
     for (const row of rows) {
+      if (row && row._colored) { skipped++; continue; }
       const { name, qty } = extractNameAndQty(row);
       const reason = skipReason(name);
       if (reason) { skipped++; continue; }
