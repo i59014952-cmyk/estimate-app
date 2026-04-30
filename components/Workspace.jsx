@@ -466,6 +466,102 @@ function PositionsHeader({ est, onAddRow }) {
   );
 }
 
+function EstimateSearch({ rows }) {
+  const [query, setQuery] = React.useState("");
+  const matches = React.useMemo(() => {
+    if (!query || query.length < 2) return [];
+    const q = query.toLowerCase();
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if ((r.name || "").toLowerCase().includes(q)) {
+        out.push({ row: r, idx: i });
+        if (out.length >= 20) break;
+      }
+    }
+    return out;
+  }, [query, rows]);
+
+  if (rows.length === 0) return null;
+
+  const jumpTo = (id) => {
+    const el = document.getElementById(`est-row-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("kh-row-highlight");
+    void el.offsetWidth;
+    el.classList.add("kh-row-highlight");
+    setQuery("");
+  };
+
+  return (
+    <div style={{ position: "relative", padding: "0 32px 12px" }}>
+      <div className="row center gap-3" style={{
+        padding: "8px 14px",
+        border: "1px solid var(--rule)", borderRadius: 99,
+        background: "var(--paper-card)",
+      }}>
+        <Icon name="search" size={14} />
+        <input
+          value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Найти по ${rows.length} ${rows.length === 1 ? "позиции" : "позициям"} сметы…`}
+          style={{ flex: 1, border: 0, background: "transparent", outline: "none",
+                   color: "var(--ink)", fontSize: 13, fontFamily: "var(--sans)" }}
+        />
+        {query && (
+          <button onClick={() => setQuery("")} aria-label="Очистить"
+                  style={{ border: 0, background: "transparent", color: "var(--ink-3)",
+                           cursor: "pointer", padding: 4, display: "grid", placeItems: "center" }}
+                  title="Очистить">
+            <Icon name="x" size={12} />
+          </button>
+        )}
+      </div>
+      {query.length >= 2 && (
+        <div style={{
+          position: "absolute", top: "100%", left: 32, right: 32,
+          background: "var(--paper-card)", border: "1px solid var(--rule)",
+          borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,.12)",
+          maxHeight: 360, overflowY: "auto", zIndex: 25,
+          marginTop: 4,
+        }}>
+          {matches.length === 0 && (
+            <div className="muted tiny" style={{ padding: 14 }}>Ничего не найдено</div>
+          )}
+          {matches.map(({ row, idx }) => (
+            <button
+              key={row.id}
+              onClick={() => jumpTo(row.id)}
+              className="row center"
+              style={{
+                width: "100%", padding: "10px 14px",
+                borderBottom: "1px solid var(--rule)",
+                background: "transparent", textAlign: "left", cursor: "pointer",
+                gap: 12, color: "var(--ink)",
+              }}
+            >
+              <span className="mono tiny" style={{ width: 44, color: "var(--ink-4)" }}>
+                {String(idx + 1).padStart(3, "0")}
+              </span>
+              <span style={{ flex: 1, fontSize: 13,
+                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {row.name}
+              </span>
+              <span className="mono tiny muted" style={{ width: 90, textAlign: "right" }}>
+                {row.qty} {row.unit || ""}
+              </span>
+              <span className="mono tiny" style={{ width: 90, textAlign: "right",
+                                                    color: row.notFound ? "var(--rust)" : "var(--ink-3)" }}>
+                {row.notFound ? "—" : formatMoney(row.unitPrice * row.qty) + " ₽"}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ColumnsHeader() {
   return (
     <div className="row" style={{ padding: "10px 32px", borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)", color: "var(--ink-4)", background: "var(--paper-2)" }}>
@@ -719,6 +815,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
             />
           </div>
           <PositionsHeader est={est} onAddRow={est.actions.addBlankRow} />
+          <EstimateSearch rows={est.state.estimate} />
           <ColumnsHeader />
           {est.state.estimate.length === 0 ? (
             <EmptyState

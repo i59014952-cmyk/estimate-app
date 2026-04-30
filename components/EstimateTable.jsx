@@ -39,7 +39,7 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
   };
 
   return (
-    <div style={{ borderBottom: "1px solid var(--rule)" }}>
+    <div id={`est-row-${row.id}`} style={{ borderBottom: "1px solid var(--rule)" }}>
       <div className="row" style={{
         padding: "12px 32px",
         alignItems: "center",
