@@ -133,6 +133,11 @@ function useEstimate() {
   const visibleUserCatalog = React.useMemo(() => userCatalog.filter(it => !isHidden(it)), [userCatalog, isHidden]);
   const visibleCatalog = React.useMemo(() => catalog.filter(it => !isHidden(it)), [catalog, isHidden]);
   const visibleDdcCatalog = React.useMemo(() => ddcCatalog.filter(it => !isHidden(it)), [ddcCatalog, isHidden]);
+
+  React.useEffect(() => {
+    window.KH_DB_COUNT = visibleUserCatalog.length + visibleCatalog.length + visibleDdcCatalog.length;
+    window.dispatchEvent(new Event('kh-storage'));
+  }, [visibleUserCatalog.length, visibleCatalog.length, visibleDdcCatalog.length]);
   const [estimate, setEstimate] = React.useState([]);
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
