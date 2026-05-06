@@ -520,13 +520,13 @@ async def prices_search(
     query: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(6, ge=1, le=30),
 ):
-    """Combined search: Kolorit + Krepmast + Voltkin in parallel, merged by URL."""
+    """Combined search: Kolorit + Krepmast + Voltkin + moi-instrumenty in parallel, merged by URL."""
     key = _cache_key("combined", query, limit)
     cached = _cache_get(key)
     if cached:
         return SearchResponse(query=query, city="combined", strategy_used="cache", cached=True, results=cached)
 
-    per_source = max(3, (limit + 2) // 3)
+    per_source = max(3, (limit + 3) // 4)
 
     async def k():
         try:
@@ -549,16 +549,24 @@ async def prices_search(
         except Exception as e:
             return [], [f"voltkin: error: {e!s}"[:140]]
 
-    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail) = await asyncio.gather(k(), m(), v())
+    async def mi():
+        try:
+            items, tr = await _moi_search_merged(query, per_source)
+            return items, [f"moi: {t}" for t in tr]
+        except Exception as e:
+            return [], [f"moi: error: {e!s}"[:140]]
+
+    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail), (mi_items, mi_trail) = await asyncio.gather(k(), m(), v(), mi())
 
     for it in k_items: it.city = "kolorit"
     for it in m_items: it.city = "krepmast"
     for it in v_items: it.city = "voltkin"
+    for it in mi_items: it.city = "moi"
 
     merged: list[PriceItem] = []
     seen: set[str] = set()
     # Round-robin between sources so results look diverse
-    source_lists = [k_items, m_items, v_items]
+    source_lists = [k_items, m_items, v_items, mi_items]
     idx = 0
     empty_streak = 0
     while len(merged) < limit and empty_streak < len(source_lists):
@@ -577,7 +585,7 @@ async def prices_search(
     _cache_set(key, merged)
     return SearchResponse(
         query=query, city="combined", strategy_used="http", cached=False,
-        results=merged, trail=k_trail + m_trail + v_trail,
+        results=merged, trail=k_trail + m_trail + v_trail + mi_trail,
     )
 
 
@@ -720,6 +728,93 @@ async def _voltkin_search_merged(query: str, limit: int) -> tuple[list[PriceItem
             if len(merged) >= limit:
                 return merged, tried
     return merged[:limit], tried
+
+
+def _moi_parse(html: str, limit: int) -> list[PriceItem]:
+    """moi-instrumenty.ru runs on InSales: .products__item card,
+    .products__item-info-name for the title, .products__pr-price-new .price for the price."""
+    soup = BeautifulSoup(html, "lxml")
+    items: list[PriceItem] = []
+    for card in soup.select(".products__item"):
+        if len(items) >= limit:
+            break
+        name_el = card.select_one(".products__item-info-name")
+        if not name_el:
+            continue
+        name = name_el.get_text(" ", strip=True)
+        if not name:
+            continue
+        price_el = card.select_one(".products__pr-price-new .price")
+        if not price_el:
+            continue
+        price = _parse_price(price_el.get_text(" ", strip=True))
+        if price is None or price <= 0:
+            continue
+        link_el = card.select_one("a[href]")
+        url_ = None
+        if link_el:
+            href = (link_el.get("href") or "").strip()
+            if href:
+                url_ = href if href.startswith("http") else f"https://moi-instrumenty.ru{href}"
+        sku = None
+        sku_el = card.select_one("input[name='product_id']")
+        if sku_el and sku_el.get("value"):
+            sku = sku_el.get("value").strip() or None
+        in_stock = bool(card.select_one(".products__available-in-stock"))
+        items.append(PriceItem(
+            name=name,
+            sku=sku,
+            price=price,
+            unit=None,
+            in_stock=in_stock,
+            city="moi",
+            url=url_,
+        ))
+    return items
+
+
+async def _moi_search_merged(query: str, limit: int) -> tuple[list[PriceItem], list[str]]:
+    q = query.strip().replace(" ", "+")
+    urls_to_try = [
+        f"https://moi-instrumenty.ru/search/?q={q}",
+    ]
+    merged: list[PriceItem] = []
+    seen: set[str] = set()
+    tried: list[str] = []
+    for url in urls_to_try:
+        try:
+            html = await _kolorit_fetch(url)
+        except Exception as e:
+            tried.append(f"{url} -> fetch error: {e!s}"[:140])
+            continue
+        chunk = _moi_parse(html, limit)
+        tried.append(f"{url} -> {len(chunk)} items")
+        for item in chunk:
+            key = item.url or item.name
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= limit:
+                return merged, tried
+    return merged[:limit], tried
+
+
+@app.get("/moi/search", response_model=SearchResponse)
+async def moi_search(
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(5, ge=1, le=30),
+):
+    key = _cache_key("moi", query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city="moi", strategy_used="cache", cached=True, results=cached)
+    try:
+        items, tried = await _moi_search_merged(query, limit)
+    except Exception as e:
+        raise HTTPException(502, f"moi fetch failed: {e!s}"[:200])
+    _cache_set(key, items)
+    return SearchResponse(query=query, city="moi", strategy_used="http", cached=False, results=items, trail=tried)
 
 
 @app.get("/voltkin/search", response_model=SearchResponse)
