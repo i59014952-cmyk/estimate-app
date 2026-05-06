@@ -58,30 +58,52 @@ function TopBar({ onTheme, theme }) {
   );
 }
 
+function khReadDynamicCounts() {
+  const tryParse = (k) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
+  const objects = tryParse('kh-objects-v1');
+  const activeObjects = objects.filter(o => (o.status || 'active') === 'active').length;
+  const contractors = tryParse('kh-contractors-v1').length;
+  return { objects: activeObjects, contractors };
+}
+
 function Sidebar({ active, onPick, meta, updateMeta }) {
-  const Item = ({ it }) => (
-    <button
-      onClick={() => onPick && onPick(it.id)}
-      className="row center between focusable"
-      style={{
-        width: "100%", padding: "9px 12px", borderRadius: 8,
-        background: active === it.id ? "var(--ink)" : "transparent",
-        color: active === it.id ? "var(--paper)" : "var(--ink-2)",
-        border: 0, cursor: "default", textAlign: "left",
-        fontSize: 13, fontFamily: "var(--sans)"
-      }}
-    >
-      <span className="row center gap-3">
-        <Icon name={it.icon} size={15} />
-        <span>{it.label}</span>
-      </span>
-      {it.count != null && (
-        <span className="mono tiny" style={{ opacity: active === it.id ? .7 : .55 }}>
-          {fmt(it.count)}
+  const [counts, setCounts] = React.useState(khReadDynamicCounts);
+  React.useEffect(() => {
+    const refresh = () => setCounts(khReadDynamicCounts());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('kh-storage', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('kh-storage', refresh);
+    };
+  }, []);
+  const Item = ({ it }) => {
+    const dynamic = counts[it.id];
+    const count = dynamic != null ? dynamic : it.count;
+    return (
+      <button
+        onClick={() => onPick && onPick(it.id)}
+        className="row center between focusable"
+        style={{
+          width: "100%", padding: "9px 12px", borderRadius: 8,
+          background: active === it.id ? "var(--ink)" : "transparent",
+          color: active === it.id ? "var(--paper)" : "var(--ink-2)",
+          border: 0, cursor: "default", textAlign: "left",
+          fontSize: 13, fontFamily: "var(--sans)"
+        }}
+      >
+        <span className="row center gap-3">
+          <Icon name={it.icon} size={15} />
+          <span>{it.label}</span>
         </span>
-      )}
-    </button>
-  );
+        {count != null && (
+          <span className="mono tiny" style={{ opacity: active === it.id ? .7 : .55 }}>
+            {fmt(count)}
+          </span>
+        )}
+      </button>
+    );
+  };
   return (
     <aside className="col" style={{
       width: 232, padding: "20px 16px 18px", gap: 4,
