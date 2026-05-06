@@ -1015,17 +1015,206 @@ function KHNormsView() {
 }
 
 // ---------- Шаблоны ----------
+// ---------- Шаблоны (редактируемые) ----------
+const KH_TPL_KEY = 'kh-templates-v1';
+const KH_TPL_SEEDED_KEY = 'kh-templates-seeded-v1';
+const khLoadTpls = () => { try { return JSON.parse(localStorage.getItem(KH_TPL_KEY) || '[]'); } catch { return []; } };
+const khSaveTpls = (l) => { try { localStorage.setItem(KH_TPL_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+
+const KH_TPL_SEED = [{
+  name: 'Каркасный дом 120 м²',
+  note: '2 этажа, утеплитель 200 мм, кровля металлочерепица, окна ПВХ. Базовый комплект под ключ.',
+  area: 120,
+  items: [
+    { name: 'Фундамент УШП 250',                unit: 'м²',  qty: 120, unitPrice: 22000 },
+    { name: 'Каркас 100×200 (КДК)',             unit: 'м³',  qty: 18,  unitPrice: 38000 },
+    { name: 'OSB-3 12 мм',                      unit: 'лист', qty: 80, unitPrice: 1280 },
+    { name: 'Утеплитель базальтовый 200 мм',     unit: 'м³',  qty: 24,  unitPrice: 4900 },
+    { name: 'Пароизоляция',                     unit: 'м²',  qty: 240, unitPrice: 90 },
+    { name: 'Ветрозащита',                      unit: 'м²',  qty: 240, unitPrice: 110 },
+    { name: 'Кровля металлочерепица',           unit: 'м²',  qty: 140, unitPrice: 850 },
+    { name: 'Стропильная система',              unit: 'м³',  qty: 6,   unitPrice: 32000 },
+    { name: 'Окна ПВХ',                         unit: 'шт',  qty: 8,   unitPrice: 28000 },
+    { name: 'Внешняя обшивка (планкен)',        unit: 'м²',  qty: 180, unitPrice: 1450 },
+    { name: 'Внутренняя обшивка ГКЛ',           unit: 'м²',  qty: 240, unitPrice: 280 },
+    { name: 'Электрика «черновая»',             unit: 'компл',qty: 1,  unitPrice: 145000 },
+    { name: 'Сантехника «черновая»',            unit: 'компл',qty: 1,  unitPrice: 110000 },
+    { name: 'Монтаж «под ключ»',                unit: 'м²',  qty: 120, unitPrice: 12500 },
+  ],
+}];
+
+function khSeedTplsIfNeeded(current) {
+  if (localStorage.getItem(KH_TPL_SEEDED_KEY)) return current;
+  const existing = new Set(current.map(t => (t.name || '').trim().toLowerCase()));
+  const fresh = KH_TPL_SEED.filter(t => !existing.has(t.name.trim().toLowerCase()))
+    .map((t, i) => ({
+      id: 'tpl-' + i + '-' + Date.now(),
+      name: t.name, note: t.note || '', area: t.area,
+      items: t.items.map((it, j) => ({ id: 'tpli-' + i + '-' + j + '-' + Date.now(), ...it })),
+    }));
+  const next = [...fresh, ...current];
+  khSaveTpls(next);
+  try { localStorage.setItem(KH_TPL_SEEDED_KEY, '1'); } catch {}
+  return next;
+}
+
 function KHTemplatesView() {
-  const data = useKHData();
-  if (!data) return <div className="kh-loading">Загрузка…</div>;
+  const [list, setList] = React.useState(() => khSeedTplsIfNeeded(khLoadTpls()));
+  const [openId, setOpenId] = React.useState(null);
+  const [tplFormOpen, setTplFormOpen] = React.useState(false);
+  const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '' });
+  const [editingTplId, setEditingTplId] = React.useState(null);
+  const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
+
+  const persist = (next) => { setList(next); khSaveTpls(next); };
+  const totalOf = (t) => (t.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+
+  const startAddTpl = () => { setTplDraft({ name: '', area: '', note: '' }); setEditingTplId(null); setTplFormOpen(true); };
+  const startEditTpl = (t) => { setTplDraft({ name: t.name || '', area: t.area ?? '', note: t.note || '' }); setEditingTplId(t.id); setTplFormOpen(true); };
+  const cancelTpl = () => { setTplFormOpen(false); setEditingTplId(null); };
+  const submitTpl = (e) => {
+    if (e) e.preventDefault();
+    const name = tplDraft.name.trim();
+    if (!name) return;
+    const fields = { name, area: tplDraft.area === '' ? '' : Number(tplDraft.area) || '', note: tplDraft.note.trim() };
+    if (editingTplId) persist(list.map(t => t.id === editingTplId ? { ...t, ...fields } : t));
+    else persist([{ id: 't-' + Date.now(), items: [], ...fields }, ...list]);
+    cancelTpl();
+  };
+  const removeTpl = (id) => {
+    if (!confirm('Удалить шаблон?')) return;
+    persist(list.filter(t => t.id !== id));
+    if (openId === id) setOpenId(null);
+  };
+
+  const addItem = (tplId) => {
+    const name = itemDraft.name.trim();
+    if (!name || itemDraft.tplId !== tplId) return;
+    const item = {
+      id: 'tpli-' + Date.now(),
+      name,
+      unit: itemDraft.unit.trim(),
+      qty: Number(itemDraft.qty) || 0,
+      unitPrice: Number(String(itemDraft.unitPrice).replace(',', '.')) || 0,
+    };
+    persist(list.map(t => t.id === tplId ? { ...t, items: [...(t.items || []), item] } : t));
+    setItemDraft({ tplId, name: '', unit: '', qty: '', unitPrice: '' });
+  };
+  const removeItem = (tplId, itemId) => {
+    persist(list.map(t => t.id === tplId ? { ...t, items: t.items.filter(it => it.id !== itemId) } : t));
+  };
+
+  const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
+
   return (
-    <div className="kh-list">
-      {data.templates.map(t => (
-        <div key={t.id} className="kh-card kh-card--static">
-          <div className="kh-card__total">{khFmt(t.basePrice)} / {t.unit}</div>
-          <div className="kh-card__title">{t.name}</div>
-        </div>
-      ))}
+    <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid var(--rule)', paddingBottom: 8 }}>
+        <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>Шаблонов · {list.length}</div>
+        {!tplFormOpen && <button className="kh-btn-primary" onClick={startAddTpl} style={{ marginLeft: 'auto' }}>+ Добавить шаблон</button>}
+      </div>
+
+      {tplFormOpen && (
+        <form onSubmit={submitTpl} className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
+          <div style={{ fontWeight: 600 }}>{editingTplId ? 'Редактировать шаблон' : 'Новый шаблон'}</div>
+          <input autoFocus placeholder="Название (например, Каркасный дом 100 м²)" value={tplDraft.name}
+            onChange={e => setTplDraft({ ...tplDraft, name: e.target.value })} style={khInputStyle()} />
+          <input placeholder="Площадь, м²" type="number" value={tplDraft.area}
+            onChange={e => setTplDraft({ ...tplDraft, area: e.target.value })} style={khInputStyle()} />
+          <textarea placeholder="Описание (необязательно)" value={tplDraft.note}
+            onChange={e => setTplDraft({ ...tplDraft, note: e.target.value })}
+            rows={2} style={{ ...khInputStyle(), resize: 'vertical' }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-sm" onClick={cancelTpl}>Отмена</button>
+            <button type="submit" className="kh-btn-primary" disabled={!tplDraft.name.trim()}>
+              {editingTplId ? 'Сохранить изменения' : 'Сохранить'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {list.length === 0 && !tplFormOpen && (
+        <div className="kh-empty" style={{ padding: 16 }}>Шаблонов нет — нажмите «+ Добавить шаблон».</div>
+      )}
+
+      <div className="kh-list">
+        {list.map(t => {
+          const total = totalOf(t);
+          const isOpen = openId === t.id;
+          const isAddingItem = itemDraft.tplId === t.id;
+          return (
+            <div key={t.id} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="kh-card__title">{t.name}</div>
+                  {t.note && <div className="kh-card__meta" style={{ marginTop: 4 }}>{t.note}</div>}
+                  <div className="kh-card__pills" style={{ marginTop: 6 }}>
+                    {t.area ? <span className="kh-pill">{t.area} м²</span> : null}
+                    <span className="kh-pill">позиций: {(t.items || []).length}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-sm" onClick={() => startEditTpl(t)} title="Редактировать">✎</button>
+                    <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeTpl(t.id)} title="Удалить">×</button>
+                  </div>
+                  {total ? <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{num(total)} ₽</div> : null}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-sm" onClick={() => setOpenId(isOpen ? null : t.id)}>
+                  {isOpen ? 'Свернуть' : 'Состав'}
+                </button>
+                {isOpen && !isAddingItem && (
+                  <button className="btn btn-sm" onClick={() => setItemDraft({ tplId: t.id, name: '', unit: '', qty: '', unitPrice: '' })}>+ Позиция</button>
+                )}
+              </div>
+              {isOpen && (t.items || []).length > 0 && (
+                <table className="kh-table" style={{ marginTop: 4 }}>
+                  <thead><tr>
+                    <th>Наименование</th>
+                    <th>Ед.</th>
+                    <th className="num">Кол-во</th>
+                    <th className="num">Цена</th>
+                    <th className="num">Сумма</th>
+                    <th></th>
+                  </tr></thead>
+                  <tbody>
+                    {t.items.map(it => (
+                      <tr key={it.id}>
+                        <td>{it.name}</td>
+                        <td>{it.unit || '—'}</td>
+                        <td className="num">{Number(it.qty || 0).toLocaleString('ru-RU')}</td>
+                        <td className="num">{num(it.unitPrice)} ₽</td>
+                        <td className="num">{num((Number(it.qty) || 0) * (Number(it.unitPrice) || 0))} ₽</td>
+                        <td className="num"><button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeItem(t.id, it.id)}>×</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {isOpen && isAddingItem && (
+                <form onSubmit={(e) => { e.preventDefault(); addItem(t.id); }}
+                  className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 8, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
+                  <input autoFocus placeholder="Название позиции" value={itemDraft.name}
+                    onChange={e => setItemDraft({ ...itemDraft, name: e.target.value })} style={khInputStyle()} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input placeholder="Ед." value={itemDraft.unit}
+                      onChange={e => setItemDraft({ ...itemDraft, unit: e.target.value })} style={{ ...khInputStyle(), width: 100 }} />
+                    <input placeholder="Кол-во" inputMode="decimal" value={itemDraft.qty}
+                      onChange={e => setItemDraft({ ...itemDraft, qty: e.target.value })} style={{ ...khInputStyle(), width: 110 }} />
+                    <input placeholder="Цена ₽" inputMode="decimal" value={itemDraft.unitPrice}
+                      onChange={e => setItemDraft({ ...itemDraft, unitPrice: e.target.value })} style={{ ...khInputStyle(), flex: 1 }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn btn-sm" onClick={() => setItemDraft({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' })}>Отмена</button>
+                    <button type="submit" className="kh-btn-primary" disabled={!itemDraft.name.trim()}>Добавить</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
