@@ -414,22 +414,19 @@ function useEstimate() {
       .replace(/"/g, '&quot;');
     const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
     const qty = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
-    const todayStr = `${dd}.${mm}.${yyyy}`;
-    const validUntil = new Date(today.getTime() + 14 * 86400000);
-    const vu = `${String(validUntil.getDate()).padStart(2, '0')}.${String(validUntil.getMonth() + 1).padStart(2, '0')}.${validUntil.getFullYear()}`;
-    const kpNo = `КП-${yyyy}/${mm}${dd}`;
 
-    const title = meta.title || 'Смета';
+    const title = meta.title || '';
     const code = meta.code || '';
-    const kind = meta.kind || 'Резиденция';
-    const construction = meta.construction || 'Деревянный каркас';
+    const kind = meta.kind || '';
+    const construction = meta.construction || '';
     const areaText = meta.areaText || '';
     const location = meta.location || '';
+    const stage = meta.stage || '';
+    const revision = meta.revision || '';
+    const date = meta.date || '';
     const estimator = meta.estimator || '';
+
+    const subtitleBits = [code, kind, construction, areaText, location, stage].filter(Boolean);
 
     const rowsHtml = estimate.map((r, i) => `
       <tr>
@@ -446,7 +443,7 @@ function useEstimate() {
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta charset="utf-8">
-<title>Коммерческое предложение ${kpNo}</title>
+<title>Смета «${esc(title)}»</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
 @page { size: A4; margin: 2cm; }
@@ -478,15 +475,14 @@ table.totals tr.grand td { font-size: 14pt; font-weight: 700; border-top: 2px so
     <div class="tag">Modern Wood Development · Est. 2014 · Made in Moscow</div>
   </td>
   <td class="r">
-    <div><span class="label">Ком. предложение №</span> <b>${kpNo}</b></div>
-    <div><span class="label">Дата</span> <b>${todayStr}</b></div>
-    <div><span class="label">Действ. до</span> <b>${vu}</b></div>
-    ${estimator ? `<div><span class="label">Менеджер</span> <b>${esc(estimator)}</b></div>` : ''}
+    ${revision  ? `<div><span class="label">Ревизия</span> <b>${esc(revision)}</b></div>` : ''}
+    ${date      ? `<div><span class="label">Дата</span> <b>${esc(date)}</b></div>` : ''}
+    ${estimator ? `<div><span class="label">Сметчик</span> <b>${esc(estimator)}</b></div>` : ''}
   </td>
 </tr></table>
 
-<h1 class="kp-title">${esc(kind)} <em>«${esc(title)}»</em>${code ? ` · ${esc(code)}` : ''}</h1>
-<div class="client">${esc(construction)}${areaText ? ' · ' + esc(areaText) : ''}${location ? ' · ' + esc(location) : ''}</div>
+<h1 class="kp-title">Смета <em>«${esc(title)}»</em></h1>
+${subtitleBits.length ? `<div class="client">${esc(subtitleBits.join(' · '))}</div>` : ''}
 
 <table class="items">
 <thead><tr>
@@ -513,11 +509,13 @@ table.totals tr.grand td { font-size: 14pt; font-weight: 700; border-top: 2px so
 </div>
 </body></html>`;
 
+    const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '').trim();
+    const fileTag = safe(code) || safe(title) || new Date().toISOString().slice(0, 10);
     const blob = new Blob(['﻿', html], { type: 'application/msword;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `KUB-HOUSE-${kpNo}.doc`;
+    a.download = `Смета-${fileTag}.doc`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 8000);
   }, [estimate, totals]);
