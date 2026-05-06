@@ -292,27 +292,39 @@ function KHMaterialsView() {
 
 // ---------- Подрядчики ----------
 const KH_CONTRACTORS_KEY = 'kh-contractors-v1';
-const KH_SEEDED_KEY = 'kh-contractors-seeded-v2';
+const KH_SEEDED_KEY = 'kh-contractors-seeded-v3';
 window.KH_CONTRACTOR_FILES = window.KH_CONTRACTOR_FILES || new Map();
 const khLoadContractors = () => { try { return JSON.parse(localStorage.getItem(KH_CONTRACTORS_KEY) || '[]'); } catch { return []; } };
 const khSaveContractors = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); } catch {} };
 
 const KH_SEED = [
-  { name: 'ТЕХНОНИКОЛЬ',     type: 'Производитель', email: 'test1@mail.ru', website: 'https://www.tn.ru/',                  org: 'Кровля, гидро- и теплоизоляция, фасады' },
-  { name: 'Segezha Group',   type: 'Производитель', email: 'test2@mail.ru', website: 'https://segezha-group.com/',          org: 'Пиломатериалы, фанера, клеёный брус, бумага' },
-  { name: 'CLT Development', type: 'Производитель', email: 'test3@mail.ru', website: 'https://cltdevelopment.ru/products',  org: 'CLT-панели, инжиниринг' },
-  { name: 'Adler-Werk',      type: 'Производитель', email: 'test4@mail.ru', website: 'https://adler-lacke.ru/',             org: 'ЛКМ для дерева, лаки, масла, краски' },
-  { name: 'КЗС',             type: 'Поставщик',     email: 'test5@mail.ru', website: 'https://kzs.ru/',                     org: 'Стройматериалы' },
-  { name: 'Dörken',          type: 'Производитель', email: 'test6@mail.ru', website: 'https://www.doerken.com/ru/ru/start', org: 'DELTA-мембраны, гидро- и пароизоляция' },
+  { name: 'ТЕХНОНИКОЛЬ',     type: 'Производитель', email: 'test1@mail.ru', phone: '+7 (000) 000-00-01', website: 'https://www.tn.ru/',                  org: 'Кровля, гидро- и теплоизоляция, фасады' },
+  { name: 'Segezha Group',   type: 'Производитель', email: 'test2@mail.ru', phone: '+7 (000) 000-00-02', website: 'https://segezha-group.com/',          org: 'Пиломатериалы, фанера, клеёный брус, бумага' },
+  { name: 'CLT Development', type: 'Производитель', email: 'test3@mail.ru', phone: '+7 (000) 000-00-03', website: 'https://cltdevelopment.ru/products',  org: 'CLT-панели, инжиниринг' },
+  { name: 'Adler-Werk',      type: 'Производитель', email: 'test4@mail.ru', phone: '+7 (000) 000-00-04', website: 'https://adler-lacke.ru/',             org: 'ЛКМ для дерева, лаки, масла, краски' },
+  { name: 'КЗС',             type: 'Поставщик',     email: 'test5@mail.ru', phone: '+7 (000) 000-00-05', website: 'https://kzs.ru/',                     org: 'Стройматериалы' },
+  { name: 'Dörken',          type: 'Производитель', email: 'test6@mail.ru', phone: '+7 (000) 000-00-06', website: 'https://www.doerken.com/ru/ru/start', org: 'DELTA-мембраны, гидро- и пароизоляция' },
 ];
 
 function khSeedIfNeeded(current) {
   if (localStorage.getItem(KH_SEEDED_KEY)) return current;
-  const existing = new Set(current.map(c => (c.name || '').trim().toLowerCase()));
-  const fresh = KH_SEED
-    .filter(v => !existing.has(v.name.trim().toLowerCase()))
-    .map((v, i) => ({ id: 'seed-' + i + '-' + Date.now(), ...v }));
-  const next = [...fresh, ...current];
+  const byName = new Map(current.map(c => [(c.name || '').trim().toLowerCase(), c]));
+  const merged = current.map(c => ({ ...c }));
+  const seedFresh = [];
+  KH_SEED.forEach((v, i) => {
+    const key = v.name.trim().toLowerCase();
+    const existing = byName.get(key);
+    if (existing) {
+      const idx = merged.indexOf(merged.find(c => c === existing) || existing);
+      const target = merged[idx] || existing;
+      ['phone', 'website', 'email', 'org', 'type'].forEach(k => {
+        if (!target[k] && v[k]) target[k] = v[k];
+      });
+    } else {
+      seedFresh.push({ id: 'seed-' + i + '-' + Date.now(), ...v });
+    }
+  });
+  const next = [...seedFresh, ...merged];
   khSaveContractors(next);
   try { localStorage.setItem(KH_SEEDED_KEY, '1'); } catch {}
   return next;
@@ -324,7 +336,7 @@ function KHContractorsView() {
   const [tab, setTab] = React.useState('Производители');
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
-  const [draft, setDraft] = React.useState({ name: '', email: '', type: 'Производитель', org: '', website: '' });
+  const [draft, setDraft] = React.useState({ name: '', email: '', phone: '', type: 'Производитель', org: '', website: '' });
   const [, force] = React.useReducer(x => x + 1, 0);
 
   const persist = (next) => { setList(next); khSaveContractors(next); };
@@ -338,12 +350,12 @@ function KHContractorsView() {
   );
 
   const startAdd = () => {
-    setDraft({ name: '', email: '', type: tab === 'Производители' ? 'Производитель' : 'Поставщик', org: '', website: '' });
+    setDraft({ name: '', email: '', phone: '', type: tab === 'Производители' ? 'Производитель' : 'Поставщик', org: '', website: '' });
     setEditingId(null);
     setFormOpen(true);
   };
   const startEdit = (c) => {
-    setDraft({ name: c.name || '', email: c.email || '', type: c.type || 'Поставщик', org: c.org || '', website: c.website || '' });
+    setDraft({ name: c.name || '', email: c.email || '', phone: c.phone || '', type: c.type || 'Поставщик', org: c.org || '', website: c.website || '' });
     setEditingId(c.id);
     setFormOpen(true);
   };
@@ -353,7 +365,7 @@ function KHContractorsView() {
     if (e) e.preventDefault();
     const name = draft.name.trim(), email = draft.email.trim();
     if (!name || !email) return;
-    const fields = { name, email, type: draft.type, org: draft.org.trim(), website: draft.website.trim() };
+    const fields = { name, email, phone: draft.phone.trim(), type: draft.type, org: draft.org.trim(), website: draft.website.trim() };
     if (editingId) {
       persist(list.map(c => c.id === editingId ? { ...c, ...fields } : c));
     } else {
@@ -455,6 +467,8 @@ function KHContractorsView() {
             onChange={e => setDraft({ ...draft, name: e.target.value })} style={khInputStyle()} />
           <input placeholder="Email" type="email" value={draft.email}
             onChange={e => setDraft({ ...draft, email: e.target.value })} style={khInputStyle()} />
+          <input placeholder="Телефон" type="tel" value={draft.phone}
+            onChange={e => setDraft({ ...draft, phone: e.target.value })} style={khInputStyle()} />
           <div style={{ display: 'flex', gap: 8 }}>
             <select value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value })} style={{ ...khInputStyle(), width: 200 }}>
               <option>Производитель</option><option>Поставщик</option><option>Бригада</option><option>Субподрядчик</option>
@@ -488,7 +502,14 @@ function KHContractorsView() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="kh-card__title">{c.name}</div>
-                  <div className="kh-card__meta">{c.type}{c.org ? ' · ' + c.org : ''} · {c.email}</div>
+                  <div className="kh-card__meta">{c.type}{c.org ? ' · ' + c.org : ''}</div>
+                  <div className="kh-card__meta">
+                    <a href={`mailto:${c.email}`} style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>{c.email}</a>
+                    {c.phone && <>
+                      <span style={{ color: 'var(--ink-4)', margin: '0 6px' }}>·</span>
+                      <a href={`tel:${c.phone.replace(/[^+\d]/g, '')}`} style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>{c.phone}</a>
+                    </>}
+                  </div>
                   {c.website && (
                     <div className="kh-card__meta">
                       <a href={c.website} target="_blank" rel="noopener noreferrer"
