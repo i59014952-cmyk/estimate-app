@@ -776,7 +776,7 @@ def _moi_parse(html: str, limit: int) -> list[PriceItem]:
 async def _moi_search_merged(query: str, limit: int) -> tuple[list[PriceItem], list[str]]:
     q = query.strip().replace(" ", "+")
     urls_to_try = [
-        f"https://moi-instrumenty.ru/search/?q={q}",
+        f"https://moi-instrumenty.ru/search/?query={q}",
     ]
     merged: list[PriceItem] = []
     seen: set[str] = set()
