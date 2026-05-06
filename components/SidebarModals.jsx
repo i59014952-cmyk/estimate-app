@@ -580,7 +580,21 @@ const KH_CONTRACTORS_KEY = 'kh-contractors-v1';
 const KH_SEEDED_KEY = 'kh-contractors-seeded-v3';
 window.KH_CONTRACTOR_FILES = window.KH_CONTRACTOR_FILES || new Map();
 const khLoadContractors = () => { try { return JSON.parse(localStorage.getItem(KH_CONTRACTORS_KEY) || '[]'); } catch { return []; } };
-const khSaveContractors = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+const khSaveContractorsLocal = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+const khSaveContractors = (l) => {
+  khSaveContractorsLocal(l);
+  if (window.SB) {
+    const cleaned = l.map(c => ({
+      id: String(c.id), name: c.name || '',
+      email: c.email || '', phone: c.phone || '',
+      type: c.type || '', org: c.org || '', website: c.website || '',
+      file_name: c.fileName || null,
+      file_size: c.fileSize == null ? null : Number(c.fileSize),
+      file_time: c.fileTime == null ? null : Number(c.fileTime),
+    }));
+    if (cleaned.length) window.SB.upsert('kh_contractors', cleaned, 'id').catch(e => console.warn('cloud contractors:', e));
+  }
+};
 
 const KH_SEED = [
   { name: 'ТЕХНОНИКОЛЬ',     type: 'Производитель', email: 'test1@mail.ru', phone: '+7 (000) 000-00-01', website: 'https://www.tn.ru/',                  org: 'Кровля, гидро- и теплоизоляция, фасады' },
@@ -663,7 +677,31 @@ function KHContractorsView() {
     if (!confirm('Удалить запись?')) return;
     persist(list.filter(c => c.id !== id));
     window.KH_CONTRACTOR_FILES.delete(id);
+    if (window.SB) window.SB.remove('kh_contractors', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('cloud contractors del:', e));
   };
+
+  React.useEffect(() => {
+    if (!window.SB) return;
+    let cancelled = false;
+    window.SB.selectAll('kh_contractors', 'order=updated_at.desc').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      if (remote.length) {
+        const mapped = remote.map(c => ({
+          id: c.id, name: c.name, email: c.email || '', phone: c.phone || '',
+          type: c.type || '', org: c.org || '', website: c.website || '',
+          fileName: c.file_name || undefined,
+          fileSize: c.file_size == null ? undefined : Number(c.file_size),
+          fileTime: c.file_time == null ? undefined : Number(c.file_time),
+        }));
+        setList(mapped);
+        khSaveContractorsLocal(mapped);
+      } else {
+        const local = khLoadContractors();
+        if (local.length) khSaveContractors(local);
+      }
+    }).catch(e => console.warn('cloud load contractors:', e));
+    return () => { cancelled = true; };
+  }, []);
 
   const attachFile = (id) => {
     const input = document.createElement('input');
@@ -837,7 +875,16 @@ function khInputStyle() {
 // ---------- Календарь со встречами (localStorage) ----------
 const KH_EVENTS_KEY = 'kh.calendar.events.v1';
 const khLoadEvents = () => { try { return JSON.parse(localStorage.getItem(KH_EVENTS_KEY) || '[]'); } catch { return []; } };
-const khSaveEvents = (l) => localStorage.setItem(KH_EVENTS_KEY, JSON.stringify(l));
+const khSaveEventsLocal = (l) => { try { localStorage.setItem(KH_EVENTS_KEY, JSON.stringify(l)); } catch {} };
+const khSaveEvents = (l) => {
+  khSaveEventsLocal(l);
+  if (window.SB) {
+    const cleaned = l.map(e => ({
+      id: Number(e.id), date: e.date || '', time: e.time || '', title: e.title || '',
+    }));
+    if (cleaned.length) window.SB.upsert('kh_events', cleaned, 'id').catch(err => console.warn('cloud events:', err));
+  }
+};
 const khDateKey = (y, m, d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
 function KHCalendarView() {
@@ -859,11 +906,31 @@ function KHCalendarView() {
   const hasEvents = (d) => events.some(e => e.date === khDateKey(year, month, d));
   const dayEvents = picked ? events.filter(e => e.date === picked).sort((a,b)=>a.time.localeCompare(b.time)) : [];
   const persist = (n) => { setEvents(n); khSaveEvents(n); };
+  const removeEvent = (id) => {
+    persist(events.filter(x => x.id !== id));
+    if (window.SB) window.SB.remove('kh_events', `id=eq.${Number(id)}`).catch(e => console.warn('cloud events del:', e));
+  };
   const addEvent = () => {
     if (!picked || !draft.title.trim()) return;
     persist([...events, { id: Date.now(), date: picked, time: draft.time, title: draft.title.trim() }]);
     setDraft({ time: draft.time, title: '' });
   };
+  React.useEffect(() => {
+    if (!window.SB) return;
+    let cancelled = false;
+    window.SB.selectAll('kh_events', 'order=date.desc,time.asc').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      if (remote.length) {
+        const mapped = remote.map(e => ({ id: Number(e.id), date: e.date, time: e.time || '', title: e.title || '' }));
+        setEvents(mapped);
+        khSaveEventsLocal(mapped);
+      } else {
+        const local = khLoadEvents();
+        if (local.length) khSaveEvents(local);
+      }
+    }).catch(e => console.warn('cloud load events:', e));
+    return () => { cancelled = true; };
+  }, []);
   const formatPicked = () => {
     if (!picked) return '';
     const [y, m, d] = picked.split('-').map(Number);
@@ -901,7 +968,7 @@ function KHCalendarView() {
             <div key={e.id} className="kh-event">
               <span className="kh-event__time">{e.time}</span>
               <span className="kh-event__title">{e.title}</span>
-              <button className="kh-event__del" onClick={() => persist(events.filter(x => x.id !== e.id))}>×</button>
+              <button className="kh-event__del" onClick={() => removeEvent(e.id)}>×</button>
             </div>
           ))}
           <div className="kh-events__form">

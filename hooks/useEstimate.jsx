@@ -16,7 +16,13 @@ function loadHiddenCatalog() {
 }
 
 function saveHiddenCatalog(set) {
-  try { localStorage.setItem(HIDDEN_CATALOG_KEY, JSON.stringify([...set])); } catch (_) {}
+  try {
+    const arr = [...set];
+    localStorage.setItem(HIDDEN_CATALOG_KEY, JSON.stringify(arr));
+    if (window.SB) {
+      if (arr.length) window.SB.upsert('kh_hidden', arr.map(k => ({ key: k })), 'key').catch(e => console.warn('cloud hidden:', e));
+    }
+  } catch (_) {}
 }
 
 function loadUserCatalog() {
@@ -38,6 +44,10 @@ function saveUserCatalog(items) {
   try {
     const slim = items.map(({ name, unit, unitPrice }) => ({ name, unit, unitPrice }));
     localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(slim));
+    if (window.SB) {
+      const cleaned = slim.map(it => ({ name: it.name, unit: it.unit || '', unit_price: Number(it.unitPrice) || 0 }));
+      if (cleaned.length) window.SB.upsert('kh_user_catalog', cleaned, 'name,unit').catch(e => console.warn('cloud user_catalog:', e));
+    }
   } catch (_) {}
 }
 
@@ -89,6 +99,32 @@ function useEstimate() {
   const [userCatalog, setUserCatalog] = React.useState(loadUserCatalog);
   const [hiddenCatalog, setHiddenCatalog] = React.useState(loadHiddenCatalog);
   const [catalogReady, setCatalogReady] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!window.SB) return;
+    let cancelled = false;
+    window.SB.selectAll('kh_user_catalog', 'order=updated_at.desc').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      if (remote.length) {
+        const mapped = remote.map(it => ({
+          name: String(it.name), unit: String(it.unit || ''),
+          unitPrice: Number(it.unit_price) || 0,
+          tokenSet: new Set(tokenize(it.name)),
+        }));
+        setUserCatalog(mapped);
+        try { localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(mapped.map(({ name, unit, unitPrice }) => ({ name, unit, unitPrice })))); } catch (_) {}
+      }
+    }).catch(e => console.warn('cloud load user_catalog:', e));
+    window.SB.selectAll('kh_hidden').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      if (remote.length) {
+        const set = new Set(remote.map(r => r.key));
+        setHiddenCatalog(set);
+        try { localStorage.setItem(HIDDEN_CATALOG_KEY, JSON.stringify([...set])); } catch (_) {}
+      }
+    }).catch(e => console.warn('cloud load hidden:', e));
+    return () => { cancelled = true; };
+  }, []);
 
   const isHidden = React.useCallback(
     (it) => hiddenCatalog.has(hiddenKey(it.name, it.unit)),
@@ -585,6 +621,10 @@ body { margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; co
         saveUserCatalog(next);
         return next;
       });
+      if (window.SB) {
+        const u = encodeURIComponent;
+        window.SB.remove('kh_user_catalog', `name=eq.${u(name)}&unit=eq.${u(unit || '')}`).catch(e => console.warn('cloud user_catalog del:', e));
+      }
       return;
     }
     setHiddenCatalog(prev => {
@@ -596,12 +636,14 @@ body { margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; co
   }, []);
 
   const restoreCatalogItem = React.useCallback((name, unit) => {
+    const k = hiddenKey(name, unit);
     setHiddenCatalog(prev => {
       const next = new Set(prev);
-      next.delete(hiddenKey(name, unit));
+      next.delete(k);
       saveHiddenCatalog(next);
       return next;
     });
+    if (window.SB) window.SB.remove('kh_hidden', `key=eq.${encodeURIComponent(k)}`).catch(e => console.warn('cloud hidden del:', e));
   }, []);
 
   const clearHiddenCatalog = React.useCallback(() => {
@@ -610,6 +652,7 @@ body { margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; co
       saveHiddenCatalog(next);
       return next;
     });
+    if (window.SB) window.SB.remove('kh_hidden', 'key=neq.__never__').catch(e => console.warn('cloud hidden clear:', e));
   }, []);
 
   const uploadCatalogFile = React.useCallback((file) => {
