@@ -252,24 +252,230 @@ function KHEstimatesView() {
 }
 
 // ---------- Объекты ----------
+const KH_OBJECTS_KEY = 'kh-objects-v1';
+const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v1';
+window.KH_OBJECT_FILES = window.KH_OBJECT_FILES || new Map();
+const khLoadObjects = () => { try { return JSON.parse(localStorage.getItem(KH_OBJECTS_KEY) || '[]'); } catch { return []; } };
+const khSaveObjects = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); } catch {} };
+
+const KH_OBJECTS_SEED = [
+  {
+    name: 'Резиденция «Сосны»',
+    address: 'МО, Одинцовский р-н, КП «Николина Гора»',
+    area: 284, stage: 'Фундамент', date: '24.04.2026',
+    budget: 18_500_000,
+    client: 'А. Меньшов',
+    note: 'Каркасный дом из клеёного бруса, 2 этажа, эксплуатируемая кровля. Готовность ~25%.',
+  },
+  {
+    name: 'Дом у озера',
+    address: 'Тверская обл., Завидово',
+    area: 412, stage: 'CLT-монтаж', date: '02.09.2025',
+    budget: 26_900_000,
+    client: 'Д. Ковров',
+    note: 'CLT-панели Segezha + терраса 96 м². Сдача — Q3 2026.',
+  },
+];
+
+function khSeedObjectsIfNeeded(current) {
+  if (localStorage.getItem(KH_OBJECTS_SEEDED_KEY)) return current;
+  const existing = new Set(current.map(o => (o.name || '').trim().toLowerCase()));
+  const fresh = KH_OBJECTS_SEED
+    .filter(o => !existing.has(o.name.trim().toLowerCase()))
+    .map((o, i) => ({ id: 'seed-obj-' + i + '-' + Date.now(), files: [], ...o }));
+  const next = [...fresh, ...current];
+  khSaveObjects(next);
+  try { localStorage.setItem(KH_OBJECTS_SEEDED_KEY, '1'); } catch {}
+  return next;
+}
+
 function KHObjectsView() {
-  const data = useKHData();
-  if (!data) return <div className="kh-loading">Загрузка…</div>;
+  const [list, setList] = React.useState(() => khSeedObjectsIfNeeded(khLoadObjects()));
+  const [formOpen, setFormOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [draft, setDraft] = React.useState(emptyObjDraft());
+  const [, force] = React.useReducer(x => x + 1, 0);
+
+  const persist = (next) => { setList(next); khSaveObjects(next); };
+
+  const startAdd = () => { setDraft(emptyObjDraft()); setEditingId(null); setFormOpen(true); };
+  const startEdit = (o) => {
+    setDraft({
+      name: o.name || '', address: o.address || '', area: o.area ?? '',
+      stage: o.stage || '', date: o.date || '', budget: o.budget ?? '',
+      client: o.client || '', note: o.note || '',
+    });
+    setEditingId(o.id); setFormOpen(true);
+  };
+  const cancelForm = () => { setFormOpen(false); setEditingId(null); };
+
+  const submitForm = (e) => {
+    if (e) e.preventDefault();
+    const name = draft.name.trim();
+    if (!name) return;
+    const fields = {
+      name, address: draft.address.trim(),
+      area: draft.area === '' ? '' : Number(draft.area) || '',
+      stage: draft.stage.trim(), date: draft.date.trim(),
+      budget: draft.budget === '' ? '' : Number(draft.budget) || '',
+      client: draft.client.trim(), note: draft.note.trim(),
+    };
+    if (editingId) {
+      persist(list.map(o => o.id === editingId ? { ...o, ...fields } : o));
+    } else {
+      persist([{ id: 'o-' + Date.now(), files: [], ...fields }, ...list]);
+    }
+    cancelForm();
+  };
+
+  const removeOne = (id) => {
+    if (!confirm('Удалить объект?')) return;
+    persist(list.filter(o => o.id !== id));
+    window.KH_OBJECT_FILES.delete(id);
+  };
+
+  const attachFiles = (id) => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.multiple = true;
+    input.onchange = (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const cur = window.KH_OBJECT_FILES.get(id) || [];
+      window.KH_OBJECT_FILES.set(id, [...cur, ...files]);
+      const meta = files.map(f => ({ name: f.name, size: f.size, time: Date.now() }));
+      persist(list.map(o => o.id === id ? { ...o, files: [...(o.files || []), ...meta] } : o));
+      force();
+    };
+    input.click();
+  };
+
+  const removeFile = (objId, idx) => {
+    const cur = window.KH_OBJECT_FILES.get(objId) || [];
+    if (cur[idx]) {
+      const next = cur.slice(); next.splice(idx, 1);
+      window.KH_OBJECT_FILES.set(objId, next);
+    }
+    persist(list.map(o => {
+      if (o.id !== objId) return o;
+      const f = (o.files || []).slice(); f.splice(idx, 1);
+      return { ...o, files: f };
+    }));
+  };
+
+  const downloadFile = (objId, idx) => {
+    const cur = window.KH_OBJECT_FILES.get(objId) || [];
+    const f = cur[idx];
+    if (!f) { alert('Файл был прикреплён в прошлой сессии и сейчас недоступен. Прикрепите его заново.'); return; }
+    const a = document.createElement('a');
+    const href = URL.createObjectURL(f);
+    a.href = href; a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 8000);
+  };
+
+  const sizeLabel = (n) => !n ? '' : n < 1024 ? `${n} Б` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} КБ` : `${(n / 1024 / 1024).toFixed(1)} МБ`;
+
   return (
-    <div className="kh-list">
-      {data.objects.map(o => (
-        <div key={o.id} className="kh-card kh-card--static">
-          <div className="kh-card__total">{khFmt(o.total)}</div>
-          <div className="kh-card__title">{o.name}</div>
-          <div className="kh-card__meta">{o.address}</div>
-          <div className="kh-card__pills">
-            <span className="kh-pill">{o.stage}</span>
-            <span className="kh-pill">{o.date}</span>
+    <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid var(--rule)', paddingBottom: 8 }}>
+        <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>Объектов · {list.length}</div>
+        {!formOpen && <button className="kh-btn-primary" onClick={startAdd} style={{ marginLeft: 'auto' }}>+ Добавить объект</button>}
+      </div>
+
+      {formOpen && (
+        <form onSubmit={submitForm}
+          className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
+          <div style={{ fontWeight: 600 }}>{editingId ? 'Редактировать объект' : 'Новый объект'}</div>
+          <input autoFocus placeholder="Название" value={draft.name}
+            onChange={e => setDraft({ ...draft, name: e.target.value })} style={khInputStyle()} />
+          <input placeholder="Адрес" value={draft.address}
+            onChange={e => setDraft({ ...draft, address: e.target.value })} style={khInputStyle()} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input placeholder="Площадь, м²" type="number" value={draft.area}
+              onChange={e => setDraft({ ...draft, area: e.target.value })} style={{ ...khInputStyle(), width: 140 }} />
+            <input placeholder="Этап (Фундамент / CLT-монтаж / Отделка…)" value={draft.stage}
+              onChange={e => setDraft({ ...draft, stage: e.target.value })} style={{ ...khInputStyle(), flex: 1 }} />
           </div>
-        </div>
-      ))}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input placeholder="Дата (24.04.2026)" value={draft.date}
+              onChange={e => setDraft({ ...draft, date: e.target.value })} style={{ ...khInputStyle(), width: 160 }} />
+            <input placeholder="Бюджет, ₽" type="number" value={draft.budget}
+              onChange={e => setDraft({ ...draft, budget: e.target.value })} style={{ ...khInputStyle(), flex: 1 }} />
+          </div>
+          <input placeholder="Заказчик" value={draft.client}
+            onChange={e => setDraft({ ...draft, client: e.target.value })} style={khInputStyle()} />
+          <textarea placeholder="Описание / комментарий" value={draft.note}
+            onChange={e => setDraft({ ...draft, note: e.target.value })}
+            rows={3} style={{ ...khInputStyle(), resize: 'vertical' }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-sm" onClick={cancelForm}>Отмена</button>
+            <button type="submit" className="kh-btn-primary" disabled={!draft.name.trim()}>
+              {editingId ? 'Сохранить изменения' : 'Сохранить'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {list.length === 0 && !formOpen && (
+        <div className="kh-empty" style={{ padding: 16 }}>Объектов нет — нажмите «+ Добавить объект».</div>
+      )}
+
+      <div className="kh-list">
+        {list.map(o => {
+          const filesInMem = window.KH_OBJECT_FILES.get(o.id) || [];
+          const filesMeta = o.files || [];
+          return (
+            <div key={o.id} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="kh-card__title">{o.name}</div>
+                  {o.address && <div className="kh-card__meta">{o.address}</div>}
+                  <div className="kh-card__pills" style={{ marginTop: 6 }}>
+                    {o.stage && <span className="kh-pill">{o.stage}</span>}
+                    {o.area && <span className="kh-pill">{o.area} м²</span>}
+                    {o.date && <span className="kh-pill">{o.date}</span>}
+                    {o.client && <span className="kh-pill">{o.client}</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  {o.budget ? <div className="kh-card__total">{khFmt(o.budget)}</div> : null}
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-sm" onClick={() => startEdit(o)} title="Редактировать">✎</button>
+                    <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeOne(o.id)} title="Удалить">×</button>
+                  </div>
+                </div>
+              </div>
+              {o.note && <div style={{ fontSize: 13, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>{o.note}</div>}
+              {filesMeta.length > 0 && (
+                <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {filesMeta.map((f, i) => {
+                    const inMem = filesInMem[i];
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px',
+                        border: '1px solid var(--rule)', borderRadius: 6, background: 'var(--paper)' }}>
+                        <span style={{ flex: 1, fontSize: 12, color: inMem ? 'var(--ink-2)' : 'var(--ink-4)' }}>
+                          📎 {f.name}{f.size ? ' · ' + sizeLabel(f.size) : ''}{!inMem ? ' (нужно прикрепить заново)' : ''}
+                        </span>
+                        {inMem && <button className="btn btn-sm" onClick={() => downloadFile(o.id, i)} title="Скачать">↓</button>}
+                        <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeFile(o.id, i)} title="Убрать">×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-sm" onClick={() => attachFiles(o.id)}>+ Прикрепить файлы</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
+}
+
+function emptyObjDraft() {
+  return { name: '', address: '', area: '', stage: '', date: '', budget: '', client: '', note: '' };
 }
 
 // ---------- Материалы ----------
