@@ -437,12 +437,16 @@ function KHObjectsView() {
                     {o.client && <span className="kh-pill">{o.client}</span>}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  {o.budget ? <div className="kh-card__total">{khFmt(o.budget)}</div> : null}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-sm" onClick={() => startEdit(o)} title="Редактировать">✎</button>
                     <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeOne(o.id)} title="Удалить">×</button>
                   </div>
+                  {o.budget ? (
+                    <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>
+                      {khFmt(o.budget)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               {o.note && <div style={{ fontSize: 13, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>{o.note}</div>}
