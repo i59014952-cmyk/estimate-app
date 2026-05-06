@@ -438,22 +438,23 @@ function KHTemplatesView() {
 }
 
 const KH_VIEWS = {
-  estimates:   { title: 'Сметы',      sub: 'Список смет по объектам', comp: KHEstimatesView },
-  objects:     { title: 'Объекты',    sub: 'Активные объекты',        comp: KHObjectsView },
-  materials:   { title: 'Материалы',  sub: 'Справочник материалов',   comp: KHMaterialsView },
-  contractors: { title: 'Подрядчики', sub: 'Поставщики и бригады',    comp: KHContractorsView },
-  calendar:    { title: 'Календарь',  sub: 'События и встречи',       comp: KHCalendarView },
-  works:       { title: 'Работы',     sub: 'Расценки',                comp: KHWorksView },
-  norms:       { title: 'Нормативы',  sub: 'Разделы сводной сметы',   comp: KHNormsView },
-  templates:   { title: 'Шаблоны',    sub: 'Типовые позиции',         comp: KHTemplatesView },
+  estimates:   { title: 'Сметы',       sub: 'Список смет по объектам', comp: KHEstimatesView },
+  objects:     { title: 'Объекты',     sub: 'Активные объекты',        comp: KHObjectsView },
+  materials:   { title: 'Материалы',   sub: 'Справочник материалов',   comp: KHMaterialsView },
+  database:    { title: 'База данных', sub: 'Каталог позиций — поиск, добавление, загрузка', comp: (props) => window.KHDatabaseView ? React.createElement(window.KHDatabaseView, props) : null },
+  contractors: { title: 'Подрядчики',  sub: 'Поставщики и бригады',    comp: KHContractorsView },
+  calendar:    { title: 'Календарь',   sub: 'События и встречи',       comp: KHCalendarView },
+  works:       { title: 'Работы',      sub: 'Расценки',                comp: KHWorksView },
+  norms:       { title: 'Нормативы',   sub: 'Разделы сводной сметы',   comp: KHNormsView },
+  templates:   { title: 'Шаблоны',     sub: 'Типовые позиции',         comp: KHTemplatesView },
 };
 
-function KHModalRoot({ activeId, onClose }) {
+function KHModalRoot({ activeId, onClose, est }) {
   const view = activeId ? KH_VIEWS[activeId] : null;
   const C = view ? view.comp : null;
   return (
     <KHModal open={!!activeId} onClose={onClose} title={view?.title} subtitle={view?.sub}>
-      {C && <C />}
+      {C && <C est={est} />}
     </KHModal>
   );
 }

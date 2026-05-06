@@ -1,44 +1,42 @@
-// DatabaseSidebar.jsx — левая колонка «База данных» с поиском, ручным добавлением и загрузкой файла.
+// KHDatabaseView — содержимое модалки «База данных»: поиск, ручное добавление,
+// загрузка XLSX/CSV, фильтры по источнику, добавление в смету.
 
-function DatabaseSidebar({ est }) {
+function KHDatabaseView({ est }) {
   const [query, setQuery] = React.useState("");
+  const [filter, setFilter] = React.useState("all");
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);
 
+  if (!est) return <div className="kh-empty">База недоступна</div>;
+
   const userCatalog = est.state.userCatalog;
   const localCatalog = est.state.catalog;
   const ddcCatalog = est.state.ddcCatalog;
 
+  const merged = React.useMemo(() => [
+    ...userCatalog.map(it => ({ ...it, _kind: "user" })),
+    ...localCatalog.map(it => ({ ...it, _kind: "local" })),
+    ...ddcCatalog.map(it => ({ ...it, _kind: "ddc" })),
+  ], [userCatalog, localCatalog, ddcCatalog]);
+
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    const merged = [
-      ...userCatalog.map(it => ({ ...it, _kind: "user" })),
-      ...localCatalog.map(it => ({ ...it, _kind: "local" })),
-      ...ddcCatalog.map(it => ({ ...it, _kind: "ddc" })),
-    ];
-    if (!q) return merged.slice(0, 200);
-    const out = [];
-    for (const it of merged) {
-      if ((it.name || "").toLowerCase().includes(q)) {
-        out.push(it);
-        if (out.length >= 200) break;
-      }
-    }
-    return out;
-  }, [query, userCatalog, localCatalog, ddcCatalog]);
+    let out = merged;
+    if (filter !== "all") out = out.filter(it => it._kind === filter);
+    if (q) out = out.filter(it => (it.name || "").toLowerCase().includes(q));
+    return out.slice(0, 500);
+  }, [merged, query, filter]);
 
   const totals = {
+    all: merged.length,
     user: userCatalog.length,
     local: localCatalog.length,
     ddc: ddcCatalog.length,
   };
 
-  const startAdd = () => {
-    setDraft({ name: "", unit: "", unitPrice: "" });
-    setAdding(true);
-  };
+  const startAdd = () => { setDraft({ name: "", unit: "", unitPrice: "" }); setAdding(true); };
   const cancelAdd = () => setAdding(false);
   const submitAdd = (e) => {
     if (e) e.preventDefault();
@@ -67,74 +65,67 @@ function DatabaseSidebar({ est }) {
 
   const kindBadge = (kind) => {
     if (kind === "user") return { label: "Моё", color: "var(--moss)" };
-    if (kind === "local") return { label: "JSON", color: "var(--ink-4)" };
-    return { label: "DDC", color: "var(--ink-4)" };
+    if (kind === "local") return { label: "JSON", color: "var(--ink-3)" };
+    return { label: "DDC", color: "var(--ink-3)" };
   };
 
+  const FilterPill = ({ id, label, count }) => (
+    <button
+      onClick={() => setFilter(id)}
+      className="kh-pill"
+      style={{
+        cursor: "pointer", border: "1px solid var(--rule)",
+        background: filter === id ? "var(--ink)" : "var(--paper-card)",
+        color: filter === id ? "var(--paper)" : "var(--ink-2)",
+        fontWeight: filter === id ? 600 : 400,
+      }}
+    >{label} · {count}</button>
+  );
+
   return (
-    <aside className="col" style={{
-      width: 288, padding: "20px 16px 18px", gap: 10,
-      borderRight: "1px solid var(--rule)", background: "var(--paper-2)",
-      minHeight: "100%",
-    }}>
+    <div className="col" style={{ gap: 14 }}>
       <input
         ref={fileRef} type="file"
         accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         style={{ display: "none" }}
         onChange={onFileChange}
       />
-      <div className="row between center" style={{ padding: "0 4px" }}>
-        <div className="row center gap-2">
-          <Icon name="cube" size={14} />
-          <div className="eyebrow" style={{ padding: 0 }}>База данных</div>
-        </div>
-        <div className="row center gap-2">
-          <button
-            className="btn btn-icon"
-            title="Добавить позицию"
-            onClick={startAdd}
-            style={{ width: 28, height: 28 }}
-          >
-            <Icon name="plus" size={13} />
-          </button>
-          <button
-            className="btn btn-icon"
-            title="Загрузить XLSX/CSV"
-            onClick={onUploadClick}
-            style={{ width: 28, height: 28 }}
-          >
-            <Icon name="upload" size={13} />
-          </button>
-        </div>
+
+      <div className="kh-toolbar" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          placeholder={`Поиск среди ${totals.all} позиций`}
+          value={query} onChange={e => setQuery(e.target.value)}
+          style={{ flex: 1, minWidth: 240 }}
+        />
+        <button className="kh-btn-primary" onClick={startAdd}>+ Добавить</button>
+        <button className="kh-btn-primary" onClick={onUploadClick}>↑ Загрузить XLSX/CSV</button>
       </div>
 
-      <div className="mono tiny" style={{ padding: "0 4px", color: "var(--ink-4)", letterSpacing: ".06em" }}>
-        <b style={{ color: "var(--ink-2)" }}>{fmt(totals.user)}</b> моё
-        <span style={{ margin: "0 6px", color: "var(--ink-4)" }}>·</span>
-        <b style={{ color: "var(--ink-2)" }}>{fmt(totals.local)}</b> JSON
-        <span style={{ margin: "0 6px", color: "var(--ink-4)" }}>·</span>
-        <b style={{ color: "var(--ink-2)" }}>{fmt(totals.ddc)}</b> DDC
+      <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <FilterPill id="all" label="Все" count={totals.all} />
+        <FilterPill id="user" label="Моё" count={totals.user} />
+        <FilterPill id="local" label="JSON" count={totals.local} />
+        <FilterPill id="ddc" label="DDC" count={totals.ddc} />
       </div>
 
       {uploadStatus && (
         <div
-          className="mono tiny"
           style={{
-            padding: "8px 10px", borderRadius: 8,
+            padding: "10px 12px", borderRadius: 8,
             border: "1px solid " + (uploadStatus.kind === "error" ? "var(--rust)" : "var(--rule)"),
             background: "var(--paper-card)",
             color: uploadStatus.kind === "error" ? "var(--rust)" : "var(--ink-2)",
+            fontSize: 13,
           }}
-        >
-          {uploadStatus.text}
-        </div>
+        >{uploadStatus.text}</div>
       )}
 
       {adding && (
         <form onSubmit={submitAdd} className="col" style={{
-          gap: 6, padding: 10, borderRadius: 10,
+          gap: 8, padding: 14, borderRadius: 10,
           border: "1px solid var(--moss)", background: "var(--paper-card)",
         }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>Новая позиция</div>
           <input
             autoFocus
             placeholder="Название"
@@ -142,120 +133,92 @@ function DatabaseSidebar({ est }) {
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             style={inputStyle()}
           />
-          <div className="row gap-2">
+          <div className="row" style={{ display: "flex", gap: 8 }}>
             <input
-              placeholder="Ед."
+              placeholder="Ед. (шт, м, м², кг…)"
               value={draft.unit}
               onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-              style={{ ...inputStyle(), width: 60 }}
+              style={{ ...inputStyle(), width: 200 }}
             />
             <input
-              placeholder="Цена ₽"
+              placeholder="Цена за единицу, ₽"
               inputMode="decimal"
               value={draft.unitPrice}
               onChange={(e) => setDraft({ ...draft, unitPrice: e.target.value })}
               style={{ ...inputStyle(), flex: 1 }}
             />
           </div>
-          <div className="row gap-2" style={{ justifyContent: "flex-end" }}>
+          <div className="row" style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" className="btn btn-sm" onClick={cancelAdd}>Отмена</button>
-            <button type="submit" className="btn btn-sm btn-primary"
+            <button type="submit" className="kh-btn-primary"
               disabled={!draft.name.trim() || !isFinite(parseFloat(String(draft.unitPrice).replace(",", ".")))}>
-              <Icon name="check" size={12} /> Сохранить
+              Сохранить
             </button>
           </div>
         </form>
       )}
 
-      <div className="row center gap-2" style={{
-        padding: "7px 10px", border: "1px solid var(--rule)", borderRadius: 99,
-        background: "var(--paper-card)",
-      }}>
-        <Icon name="search" size={13} />
-        <input
-          value={query} onChange={(e) => setQuery(e.target.value)}
-          placeholder="Найти в базе…"
-          style={{ flex: 1, border: 0, background: "transparent", outline: "none",
-                   color: "var(--ink)", fontSize: 12, fontFamily: "var(--sans)" }}
-        />
-        {query && (
-          <button onClick={() => setQuery("")} aria-label="Очистить"
-                  style={{ border: 0, background: "transparent", color: "var(--ink-3)",
-                           cursor: "pointer", padding: 2, display: "grid", placeItems: "center" }}>
-            <Icon name="x" size={11} />
-          </button>
-        )}
-      </div>
+      <table className="kh-table">
+        <thead>
+          <tr>
+            <th style={{ width: 70 }}>Источник</th>
+            <th>Наименование</th>
+            <th style={{ width: 80 }}>Ед.</th>
+            <th className="num" style={{ width: 130 }}>Цена</th>
+            <th style={{ width: 110 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((it, i) => {
+            const badge = kindBadge(it._kind);
+            return (
+              <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
+                <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>
+                <td>{it.name}</td>
+                <td>{it.unit || "—"}</td>
+                <td className="num">{it.unitPrice ? fmt(Math.round(it.unitPrice)) + " ₽" : "—"}</td>
+                <td>
+                  <div className="row" style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <button
+                      className="btn btn-sm"
+                      title="Добавить в смету"
+                      onClick={() => est.actions.addRow({
+                        name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: 1,
+                        notFound: false, source: it._kind === "ddc" ? "ddc" : (it._kind === "user" ? "manual" : "local"),
+                      })}
+                    >+ В смету</button>
+                    {it._kind === "user" && (
+                      <button
+                        className="btn btn-sm"
+                        title="Удалить из базы"
+                        onClick={() => est.actions.removeCatalogItem(it.name, it.unit)}
+                        style={{ color: "var(--rust)" }}
+                      >×</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
 
-      <div className="col" style={{
-        flex: 1, minHeight: 0, overflowY: "auto", gap: 4, paddingRight: 2,
-      }}>
-        {visible.length === 0 && (
-          <div className="muted tiny" style={{ padding: 12, textAlign: "center" }}>
-            {query ? "Ничего не найдено" : "База пуста — добавьте позиции"}
-          </div>
-        )}
-        {visible.map((it, i) => {
-          const badge = kindBadge(it._kind);
-          const key = `${it._kind}-${it.name}-${it.unit}-${i}`;
-          return (
-            <div
-              key={key}
-              className="row center"
-              style={{
-                padding: "7px 9px", borderRadius: 8,
-                border: "1px solid var(--rule)", background: "var(--paper-card)",
-                gap: 6,
-              }}
-            >
-              <div className="col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <div style={{
-                  fontSize: 12, lineHeight: 1.25, color: "var(--ink)",
-                  overflow: "hidden", textOverflow: "ellipsis",
-                  display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                }} title={it.name}>{it.name}</div>
-                <div className="mono tiny" style={{ color: "var(--ink-4)", whiteSpace: "nowrap" }}>
-                  <span style={{ color: badge.color }}>{badge.label}</span>
-                  {it.unit ? <> <span style={{ color: "var(--ink-4)" }}>·</span> {it.unit}</> : null}
-                  {it.unitPrice ? <> <span style={{ color: "var(--ink-4)" }}>·</span> {fmt(Math.round(it.unitPrice))} ₽</> : null}
-                </div>
-              </div>
-              <button
-                className="btn btn-icon"
-                title="Добавить в смету"
-                onClick={() => est.actions.addRow({
-                  name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: 1,
-                  notFound: false, source: it._kind === "ddc" ? "ddc" : (it._kind === "user" ? "manual" : "local"),
-                })}
-                style={{ width: 26, height: 26, flexShrink: 0 }}
-              >
-                <Icon name="plus" size={12} />
-              </button>
-              {it._kind === "user" && (
-                <button
-                  className="btn btn-icon"
-                  title="Удалить из базы"
-                  onClick={() => est.actions.removeCatalogItem(it.name, it.unit)}
-                  style={{ width: 26, height: 26, flexShrink: 0, borderColor: "transparent" }}
-                >
-                  <Icon name="x" size={11} />
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </aside>
+      {visible.length === 0 && (
+        <div className="kh-empty" style={{ padding: 24, textAlign: "center" }}>
+          {query ? "Ничего не найдено" : "База пуста — добавьте позиции"}
+        </div>
+      )}
+    </div>
   );
 }
 
 function inputStyle() {
   return {
     border: "1px solid var(--rule)", borderRadius: 6,
-    padding: "6px 8px", outline: "none",
+    padding: "8px 10px", outline: "none",
     background: "var(--paper)", color: "var(--ink)",
-    fontSize: 12, fontFamily: "var(--sans)",
+    fontSize: 13, fontFamily: "var(--sans)",
   };
 }
 
-Object.assign(window, { DatabaseSidebar });
+Object.assign(window, { KHDatabaseView });
