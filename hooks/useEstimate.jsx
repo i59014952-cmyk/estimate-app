@@ -503,12 +503,7 @@ function useEstimate() {
 <style>
   body{margin:0;padding:0;background:#e8e0cf;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color:#1f1a15}
   .page{width:100%;max-width:1100px;margin:0 auto;background:#f6f1e9;padding:48px 64px 56px;border-bottom:6px solid #a07a4a}
-  .brand-row{text-align:center;margin-bottom:42px;padding-bottom:30px;border-bottom:1px solid #d9cdb6}
-  .brand-row .mark{display:inline-block;border:3px solid #1f1a15;padding:14px 22px;font-family:'Helvetica Neue',Arial,sans-serif;font-weight:900;font-size:22pt;letter-spacing:.04em;color:#1f1a15;line-height:1.05}
-  .brand-row .mark span{display:block}
-  .brand-row .stamp{margin-top:16px;font-family:'Consolas','Courier New',monospace;font-size:11px;letter-spacing:.22em;color:#7a5a36;text-transform:uppercase}
-  .brand-row .stamp .muted{color:#9a8f7d;margin-left:14px}
-  .meta{font-family:'Consolas','Courier New',monospace;font-size:12px;letter-spacing:.16em;color:#5b524a;text-transform:uppercase;line-height:1.6}
+  .meta{font-family:'Consolas','Courier New',monospace;font-size:12px;letter-spacing:.16em;color:#5b524a;text-transform:uppercase;line-height:1.6;text-align:center}
   .meta .num{color:#7a5a36;font-weight:600;letter-spacing:.1em}
   .meta .dot{color:#c8b994}
   h1.title{font-family:'Cormorant Garamond','Georgia',serif;font-weight:500;font-size:54pt;line-height:1.05;margin:14px 0 20px;color:#1f1a15}
@@ -522,8 +517,8 @@ function useEstimate() {
   .contacts-val{font-size:13pt;line-height:1.5;color:#5b524a}
   .contacts-val b{color:#1f1a15;font-weight:600}
   .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6;text-align:center}
-  .estimate-wrap{margin:0 auto}
-  table.estimate{width:100%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin:0 auto}
+  .estimate-wrap{margin:0 auto;text-align:center}
+  table.estimate{width:96%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin-left:auto;margin-right:auto}
   table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:center;border:0}
   table.estimate th.left{text-align:left}
   table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a;text-align:center}
@@ -551,10 +546,6 @@ function useEstimate() {
 </head>
 <body>
 <div class="page">
-  <div class="brand-row">
-    <div class="mark"><span>KUB</span><span>HOUSE</span></div>
-    <div class="stamp">Modern Wood Development<span class="muted">EST. 2014 &middot; MADE IN MOSCOW</span></div>
-  </div>
   <div class="meta">${metaLine}</div>
   <h1 class="title">${titleLine}</h1>
   ${recipientLine ? `<div class="recipient">${recipientLine}</div>` : ''}
@@ -565,7 +556,8 @@ function useEstimate() {
     <td><div class="contacts-label">График</div><div class="contacts-val"><b>Пн&ndash;Пт</b> 10:00&ndash;18:00<br>Сб&ndash;Вс: выходной</div></td>
   </tr></table>
   <div class="section-eyebrow">Ориентировочная смета</div>
-  <table class="estimate">
+  <div class="estimate-wrap" align="center">
+  <table class="estimate" align="center">
     <thead><tr>
       <th>&#8470;</th>
       <th class="left">Наименование</th>
@@ -582,6 +574,7 @@ function useEstimate() {
       </tr>
     </tbody>
   </table>
+  </div>
   <table class="sign-row"><tr>
     <td class="left sign">
       <div class="lead">С уважением,</div>
