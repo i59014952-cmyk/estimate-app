@@ -256,7 +256,22 @@ const KH_OBJECTS_KEY = 'kh-objects-v1';
 const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v2';
 window.KH_OBJECT_FILES = window.KH_OBJECT_FILES || new Map();
 const khLoadObjects = () => { try { return JSON.parse(localStorage.getItem(KH_OBJECTS_KEY) || '[]'); } catch { return []; } };
-const khSaveObjects = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+const khSaveObjectsLocal = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+const khSaveObjects = (l) => {
+  khSaveObjectsLocal(l);
+  if (window.SB) {
+    const cleaned = l.map(o => ({
+      id: String(o.id), name: o.name || '', address: o.address || '',
+      area: o.area === '' || o.area == null ? null : Number(o.area),
+      stage: o.stage || '', date: o.date || '',
+      budget: o.budget === '' || o.budget == null ? null : Number(o.budget),
+      client: o.client || '', note: o.note || '',
+      status: o.status || 'active',
+      files: o.files || [],
+    }));
+    if (cleaned.length) window.SB.upsert('kh_objects', cleaned, 'id').catch(e => console.warn('cloud objects:', e));
+  }
+};
 
 const KH_OBJECTS_SEED = [
   {
@@ -354,7 +369,24 @@ function KHObjectsView() {
     if (!confirm('Удалить объект?')) return;
     persist(list.filter(o => o.id !== id));
     window.KH_OBJECT_FILES.delete(id);
+    if (window.SB) window.SB.remove('kh_objects', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('cloud objects del:', e));
   };
+
+  React.useEffect(() => {
+    if (!window.SB) return;
+    let cancelled = false;
+    window.SB.selectAll('kh_objects', 'order=updated_at.desc').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      if (remote.length) {
+        setList(remote);
+        khSaveObjectsLocal(remote);
+      } else {
+        const local = khLoadObjects();
+        if (local.length) khSaveObjects(local);
+      }
+    }).catch(e => console.warn('cloud load objects:', e));
+    return () => { cancelled = true; };
+  }, []);
 
   const attachFiles = (id) => {
     const input = document.createElement('input');
