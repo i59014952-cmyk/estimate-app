@@ -511,14 +511,14 @@ function useEstimate() {
   .recipient{font-size:14pt;color:#5b524a;line-height:1.55;padding-bottom:22px;border-bottom:1px solid #d9cdb6}
   .recipient b{color:#1f1a15;font-weight:600}
   table.contacts{width:100%;border-collapse:collapse;margin:0;border-bottom:1px solid #d9cdb6}
-  table.contacts td{padding:24px 18px 32px 0;vertical-align:top;width:25%}
+  table.contacts td{padding:24px 18px 32px 0;vertical-align:top;width:33%}
   table.contacts td:last-child{padding-right:0}
   .contacts-label{font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:600;letter-spacing:.22em;color:#7a5a36;margin-bottom:8px;text-transform:uppercase}
   .contacts-val{font-size:13pt;line-height:1.5;color:#5b524a}
   .contacts-val b{color:#1f1a15;font-weight:600}
   .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6;text-align:center}
-  .estimate-wrap{margin:0 auto;text-align:center}
-  table.estimate{width:96%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin-left:auto;margin-right:auto}
+  .estimate-wrap{margin:0 auto;text-align:center;width:100%}
+  table.estimate{width:88%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin-left:auto !important;margin-right:auto !important;mso-table-lspace:auto;mso-table-rspace:auto}
   table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:center;border:0}
   table.estimate th.left{text-align:left}
   table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a;text-align:center}
@@ -552,8 +552,7 @@ function useEstimate() {
   <table class="contacts"><tr>
     <td><div class="contacts-label">Телефон</div><div class="contacts-val" style="white-space:nowrap"><b>+7&nbsp;(495)&nbsp;128&#8209;41&#8209;11</b></div></td>
     <td><div class="contacts-label">Почта &middot; Сайт</div><div class="contacts-val"><b>info@kub.team</b><br>kub.house</div></td>
-    <td><div class="contacts-label">Офис</div><div class="contacts-val"><b>Москва</b>, Малая<br>Ордынка 39 с1</div></td>
-    <td><div class="contacts-label">График</div><div class="contacts-val"><b>Пн&ndash;Пт</b> 10:00&ndash;18:00<br>Сб&ndash;Вс: выходной</div></td>
+    <td><div class="contacts-label">Офис</div><div class="contacts-val"><b>Москва</b>, Малая Ордынка 39 с1</div></td>
   </tr></table>
   <div class="section-eyebrow">Ориентировочная смета</div>
   <div class="estimate-wrap" align="center">
