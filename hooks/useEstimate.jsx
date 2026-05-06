@@ -502,7 +502,7 @@ function useEstimate() {
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
   body{margin:0;padding:0;background:#e8e0cf;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color:#1f1a15}
-  .page{width:100%;max-width:1100px;margin:0 auto;background:#f6f1e9;padding:48px 64px 56px;border-bottom:6px solid #a07a4a}
+  .page{width:100%;max-width:1100px;margin:0 auto;background:#f6f1e9;padding:48px 56px 56px 56px;border-bottom:6px solid #a07a4a;box-sizing:border-box}
   .meta{font-family:'Consolas','Courier New',monospace;font-size:12px;letter-spacing:.16em;color:#5b524a;text-transform:uppercase;line-height:1.6;text-align:center}
   .meta .num{color:#7a5a36;font-weight:600;letter-spacing:.1em}
   .meta .dot{color:#c8b994}
@@ -511,14 +511,15 @@ function useEstimate() {
   .recipient{font-size:14pt;color:#5b524a;line-height:1.55;padding-bottom:22px;border-bottom:1px solid #d9cdb6}
   .recipient b{color:#1f1a15;font-weight:600}
   table.contacts{width:100%;border-collapse:collapse;margin:0;border-bottom:1px solid #d9cdb6}
-  table.contacts td{padding:24px 18px 32px 0;vertical-align:top;width:33%}
+  table.contacts td{padding:24px 12px 32px;vertical-align:top;width:33%}
+  table.contacts td:first-child{padding-left:0}
   table.contacts td:last-child{padding-right:0}
   .contacts-label{font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:600;letter-spacing:.22em;color:#7a5a36;margin-bottom:8px;text-transform:uppercase}
   .contacts-val{font-size:13pt;line-height:1.5;color:#5b524a}
   .contacts-val b{color:#1f1a15;font-weight:600}
   .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6;text-align:center}
   .estimate-wrap{margin:0 auto;text-align:center;width:100%}
-  table.estimate{width:88%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin-left:auto !important;margin-right:auto !important;mso-table-lspace:auto;mso-table-rspace:auto}
+  table.estimate{width:100%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin:0;mso-table-lspace:0;mso-table-rspace:0}
   table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:400;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:center;border:0}
   table.estimate th.left{text-align:left}
   table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a;text-align:center;font-weight:400}
