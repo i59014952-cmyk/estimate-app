@@ -501,8 +501,10 @@ function useEstimate() {
 <title>Смета «${esc(title)}»</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
-  body{margin:0;padding:0;background:#e8e0cf;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color:#1f1a15}
-  .page{width:100%;max-width:1100px;margin:0 auto;background:#f6f1e9;padding:48px 56px 56px 56px;border-bottom:6px solid #a07a4a;box-sizing:border-box}
+  @page WordSection1{size:21cm 29.7cm;margin:0;mso-page-orientation:portrait}
+  div.WordSection1{page:WordSection1}
+  body{margin:0;padding:0;background:#f6f1e9;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color:#1f1a15}
+  .page{width:100%;margin:0;background:#f6f1e9;padding:72px 80px 72px 80px;border-bottom:6px solid #a07a4a;box-sizing:border-box}
   .meta{font-family:'Consolas','Courier New',monospace;font-size:12px;letter-spacing:.16em;color:#5b524a;text-transform:uppercase;line-height:1.6;text-align:center}
   .meta .num{color:#7a5a36;font-weight:600;letter-spacing:.1em}
   .meta .dot{color:#c8b994}
@@ -545,6 +547,7 @@ function useEstimate() {
 </style>
 </head>
 <body>
+<div class="WordSection1">
 <div class="page">
   <div class="meta">${metaLine}</div>
   <h1 class="title">${titleLine}</h1>
@@ -592,6 +595,7 @@ function useEstimate() {
     <td class="c"><span class="accent-bar"></span></td>
     <td class="r">Стр. 01</td>
   </tr></table>
+</div>
 </div>
 </body></html>`;
 
