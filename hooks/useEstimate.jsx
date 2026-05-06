@@ -477,12 +477,12 @@ function useEstimate() {
       .filter(Boolean).join(' <span class="dot">·</span> ');
 
     const rowsHtml = estimate.map((r, i) => {
-      const totalCell = r.notFound ? '&mdash;' : `<b>${num(r.qty * r.unitPrice)}</b>`;
+      const totalCell = r.notFound ? '&mdash;' : num(r.qty * r.unitPrice);
       const priceCell = r.notFound ? '&mdash;' : num(r.unitPrice);
       const qtyCell   = `${qtyFmt(r.qty)}${r.unit ? '&nbsp;' + esc(r.unit) : ''}`;
       return `<tr>
         <td class="idx">${String(i + 1).padStart(2, '0')}</td>
-        <td class="name"><b>${esc(r.name)}</b></td>
+        <td class="name">${esc(r.name)}</td>
         <td class="right">${priceCell}</td>
         <td class="right">${qtyCell}</td>
         <td class="right">${totalCell}</td>
@@ -519,13 +519,12 @@ function useEstimate() {
   .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6;text-align:center}
   .estimate-wrap{margin:0 auto;text-align:center;width:100%}
   table.estimate{width:88%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin-left:auto !important;margin-right:auto !important;mso-table-lspace:auto;mso-table-rspace:auto}
-  table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:center;border:0}
+  table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:400;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:center;border:0}
   table.estimate th.left{text-align:left}
-  table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a;text-align:center}
-  table.estimate td.idx{color:#8a7f73;font-family:'Consolas','Courier New',monospace;font-weight:500;width:64px;text-align:center}
-  table.estimate td.name{text-align:left}
-  table.estimate td.name b{display:block;color:#1f1a15;font-size:14pt;font-weight:600;margin-bottom:2px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif}
-  table.estimate td.right{text-align:center;color:#1f1a15}
+  table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a;text-align:center;font-weight:400}
+  table.estimate td.idx{color:#8a7f73;font-family:'Consolas','Courier New',monospace;font-weight:400;width:64px;text-align:center}
+  table.estimate td.name{text-align:left;color:#1f1a15;font-size:13pt;font-weight:500;font-family:'Manrope','Helvetica Neue',Arial,sans-serif}
+  table.estimate td.right{text-align:center;color:#1f1a15;font-weight:500}
   table.estimate tr.total td{background:#efe7d7;border-bottom:0;padding:22px 18px}
   .sum{font-family:'Consolas','Courier New',monospace;font-size:18pt;font-weight:600;color:#7a5a36;letter-spacing:.02em}
   table.sign-row{width:100%;border-collapse:collapse;margin-top:48px}
@@ -559,7 +558,7 @@ function useEstimate() {
   <table class="estimate" align="center">
     <thead><tr>
       <th>&#8470;</th>
-      <th class="left">Наименование</th>
+      <th class="left">Название работ</th>
       <th>Цена,&nbsp;&#8381;</th>
       <th>Кол&#8209;во</th>
       <th>Итого,&nbsp;&#8381;</th>
@@ -567,7 +566,7 @@ function useEstimate() {
     <tbody>${rowsHtml}
       <tr class="total">
         <td class="idx"></td>
-        <td class="name"><b>Итого по&nbsp;объекту</b></td>
+        <td class="name" style="font-weight:600">Итого по&nbsp;объекту</td>
         <td></td><td></td>
         <td class="right sum">${grandTotalStr}</td>
       </tr>
