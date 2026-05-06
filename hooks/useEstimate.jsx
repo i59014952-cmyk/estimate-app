@@ -502,15 +502,12 @@ function useEstimate() {
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
   body{margin:0;padding:0;background:#e8e0cf;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color:#1f1a15}
-  .page{width:100%;max-width:1240px;margin:0 auto;background:#f6f1e9}
-  table.layout{width:100%;border-collapse:collapse}
-  td.side{width:260px;vertical-align:top;background:#1f1a15;color:#f3ead8;padding:44px 32px 36px;border-bottom:8px solid #a07a4a}
-  td.main{vertical-align:top;padding:44px 48px 48px}
-  .logo-tile{background:#f6f1e9;width:200px;padding:24px 0;margin-bottom:50px;text-align:center}
-  .logo-tile svg{width:148px;height:148px;display:inline-block}
-  .stamp{font-family:'Consolas','Courier New',monospace;font-size:13px;letter-spacing:.18em;color:#f3ead8;line-height:1.7}
-  .stamp .accent{color:#c79a6a}
-  .side-foot{margin-top:60px;font-family:'Consolas','Courier New',monospace;font-size:11px;letter-spacing:.22em;color:#9a8f7d;padding-top:24px}
+  .page{width:100%;max-width:1100px;margin:0 auto;background:#f6f1e9;padding:48px 64px 56px;border-bottom:6px solid #a07a4a}
+  .brand-row{text-align:center;margin-bottom:42px;padding-bottom:30px;border-bottom:1px solid #d9cdb6}
+  .brand-row .mark{display:inline-block;border:3px solid #1f1a15;padding:14px 22px;font-family:'Helvetica Neue',Arial,sans-serif;font-weight:900;font-size:22pt;letter-spacing:.04em;color:#1f1a15;line-height:1.05}
+  .brand-row .mark span{display:block}
+  .brand-row .stamp{margin-top:16px;font-family:'Consolas','Courier New',monospace;font-size:11px;letter-spacing:.22em;color:#7a5a36;text-transform:uppercase}
+  .brand-row .stamp .muted{color:#9a8f7d;margin-left:14px}
   .meta{font-family:'Consolas','Courier New',monospace;font-size:12px;letter-spacing:.16em;color:#5b524a;text-transform:uppercase;line-height:1.6}
   .meta .num{color:#7a5a36;font-weight:600;letter-spacing:.1em}
   .meta .dot{color:#c8b994}
@@ -551,23 +548,11 @@ function useEstimate() {
 </style>
 </head>
 <body>
-<div class="page"><table class="layout"><tr>
-<td class="side">
-  <div class="logo-tile">
-    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <path d="M 12 12 L 12 188 L 188 188 L 188 70 M 188 12 L 12 12" fill="none" stroke="#1f1a15" stroke-width="7" stroke-linejoin="miter" stroke-linecap="square"/>
-      <text x="28" y="92" font-family="Helvetica, Arial, sans-serif" font-weight="900" font-size="44" fill="#1f1a15">KUB</text>
-      <text x="28" y="138" font-family="Helvetica, Arial, sans-serif" font-weight="900" font-size="44" fill="#1f1a15">HOUSE</text>
-    </svg>
+<div class="page">
+  <div class="brand-row">
+    <div class="mark"><span>KUB</span><span>HOUSE</span></div>
+    <div class="stamp">Modern Wood Development<span class="muted">EST. 2014 &middot; MADE IN MOSCOW</span></div>
   </div>
-  <div class="stamp">
-    <div><b style="letter-spacing:.22em">KUB&nbsp;HOUSE</b></div>
-    <div class="accent">Modern Wood</div>
-    <div class="accent">Development</div>
-  </div>
-  <div class="side-foot">EST. 2014<br>MADE IN MOSCOW</div>
-</td>
-<td class="main">
   <div class="meta">${metaLine}</div>
   <h1 class="title">${titleLine}</h1>
   ${recipientLine ? `<div class="recipient">${recipientLine}</div>` : ''}
@@ -613,8 +598,7 @@ function useEstimate() {
     <td class="c"><span class="accent-bar"></span></td>
     <td class="r">Стр. 01</td>
   </tr></table>
-</td>
-</tr></table></div>
+</div>
 </body></html>`;
 
     const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '').trim();
