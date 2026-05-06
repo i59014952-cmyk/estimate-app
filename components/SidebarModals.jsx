@@ -256,7 +256,7 @@ const KH_OBJECTS_KEY = 'kh-objects-v1';
 const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v2';
 window.KH_OBJECT_FILES = window.KH_OBJECT_FILES || new Map();
 const khLoadObjects = () => { try { return JSON.parse(localStorage.getItem(KH_OBJECTS_KEY) || '[]'); } catch { return []; } };
-const khSaveObjects = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); } catch {} };
+const khSaveObjects = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
 
 const KH_OBJECTS_SEED = [
   {
@@ -548,7 +548,7 @@ const KH_CONTRACTORS_KEY = 'kh-contractors-v1';
 const KH_SEEDED_KEY = 'kh-contractors-seeded-v3';
 window.KH_CONTRACTOR_FILES = window.KH_CONTRACTOR_FILES || new Map();
 const khLoadContractors = () => { try { return JSON.parse(localStorage.getItem(KH_CONTRACTORS_KEY) || '[]'); } catch { return []; } };
-const khSaveContractors = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); } catch {} };
+const khSaveContractors = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
 
 const KH_SEED = [
   { name: 'ТЕХНОНИКОЛЬ',     type: 'Производитель', email: 'test1@mail.ru', phone: '+7 (000) 000-00-01', website: 'https://www.tn.ru/',                  org: 'Кровля, гидро- и теплоизоляция, фасады' },
