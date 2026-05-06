@@ -253,7 +253,7 @@ function KHEstimatesView() {
 
 // ---------- Объекты ----------
 const KH_OBJECTS_KEY = 'kh-objects-v1';
-const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v1';
+const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v2';
 window.KH_OBJECT_FILES = window.KH_OBJECT_FILES || new Map();
 const khLoadObjects = () => { try { return JSON.parse(localStorage.getItem(KH_OBJECTS_KEY) || '[]'); } catch { return []; } };
 const khSaveObjects = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); } catch {} };
@@ -265,6 +265,7 @@ const KH_OBJECTS_SEED = [
     area: 284, stage: 'Фундамент', date: '24.04.2026',
     budget: 18_500_000,
     client: 'А. Меньшов',
+    status: 'active',
     note: 'Каркасный дом из клеёного бруса, 2 этажа, эксплуатируемая кровля. Готовность ~25%.',
   },
   {
@@ -273,17 +274,28 @@ const KH_OBJECTS_SEED = [
     area: 412, stage: 'CLT-монтаж', date: '02.09.2025',
     budget: 26_900_000,
     client: 'Д. Ковров',
+    status: 'active',
     note: 'CLT-панели Segezha + терраса 96 м². Сдача — Q3 2026.',
+  },
+  {
+    name: 'Шале «Берёзовая»',
+    address: 'МО, Дмитровский р-н, КП «Берёзовая роща»',
+    area: 168, stage: 'Сдан', date: '15.10.2024',
+    budget: 11_400_000,
+    client: 'И. Соколов',
+    status: 'completed',
+    note: 'Каркасный дом из КДК, 1.5 этажа. Подписаны акты КС-2/КС-3, гарантия — до 2026.',
   },
 ];
 
 function khSeedObjectsIfNeeded(current) {
   if (localStorage.getItem(KH_OBJECTS_SEEDED_KEY)) return current;
-  const existing = new Set(current.map(o => (o.name || '').trim().toLowerCase()));
+  const patched = current.map(o => o.status ? o : { ...o, status: 'active' });
+  const existing = new Set(patched.map(o => (o.name || '').trim().toLowerCase()));
   const fresh = KH_OBJECTS_SEED
     .filter(o => !existing.has(o.name.trim().toLowerCase()))
     .map((o, i) => ({ id: 'seed-obj-' + i + '-' + Date.now(), files: [], ...o }));
-  const next = [...fresh, ...current];
+  const next = [...fresh, ...patched];
   khSaveObjects(next);
   try { localStorage.setItem(KH_OBJECTS_SEEDED_KEY, '1'); } catch {}
   return next;
@@ -291,6 +303,7 @@ function khSeedObjectsIfNeeded(current) {
 
 function KHObjectsView() {
   const [list, setList] = React.useState(() => khSeedObjectsIfNeeded(khLoadObjects()));
+  const [tab, setTab] = React.useState('active');
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
   const [draft, setDraft] = React.useState(emptyObjDraft());
@@ -298,12 +311,20 @@ function KHObjectsView() {
 
   const persist = (next) => { setList(next); khSaveObjects(next); };
 
+  const counts = {
+    active: list.filter(o => (o.status || 'active') === 'active').length,
+    completed: list.filter(o => o.status === 'completed').length,
+  };
+  const filtered = list.filter(o => (o.status || 'active') === tab);
+
+  const setStatus = (id, status) => persist(list.map(o => o.id === id ? { ...o, status } : o));
+
   const startAdd = () => { setDraft(emptyObjDraft()); setEditingId(null); setFormOpen(true); };
   const startEdit = (o) => {
     setDraft({
       name: o.name || '', address: o.address || '', area: o.area ?? '',
       stage: o.stage || '', date: o.date || '', budget: o.budget ?? '',
-      client: o.client || '', note: o.note || '',
+      client: o.client || '', note: o.note || '', status: o.status || 'active',
     });
     setEditingId(o.id); setFormOpen(true);
   };
@@ -319,6 +340,7 @@ function KHObjectsView() {
       stage: draft.stage.trim(), date: draft.date.trim(),
       budget: draft.budget === '' ? '' : Number(draft.budget) || '',
       client: draft.client.trim(), note: draft.note.trim(),
+      status: draft.status || 'active',
     };
     if (editingId) {
       persist(list.map(o => o.id === editingId ? { ...o, ...fields } : o));
@@ -375,11 +397,23 @@ function KHObjectsView() {
 
   const sizeLabel = (n) => !n ? '' : n < 1024 ? `${n} Б` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} КБ` : `${(n / 1024 / 1024).toFixed(1)} МБ`;
 
+  const ObjTab = ({ id, label }) => (
+    <button
+      onClick={() => setTab(id)}
+      style={{
+        padding: '8px 14px', border: 'none', borderBottom: '2px solid ' + (tab === id ? 'var(--ink)' : 'transparent'),
+        background: 'transparent', color: tab === id ? 'var(--ink)' : 'var(--ink-3)',
+        fontWeight: tab === id ? 600 : 400, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--sans)',
+      }}
+    >{label} <span style={{ color: 'var(--ink-4)', marginLeft: 4 }}>· {counts[id]}</span></button>
+  );
+
   return (
     <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid var(--rule)', paddingBottom: 8 }}>
-        <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>Объектов · {list.length}</div>
-        {!formOpen && <button className="kh-btn-primary" onClick={startAdd} style={{ marginLeft: 'auto' }}>+ Добавить объект</button>}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid var(--rule)' }}>
+        <ObjTab id="active" label="Активные" />
+        <ObjTab id="completed" label="Завершённые" />
+        {!formOpen && <button className="kh-btn-primary" onClick={startAdd} style={{ marginLeft: 'auto', marginBottom: 6 }}>+ Добавить объект</button>}
       </div>
 
       {formOpen && (
@@ -407,6 +441,10 @@ function KHObjectsView() {
           <textarea placeholder="Описание / комментарий" value={draft.note}
             onChange={e => setDraft({ ...draft, note: e.target.value })}
             rows={3} style={{ ...khInputStyle(), resize: 'vertical' }} />
+          <select value={draft.status || 'active'} onChange={e => setDraft({ ...draft, status: e.target.value })} style={khInputStyle()}>
+            <option value="active">Активный</option>
+            <option value="completed">Завершённый</option>
+          </select>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-sm" onClick={cancelForm}>Отмена</button>
             <button type="submit" className="kh-btn-primary" disabled={!draft.name.trim()}>
@@ -416,12 +454,14 @@ function KHObjectsView() {
         </form>
       )}
 
-      {list.length === 0 && !formOpen && (
-        <div className="kh-empty" style={{ padding: 16 }}>Объектов нет — нажмите «+ Добавить объект».</div>
+      {filtered.length === 0 && !formOpen && (
+        <div className="kh-empty" style={{ padding: 16 }}>
+          {tab === 'active' ? 'Активных объектов нет' : 'Завершённых объектов нет'} — нажмите «+ Добавить объект».
+        </div>
       )}
 
       <div className="kh-list">
-        {list.map(o => {
+        {filtered.map(o => {
           const filesInMem = window.KH_OBJECT_FILES.get(o.id) || [];
           const filesMeta = o.files || [];
           return (
@@ -467,8 +507,11 @@ function KHObjectsView() {
                   })}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={() => attachFiles(o.id)}>+ Прикрепить файлы</button>
+                {(o.status || 'active') === 'active'
+                  ? <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'completed')}>✓ Завершить</button>
+                  : <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'active')}>↶ В активные</button>}
               </div>
             </div>
           );
@@ -479,7 +522,7 @@ function KHObjectsView() {
 }
 
 function emptyObjDraft() {
-  return { name: '', address: '', area: '', stage: '', date: '', budget: '', client: '', note: '' };
+  return { name: '', address: '', area: '', stage: '', date: '', budget: '', client: '', note: '', status: 'active' };
 }
 
 // ---------- Материалы ----------
