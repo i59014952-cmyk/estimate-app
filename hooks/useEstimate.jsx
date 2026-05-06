@@ -14,6 +14,11 @@ function useEstimate() {
   React.useEffect(() => { estimateRef.current = estimate; }, [estimate]);
 
   React.useEffect(() => {
+    const filtered = estimate.filter(r => !isHiddenCategory(r.name));
+    if (filtered.length !== estimate.length) setEstimate(filtered);
+  }, [estimate]);
+
+  React.useEffect(() => {
     setStatus({ kind: "busy", text: "Загрузка каталогов…" });
     Promise.all([loadLocalCatalog(), loadDdcCatalog()])
       .then(([local, ddc]) => {

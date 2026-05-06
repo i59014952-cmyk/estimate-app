@@ -12,6 +12,9 @@ const HIDDEN_CATEGORIES = new Set([
     'радиаторное отопление',
     'канализация',
     'водоснабжение',
+    'прочие работы',
+    'прочие',
+    'механизмы и спецтехника',
 ]);
 function isHiddenCategory(name) {
     const normalized = String(name)

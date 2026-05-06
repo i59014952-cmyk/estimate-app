@@ -1,9 +1,10 @@
 // EstimateTable.jsx — list of estimate rows with qty edit, picker, delete.
 
 function EstimateTable({ rows, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+  const visibleRows = rows.filter(r => !isHiddenCategory(r.name));
   return (
     <div className="col">
-      {rows.map((r, i) => (
+      {visibleRows.map((r, i) => (
         <EstimateRow
           key={r.id}
           row={r}
