@@ -415,29 +415,45 @@ function useEstimate() {
     const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
     const qty = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 
-    const title = meta.title || '';
-    const code = meta.code || '';
-    const kind = meta.kind || '';
+    const title        = meta.title || '';
+    const code         = meta.code || '';
+    const kind         = meta.kind || '';
     const construction = meta.construction || '';
-    const areaText = meta.areaText || '';
-    const location = meta.location || '';
-    const stage = meta.stage || '';
-    const revision = meta.revision || '';
-    const date = meta.date || '';
-    const estimator = meta.estimator || '';
+    const areaText     = meta.areaText || '';
+    const location     = meta.location || '';
+    const stage        = meta.stage || '';
+    const date         = meta.date || '';
+    const estimator    = meta.estimator || '';
 
-    const subtitleBits = [code, kind, construction, areaText, location, stage].filter(Boolean);
+    const titleHtml = construction
+      ? `${esc(construction)} &mdash; <em style="font-style:italic;color:#6b6258;">проект</em> &laquo;${esc(title)}&raquo;`
+      : `Смета <em style="font-style:italic;">&laquo;${esc(title)}&raquo;</em>`;
 
-    const rowsHtml = estimate.map((r, i) => `
-      <tr>
-        <td>${String(i + 1).padStart(2, '0')}</td>
-        <td>${esc(r.name)}</td>
-        <td>${esc(r.unit || '')}</td>
-        <td style="text-align:right">${qty(r.qty)}</td>
-        <td style="text-align:right">${r.notFound ? '—' : num(r.unitPrice)}</td>
-        <td style="text-align:right">${r.notFound ? '—' : num(r.qty * r.unitPrice)}</td>
-      </tr>
-    `).join('');
+    const subBits = [];
+    if (kind && areaText) subBits.push(`${esc(kind)}, ${esc(areaText)}`);
+    else if (kind) subBits.push(esc(kind));
+    else if (areaText) subBits.push(esc(areaText));
+    if (location) subBits.push(esc(location));
+    if (stage) subBits.push(esc(stage));
+    if (estimator) subBits.push(`менеджер <b>${esc(estimator)}</b>`);
+    const subLine = subBits.join(' &middot; ');
+
+    const headLine = ['Коммерческое предложение', code ? `&#8470; ${esc(code)}` : '', date ? esc(date) : '']
+      .filter(Boolean).join(' &middot; ');
+
+    const rowsHtml = estimate.map((r, i) => {
+      const odd = i % 2 === 1;
+      const total = r.notFound ? '—' : num(r.qty * r.unitPrice);
+      const price = r.notFound ? '—' : num(r.unitPrice);
+      const qtyText = `${qty(r.qty)}${r.unit ? ' ' + esc(r.unit) : ''}`;
+      return `<tr style="background:${odd ? '#f5ecdb' : '#fbf5e6'};">
+        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:10pt;color:#8c8378;width:40pt;">${String(i + 1).padStart(2, '0')}</td>
+        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Georgia,serif;font-size:11pt;color:#1d1a17;font-weight:600;">${esc(r.name)}</td>
+        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:11pt;color:#1d1a17;text-align:right;">${price}</td>
+        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:11pt;color:#1d1a17;text-align:right;">${qtyText}</td>
+        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:11pt;color:#1d1a17;text-align:right;font-weight:700;">${total}</td>
+      </tr>`;
+    }).join('');
 
     const html = `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -446,66 +462,89 @@ function useEstimate() {
 <title>Смета «${esc(title)}»</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
-@page { size: A4; margin: 2cm; }
-body { font-family: Georgia, 'Times New Roman', serif; color: #1d1a17; font-size: 11pt; }
-.brand { font-size: 28pt; letter-spacing: .14em; font-weight: 700; font-family: Georgia, serif; }
-.tag { font-size: 9pt; color: #6b6258; letter-spacing: .08em; margin-bottom: 18pt; text-transform: uppercase; }
-table.head { width: 100%; border-collapse: collapse; margin-bottom: 18pt; }
-table.head td { vertical-align: top; padding: 0; border: 0; }
-table.head td.r { text-align: right; }
-.label { color: #8c8378; font-size: 9pt; letter-spacing: .06em; text-transform: uppercase; }
-h1.kp-title { font-size: 18pt; font-weight: 600; margin: 12pt 0 4pt; font-family: Georgia, serif; }
-.kp-title em { font-style: italic; }
-.client { font-size: 11pt; color: #2b2722; margin-bottom: 14pt; }
-table.items { width: 100%; border-collapse: collapse; margin: 14pt 0; font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 10pt; }
-table.items th, table.items td { border: 1px solid #d6cfc4; padding: 6pt 8pt; text-align: left; }
-table.items th { background: #f0e9dc; font-weight: 600; font-size: 9pt; letter-spacing: .04em; text-transform: uppercase; }
-table.totals { width: 100%; border-collapse: collapse; margin-top: 10pt; font-size: 11pt; }
-table.totals td { padding: 4pt 0; border: 0; }
-table.totals td.v { text-align: right; font-weight: 600; }
-table.totals tr.grand td { font-size: 14pt; font-weight: 700; border-top: 2px solid #1d1a17; padding-top: 8pt; }
-.footer { margin-top: 24pt; font-size: 10pt; color: #4a4239; line-height: 1.6; border-top: 1px solid #d6cfc4; padding-top: 14pt; }
-.footer b { color: #1d1a17; }
+@page WordSection1 { size: A4; margin: 0cm; mso-page-orientation: portrait; }
+div.WordSection1 { page: WordSection1; }
+body { margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; color: #1d1a17; }
 </style>
 </head>
 <body>
-<table class="head"><tr>
-  <td>
-    <div class="brand">KUB·HOUSE</div>
-    <div class="tag">Modern Wood Development · Est. 2014 · Made in Moscow</div>
+<div class="WordSection1">
+<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+<tr>
+  <!-- DARK SIDEBAR -->
+  <td valign="top" style="width:200pt;background:#1d1a17;padding:34pt 22pt 34pt 22pt;color:#f3ebd9;">
+    <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:36pt;">
+      <tr><td style="border:1.4pt solid #f3ebd9;padding:22pt 28pt;text-align:center;font-family:Georgia,serif;">
+        <div style="font-size:18pt;font-weight:700;letter-spacing:.06em;line-height:1;">KUB</div>
+        <div style="font-size:18pt;font-weight:700;letter-spacing:.06em;line-height:1;margin-top:2pt;">HOUSE</div>
+      </td></tr>
+    </table>
+    <div style="font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.14em;line-height:1.6;color:#f3ebd9;">
+      KUB HOUSE<br>
+      MODERN WOOD<br>
+      DEVELOPMENT
+    </div>
+    <div style="margin-top:28pt;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.14em;line-height:1.6;color:#f3ebd9;">
+      EST. 2014<br>
+      MADE IN MOSCOW
+    </div>
   </td>
-  <td class="r">
-    ${revision  ? `<div><span class="label">Ревизия</span> <b>${esc(revision)}</b></div>` : ''}
-    ${date      ? `<div><span class="label">Дата</span> <b>${esc(date)}</b></div>` : ''}
-    ${estimator ? `<div><span class="label">Сметчик</span> <b>${esc(estimator)}</b></div>` : ''}
+  <!-- CONTENT -->
+  <td valign="top" style="background:#f5ecdb;padding:34pt 38pt 38pt 38pt;">
+    <div style="font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.18em;color:#6b6258;text-transform:uppercase;">${headLine}</div>
+    <h1 style="font-family:Georgia,serif;font-size:24pt;font-weight:600;margin:16pt 0 14pt 0;line-height:1.2;color:#1d1a17;">${titleHtml}</h1>
+    ${subLine ? `<div style="font-family:Georgia,serif;font-size:11pt;color:#2b2722;line-height:1.5;">${subLine}</div>` : ''}
+    <hr style="border:0;border-top:1px solid #c9b988;margin:24pt 0 22pt 0;">
+    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-bottom:30pt;">
+      <tr>
+        <td valign="top" style="padding-right:14pt;width:25%;">
+          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">Телефон</div>
+          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;"><b>+7 (495) 128-41-11</b></div>
+        </td>
+        <td valign="top" style="padding-right:14pt;width:25%;">
+          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">Почта &middot; Сайт</div>
+          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;line-height:1.5;"><b>info@kub.team</b><br>kub.house</div>
+        </td>
+        <td valign="top" style="padding-right:14pt;width:25%;">
+          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">Офис</div>
+          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;line-height:1.5;"><b>Москва</b>, Малая<br>Ордынка 39 с1</div>
+        </td>
+        <td valign="top" style="width:25%;">
+          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">График</div>
+          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;line-height:1.5;">Пн&ndash;Пт 10:00&ndash;18:00<br>Сб&ndash;Вс: выходной</div>
+        </td>
+      </tr>
+    </table>
+    <div style="font-family:Arial,sans-serif;font-size:10pt;letter-spacing:.22em;color:#8c8378;text-transform:uppercase;margin-bottom:14pt;">Ориентировочная смета</div>
+    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#1d1a17;color:#f3ebd9;">
+          <th style="padding:18pt 10pt;text-align:left;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;width:40pt;">&#8470;</th>
+          <th style="padding:18pt 10pt;text-align:left;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Наименование</th>
+          <th style="padding:18pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Цена, &#8381;</th>
+          <th style="padding:18pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Кол-во</th>
+          <th style="padding:18pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Итого, &#8381;</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:18pt;">
+      <tr>
+        <td style="padding:6pt 10pt;font-family:Georgia,serif;font-size:11pt;color:#4a4239;">Сумма без НДС</td>
+        <td style="padding:6pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:11pt;font-weight:600;color:#1d1a17;">${num(totals.subtotal)} &#8381;</td>
+      </tr>
+      <tr>
+        <td style="padding:6pt 10pt;font-family:Georgia,serif;font-size:11pt;color:#4a4239;">НДС 20%</td>
+        <td style="padding:6pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:11pt;font-weight:600;color:#1d1a17;">${num(totals.vat)} &#8381;</td>
+      </tr>
+      <tr>
+        <td style="padding:14pt 10pt 6pt;border-top:2pt solid #1d1a17;font-family:Georgia,serif;font-size:14pt;font-weight:700;color:#1d1a17;">Итого с НДС</td>
+        <td style="padding:14pt 10pt 6pt;border-top:2pt solid #1d1a17;text-align:right;font-family:Arial,sans-serif;font-size:14pt;font-weight:700;color:#1d1a17;">${num(totals.grand)} &#8381;</td>
+      </tr>
+    </table>
   </td>
-</tr></table>
-
-<h1 class="kp-title">Смета <em>«${esc(title)}»</em></h1>
-${subtitleBits.length ? `<div class="client">${esc(subtitleBits.join(' · '))}</div>` : ''}
-
-<table class="items">
-<thead><tr>
-  <th style="width:30pt">№</th>
-  <th>Наименование</th>
-  <th style="width:55pt">Ед.</th>
-  <th style="width:60pt;text-align:right">Кол-во</th>
-  <th style="width:80pt;text-align:right">Цена, ₽</th>
-  <th style="width:95pt;text-align:right">Сумма, ₽</th>
-</tr></thead>
-<tbody>${rowsHtml}</tbody>
+</tr>
 </table>
-
-<table class="totals">
-<tr><td>Сумма без НДС</td><td class="v">${num(totals.subtotal)} ₽</td></tr>
-<tr><td>НДС 20%</td><td class="v">${num(totals.vat)} ₽</td></tr>
-<tr class="grand"><td>Итого с НДС</td><td class="v">${num(totals.grand)} ₽</td></tr>
-</table>
-
-<div class="footer">
-<b>Контакты:</b> +7 (495) 128-41-11 · info@kub.team · kub.house<br>
-<b>Офис:</b> Москва, Малая Ордынка 39 с1 · пн–пт 10:00–18:00<br>
-<b>Гарантия:</b> 10 лет
 </div>
 </body></html>`;
 
