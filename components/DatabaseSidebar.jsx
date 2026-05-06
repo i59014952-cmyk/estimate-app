@@ -58,18 +58,30 @@ function KHDatabaseView({ est }) {
   };
 
   const onUploadClick = () => fileRef.current && fileRef.current.click();
-  const onFileChange = (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    setUploadStatus({ kind: "busy", text: `Загрузка ${f.name}…` });
-    est.actions.uploadCatalogFile(f).then(({ added, skipped }) => {
-      setUploadStatus({ kind: "ok", text: `Добавлено ${added}, пропущено ${skipped}` });
-      setTimeout(() => setUploadStatus(null), 4000);
-    }).catch(err => {
-      setUploadStatus({ kind: "error", text: err.message || String(err) });
-      setTimeout(() => setUploadStatus(null), 6000);
-    });
+  const onFileChange = async (e) => {
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
+    if (!files.length) return;
+    let totalAdded = 0, totalSkipped = 0;
+    const errors = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setUploadStatus({ kind: "busy", text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
+      try {
+        const { added, skipped } = await est.actions.uploadCatalogFile(f);
+        totalAdded += added;
+        totalSkipped += skipped;
+      } catch (err) {
+        errors.push(`${f.name}: ${err.message || err}`);
+      }
+    }
+    if (errors.length) {
+      setUploadStatus({ kind: "error", text: `Ошибки: ${errors.join('; ')}` });
+      setTimeout(() => setUploadStatus(null), 8000);
+    } else {
+      setUploadStatus({ kind: "ok", text: `Файлов: ${files.length}. Добавлено ${totalAdded}, пропущено ${totalSkipped}` });
+      setTimeout(() => setUploadStatus(null), 5000);
+    }
   };
 
   const kindBadge = (kind) => {
@@ -94,7 +106,7 @@ function KHDatabaseView({ est }) {
   return (
     <div className="col" style={{ gap: 14 }}>
       <input
-        ref={fileRef} type="file"
+        ref={fileRef} type="file" multiple
         accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         style={{ display: "none" }}
         onChange={onFileChange}
@@ -107,7 +119,7 @@ function KHDatabaseView({ est }) {
           style={{ flex: 1, minWidth: 240 }}
         />
         <button className="kh-btn-primary" onClick={startAdd}>+ Добавить</button>
-        <button className="kh-btn-primary" onClick={onUploadClick}>↑ Загрузить XLSX/CSV</button>
+        <button className="kh-btn-primary" onClick={onUploadClick}>↑ Загрузить XLSX/CSV (можно несколько)</button>
       </div>
 
       {!showHidden && (
