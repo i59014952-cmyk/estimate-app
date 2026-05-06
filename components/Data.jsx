@@ -96,6 +96,7 @@ const NAV = [
   { id: "estimates", label: "Сметы", icon: "doc", count: 24, active: true },
   { id: "objects", label: "Объекты", icon: "house", count: 18 },
   { id: "materials", label: "Материалы", icon: "cube", count: 2_078 },
+  { id: "database", label: "База данных", icon: "layers" },
   { id: "contractors", label: "Подрядчики", icon: "users", count: 47 },
   { id: "calendar", label: "Календарь", icon: "cal" },
 ];
