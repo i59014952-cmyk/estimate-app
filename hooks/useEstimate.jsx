@@ -1,8 +1,75 @@
 // useEstimate.jsx — React hook owning estimate state and actions.
 
+const USER_CATALOG_KEY = "kh-user-catalog-v1";
+
+function loadUserCatalog() {
+  try {
+    const saved = localStorage.getItem(USER_CATALOG_KEY);
+    if (!saved) return [];
+    const arr = JSON.parse(saved);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(x => x && x.name).map(x => ({
+      name: String(x.name),
+      unit: String(x.unit || ""),
+      unitPrice: Number(x.unitPrice) || 0,
+      tokenSet: new Set(tokenize(x.name)),
+    }));
+  } catch (_) { return []; }
+}
+
+function saveUserCatalog(items) {
+  try {
+    const slim = items.map(({ name, unit, unitPrice }) => ({ name, unit, unitPrice }));
+    localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(slim));
+  } catch (_) {}
+}
+
+function parseUserCatalogRows(rows) {
+  if (!rows || rows.length === 0) return [];
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  const head = rows[0].map(norm);
+  const detect = (...keys) => {
+    for (let i = 0; i < head.length; i++) {
+      if (keys.some(k => head[i] === k || head[i].includes(k))) return i;
+    }
+    return -1;
+  };
+  const nameIdx = detect("name", "наимен", "позиц", "товар", "материал");
+  const unitIdx = detect("unit", "ед.", "ед ", "ед изм", "единиц");
+  const priceIdx = detect("price", "цена", "стоимост");
+  const hasHeader = nameIdx !== -1 && priceIdx !== -1;
+  const start = hasHeader ? 1 : 0;
+  const out = [];
+  for (let i = start; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    const cells = row.map(c => String(c == null ? "" : c).trim());
+    let name = "", unit = "", price = NaN;
+    if (hasHeader) {
+      name = cells[nameIdx] || "";
+      unit = unitIdx !== -1 ? (cells[unitIdx] || "") : "";
+      price = toNumber(cells[priceIdx]);
+    } else {
+      for (const c of cells) {
+        if (!c) continue;
+        if (!name && !isPureNumber(c) && c.length >= 3) { name = c; continue; }
+        if (!unit && c.length <= 8 && /\p{L}/u.test(c) && !isPureNumber(c) && c !== name) { unit = c; continue; }
+        const n = toNumber(c);
+        if (!isNaN(n) && n > 0 && isNaN(price)) price = n;
+      }
+    }
+    name = (name || "").trim();
+    if (!name || name.length < 2) continue;
+    if (isNaN(price) || price <= 0) continue;
+    out.push({ name, unit: unit.trim(), unitPrice: price });
+  }
+  return out;
+}
+
 function useEstimate() {
   const [catalog, setCatalog] = React.useState([]);
   const [ddcCatalog, setDdcCatalog] = React.useState([]);
+  const [userCatalog, setUserCatalog] = React.useState(loadUserCatalog);
   const [catalogReady, setCatalogReady] = React.useState(false);
   const [estimate, setEstimate] = React.useState([]);
   const [query, setQuery] = React.useState("");
@@ -41,14 +108,22 @@ function useEstimate() {
     if (!query || query.length < 2) return [];
     const q = query.toLowerCase();
     const out = [];
-    for (const item of catalog) {
+    for (const item of userCatalog) {
       if (item.name.toLowerCase().includes(q)) {
         out.push(item);
         if (out.length >= MAX_RESULTS) break;
       }
     }
+    if (out.length < MAX_RESULTS) {
+      for (const item of catalog) {
+        if (item.name.toLowerCase().includes(q)) {
+          out.push(item);
+          if (out.length >= MAX_RESULTS) break;
+        }
+      }
+    }
     return out;
-  }, [query, catalog]);
+  }, [query, catalog, userCatalog]);
 
   const totals = React.useMemo(() => {
     const subtotal = estimate.reduce((s, r) => r.notFound ? s : s + r.qty * r.unitPrice, 0);
@@ -151,7 +226,7 @@ function useEstimate() {
       const reason = skipReason(name);
       if (reason) { skipped++; continue; }
       const q = isFinite(qty) && qty > 0 ? qty : 1;
-      const match = fuzzyFind(name, catalog, ddcCatalog);
+      const match = fuzzyFind(name, [...userCatalog, ...catalog], ddcCatalog);
       if (match) {
         additions.push({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source });
       } else {
@@ -174,7 +249,7 @@ function useEstimate() {
       return out;
     });
     return { imported, notFoundCount, skipped };
-  }, [catalog, ddcCatalog]);
+  }, [catalog, ddcCatalog, userCatalog]);
 
   const handleFile = React.useCallback((file) => {
     setStatus({ kind: "busy", text: `Обработка: ${file.name}…` });
@@ -306,11 +381,86 @@ function useEstimate() {
     addRow({ name: 'Новая позиция', unit: '', unitPrice: 0, qty: 1, notFound: true, source: 'none' });
   }, [addRow]);
 
+  const addCatalogItem = React.useCallback(({ name, unit, unitPrice }) => {
+    setUserCatalog(prev => {
+      const key = (s) => `${s.name}|${s.unit}`;
+      const filtered = prev.filter(it => key(it) !== key({ name, unit }));
+      const item = {
+        name: String(name).trim(),
+        unit: String(unit || "").trim(),
+        unitPrice: Number(unitPrice) || 0,
+        tokenSet: new Set(tokenize(name)),
+      };
+      const next = [item, ...filtered];
+      saveUserCatalog(next);
+      return next;
+    });
+  }, []);
+
+  const removeCatalogItem = React.useCallback((name, unit) => {
+    setUserCatalog(prev => {
+      const next = prev.filter(it => !(it.name === name && (it.unit || "") === (unit || "")));
+      saveUserCatalog(next);
+      return next;
+    });
+  }, []);
+
+  const uploadCatalogFile = React.useCallback((file) => {
+    const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
+    const mime = (file.type || '').toLowerCase();
+
+    const ingest = (rows) => {
+      const items = parseUserCatalogRows(rows);
+      if (items.length === 0) {
+        return { added: 0, skipped: rows.length };
+      }
+      setUserCatalog(prev => {
+        const map = new Map();
+        for (const it of prev) map.set(`${it.name}|${it.unit}`, it);
+        for (const it of items) {
+          map.set(`${it.name}|${it.unit}`, {
+            name: it.name, unit: it.unit, unitPrice: it.unitPrice,
+            tokenSet: new Set(tokenize(it.name)),
+          });
+        }
+        const next = Array.from(map.values());
+        saveUserCatalog(next);
+        return next;
+      });
+      return { added: items.length, skipped: Math.max(0, rows.length - items.length) };
+    };
+
+    const readBuffer = () => new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error('не удалось прочитать файл'));
+      r.readAsArrayBuffer(file);
+    });
+
+    if (ext === 'csv' || mime === 'text/csv') {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          try { resolve(ingest(parseCsv(r.result))); }
+          catch (err) { reject(err); }
+        };
+        r.onerror = () => reject(new Error('не удалось прочитать файл'));
+        r.readAsText(file, 'utf-8');
+      });
+    }
+    if (ext === 'xlsx' || ext === 'xls' || mime.includes('spreadsheet')) {
+      if (typeof XLSX === 'undefined') return Promise.reject(new Error('XLSX не загружен'));
+      return readBuffer().then(buf => ingest(readXlsx(new Uint8Array(buf))));
+    }
+    return Promise.reject(new Error('поддерживаются только Excel (.xlsx/.xls) и CSV'));
+  }, []);
+
   return {
-    state: { catalog, ddcCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
+    state: { catalog, ddcCatalog, userCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
       setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, addBlankRow,
+      addCatalogItem, removeCatalogItem, uploadCatalogFile,
     },
   };
 }

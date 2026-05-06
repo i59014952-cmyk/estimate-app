@@ -808,6 +808,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
       <TopBar onTheme={onTheme} theme={theme} />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
         <Sidebar active={navActive} onPick={(id) => { setNavActive(id); setKhModalTab(id); }} meta={meta} updateMeta={updateMeta} />
+        <DatabaseSidebar est={est} />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
           <HeroBlock est={est} meta={meta} updateMeta={updateMeta} />
           <div style={{ position: "relative" }}>
