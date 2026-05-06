@@ -473,11 +473,10 @@ body { margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; co
 <tr>
   <!-- DARK SIDEBAR -->
   <td valign="top" style="width:200pt;background:#1d1a17;padding:34pt 22pt 34pt 22pt;color:#f3ebd9;">
-    <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:36pt;">
-      <tr><td style="border:1.4pt solid #f3ebd9;padding:22pt 28pt;text-align:center;font-family:Georgia,serif;">
-        <div style="font-size:18pt;font-weight:700;letter-spacing:.06em;line-height:1;">KUB</div>
-        <div style="font-size:18pt;font-weight:700;letter-spacing:.06em;line-height:1;margin-top:2pt;">HOUSE</div>
-      </td></tr>
+    <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:38pt;border:1.5pt solid #f3ebd9;width:120pt;">
+      <tr><td style="padding:18pt 0 6pt 0;text-align:center;font-family:Georgia,serif;font-size:22pt;font-weight:700;letter-spacing:.10em;line-height:1;color:#f3ebd9;">KUB</td></tr>
+      <tr><td style="padding:0;border-top:1pt solid #f3ebd9;line-height:0;font-size:0;">&nbsp;</td></tr>
+      <tr><td style="padding:6pt 0 18pt 0;text-align:center;font-family:Georgia,serif;font-size:22pt;font-weight:700;letter-spacing:.10em;line-height:1;color:#f3ebd9;">HOUSE</td></tr>
     </table>
     <div style="font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.14em;line-height:1.6;color:#f3ebd9;">
       KUB HOUSE<br>
