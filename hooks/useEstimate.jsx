@@ -449,138 +449,172 @@ function useEstimate() {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
     const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
-    const qty = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    const qtyFmt = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 
     const title        = meta.title || '';
     const code         = meta.code || '';
-    const kind         = meta.kind || '';
     const construction = meta.construction || '';
     const areaText     = meta.areaText || '';
     const location     = meta.location || '';
-    const stage        = meta.stage || '';
     const date         = meta.date || '';
     const estimator    = meta.estimator || '';
 
-    const titleHtml = construction
-      ? `${esc(construction)} &mdash; <em style="font-style:italic;color:#6b6258;">проект</em> &laquo;${esc(title)}&raquo;`
-      : `Смета <em style="font-style:italic;">&laquo;${esc(title)}&raquo;</em>`;
+    const titleLine = construction
+      ? `${esc(construction)}&nbsp;&mdash; <em>проект «${esc(title)}»</em>`
+      : `Смета <em>«${esc(title)}»</em>`;
 
-    const subBits = [];
-    if (kind && areaText) subBits.push(`${esc(kind)}, ${esc(areaText)}`);
-    else if (kind) subBits.push(esc(kind));
-    else if (areaText) subBits.push(esc(areaText));
-    if (location) subBits.push(esc(location));
-    if (stage) subBits.push(esc(stage));
-    if (estimator) subBits.push(`менеджер <b>${esc(estimator)}</b>`);
-    const subLine = subBits.join(' &middot; ');
+    const recipientBits = [];
+    if (location)  recipientBits.push(`<b>${esc(location)}</b>`);
+    if (areaText)  recipientBits.push(esc(areaText));
+    if (estimator) recipientBits.push(`менеджер&nbsp;<b>${esc(estimator)}</b>`);
+    const recipientLine = recipientBits.length
+      ? `Подготовлено для&nbsp;${recipientBits.join(' &middot; ')}`
+      : '';
 
-    const headLine = ['Коммерческое предложение', code ? `&#8470; ${esc(code)}` : '', date ? esc(date) : '']
-      .filter(Boolean).join(' &middot; ');
+    const metaLine = ['Коммерческое предложение',
+                      code ? `<span class="num">№&nbsp;${esc(code)}</span>` : '',
+                      date ? esc(date) : '']
+      .filter(Boolean).join(' <span class="dot">·</span> ');
 
     const rowsHtml = estimate.map((r, i) => {
-      const odd = i % 2 === 1;
-      const total = r.notFound ? '—' : num(r.qty * r.unitPrice);
-      const price = r.notFound ? '—' : num(r.unitPrice);
-      const qtyText = `${qty(r.qty)}${r.unit ? ' ' + esc(r.unit) : ''}`;
-      return `<tr style="background:${odd ? '#f5ecdb' : '#fbf5e6'};">
-        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:10pt;color:#8c8378;width:40pt;">${String(i + 1).padStart(2, '0')}</td>
-        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Georgia,serif;font-size:11pt;color:#1d1a17;font-weight:600;">${esc(r.name)}</td>
-        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:11pt;color:#1d1a17;text-align:right;">${price}</td>
-        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:11pt;color:#1d1a17;text-align:right;">${qtyText}</td>
-        <td style="padding:14pt 10pt;border-bottom:1pt solid #e0d5be;font-family:Arial,sans-serif;font-size:11pt;color:#1d1a17;text-align:right;font-weight:700;">${total}</td>
+      const totalCell = r.notFound ? '&mdash;' : `<b>${num(r.qty * r.unitPrice)}</b>`;
+      const priceCell = r.notFound ? '&mdash;' : num(r.unitPrice);
+      const qtyCell   = `${qtyFmt(r.qty)}${r.unit ? '&nbsp;' + esc(r.unit) : ''}`;
+      return `<tr>
+        <td class="idx">${String(i + 1).padStart(2, '0')}</td>
+        <td class="name"><b>${esc(r.name)}</b></td>
+        <td class="right">${priceCell}</td>
+        <td class="right">${qtyCell}</td>
+        <td class="right">${totalCell}</td>
       </tr>`;
     }).join('');
 
-    const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    const grandTotalStr = num(totals.grand) + '&nbsp;&#8381;';
+    const today = new Date();
+    const validUntil = new Date(today.getTime() + 14 * 86400000);
+    const vu = `${String(validUntil.getDate()).padStart(2,'0')}.${String(validUntil.getMonth()+1).padStart(2,'0')}.${validUntil.getFullYear()}`;
+
+    const html = `<!doctype html>
+<html lang="ru" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta charset="utf-8">
 <title>Смета «${esc(title)}»</title>
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
-@page WordSection1 { size: A4; margin: 0cm; mso-page-orientation: portrait; }
-div.WordSection1 { page: WordSection1; }
-body { margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; color: #1d1a17; }
+  body{margin:0;padding:0;background:#e8e0cf;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color:#1f1a15}
+  .page{width:100%;max-width:1240px;margin:0 auto;background:#f6f1e9}
+  table.layout{width:100%;border-collapse:collapse}
+  td.side{width:260px;vertical-align:top;background:#1f1a15;color:#f3ead8;padding:44px 32px 36px;border-bottom:8px solid #a07a4a}
+  td.main{vertical-align:top;padding:44px 48px 48px}
+  .logo-tile{background:#f6f1e9;width:200px;padding:24px 0;margin-bottom:50px;text-align:center}
+  .logo-tile svg{width:148px;height:148px;display:inline-block}
+  .stamp{font-family:'Consolas','Courier New',monospace;font-size:13px;letter-spacing:.18em;color:#f3ead8;line-height:1.7}
+  .stamp .accent{color:#c79a6a}
+  .side-foot{margin-top:60px;font-family:'Consolas','Courier New',monospace;font-size:11px;letter-spacing:.22em;color:#9a8f7d;padding-top:24px}
+  .meta{font-family:'Consolas','Courier New',monospace;font-size:12px;letter-spacing:.16em;color:#5b524a;text-transform:uppercase;line-height:1.6}
+  .meta .num{color:#7a5a36;font-weight:600;letter-spacing:.1em}
+  .meta .dot{color:#c8b994}
+  h1.title{font-family:'Cormorant Garamond','Georgia',serif;font-weight:500;font-size:54pt;line-height:1.05;margin:14px 0 20px;color:#1f1a15}
+  h1.title em{font-style:italic;color:#7a5a36;font-weight:500}
+  .recipient{font-size:14pt;color:#5b524a;line-height:1.55;padding-bottom:22px;border-bottom:1px solid #d9cdb6}
+  .recipient b{color:#1f1a15;font-weight:600}
+  table.contacts{width:100%;border-collapse:collapse;margin:0;border-bottom:1px solid #d9cdb6}
+  table.contacts td{padding:24px 18px 32px 0;vertical-align:top;width:25%}
+  table.contacts td:last-child{padding-right:0}
+  .contacts-label{font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:600;letter-spacing:.22em;color:#7a5a36;margin-bottom:8px;text-transform:uppercase}
+  .contacts-val{font-size:13pt;line-height:1.5;color:#5b524a}
+  .contacts-val b{color:#1f1a15;font-weight:600}
+  .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6}
+  table.estimate{width:100%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9}
+  table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:left;border:0}
+  table.estimate th.right{text-align:right}
+  table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a}
+  table.estimate td.idx{color:#8a7f73;font-family:'Consolas','Courier New',monospace;font-weight:500;width:64px}
+  table.estimate td.name b{display:block;color:#1f1a15;font-size:14pt;font-weight:600;margin-bottom:2px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif}
+  table.estimate td.right{text-align:right;color:#1f1a15}
+  table.estimate tr.total td{background:#efe7d7;border-bottom:0;padding:22px 18px}
+  .sum{font-family:'Consolas','Courier New',monospace;font-size:18pt;font-weight:600;color:#7a5a36;letter-spacing:.02em}
+  table.sign-row{width:100%;border-collapse:collapse;margin-top:48px}
+  table.sign-row td{vertical-align:bottom;padding:0;width:50%}
+  table.sign-row td.left{padding-right:20pt}
+  table.sign-row td.r{padding-left:20pt}
+  .lead{font-size:12pt;color:#5b524a;margin-bottom:6px}
+  .sign h3{margin:0 0 6px;font-size:15pt;font-weight:600;color:#1f1a15;font-family:'Manrope','Helvetica Neue',Arial,sans-serif}
+  .sign p{margin:0;font-size:12pt;line-height:1.65;color:#5b524a}
+  .stamp-cell{border-top:1px solid #c8b994;padding-top:18px;text-align:right;font-family:'Consolas','Courier New',monospace;font-size:10px;letter-spacing:.22em;color:#5b524a;line-height:2}
+  .stamp-cell b{color:#1f1a15;font-weight:600;letter-spacing:.16em}
+  table.page-foot{width:100%;border-collapse:collapse;margin-top:40px;border-top:1px solid #d9cdb6}
+  table.page-foot td{padding:18px 0 0 0;font-family:'Consolas','Courier New',monospace;font-size:10px;letter-spacing:.24em;color:#8a7f73;text-transform:uppercase;vertical-align:middle}
+  table.page-foot td.c{text-align:center;width:120pt}
+  table.page-foot td.r{text-align:right}
+  .accent-bar{width:80px;height:3px;background:#7a5a36;display:inline-block}
 </style>
 </head>
 <body>
-<div class="WordSection1">
-<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
-<tr>
-  <!-- DARK SIDEBAR -->
-  <td valign="top" style="width:200pt;background:#1d1a17;padding:34pt 22pt 34pt 22pt;color:#f3ebd9;">
-    <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:38pt;border:1.5pt solid #f3ebd9;width:120pt;">
-      <tr><td style="padding:18pt 0 6pt 0;text-align:center;font-family:Georgia,serif;font-size:22pt;font-weight:700;letter-spacing:.10em;line-height:1;color:#f3ebd9;">KUB</td></tr>
-      <tr><td style="padding:0;border-top:1pt solid #f3ebd9;line-height:0;font-size:0;">&nbsp;</td></tr>
-      <tr><td style="padding:6pt 0 18pt 0;text-align:center;font-family:Georgia,serif;font-size:22pt;font-weight:700;letter-spacing:.10em;line-height:1;color:#f3ebd9;">HOUSE</td></tr>
-    </table>
-    <div style="font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.14em;line-height:1.6;color:#f3ebd9;">
-      KUB HOUSE<br>
-      MODERN WOOD<br>
-      DEVELOPMENT
-    </div>
-    <div style="margin-top:28pt;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.14em;line-height:1.6;color:#f3ebd9;">
-      EST. 2014<br>
-      MADE IN MOSCOW
-    </div>
-  </td>
-  <!-- CONTENT -->
-  <td valign="top" style="background:#f5ecdb;padding:34pt 38pt 38pt 38pt;">
-    <div style="font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.18em;color:#6b6258;text-transform:uppercase;">${headLine}</div>
-    <h1 style="font-family:Georgia,serif;font-size:24pt;font-weight:600;margin:16pt 0 14pt 0;line-height:1.2;color:#1d1a17;">${titleHtml}</h1>
-    ${subLine ? `<div style="font-family:Georgia,serif;font-size:11pt;color:#2b2722;line-height:1.5;">${subLine}</div>` : ''}
-    <hr style="border:0;border-top:1px solid #c9b988;margin:24pt 0 22pt 0;">
-    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-bottom:30pt;">
-      <tr>
-        <td valign="top" style="padding-right:14pt;width:25%;">
-          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">Телефон</div>
-          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;"><b>+7 (495) 128-41-11</b></div>
-        </td>
-        <td valign="top" style="padding-right:14pt;width:25%;">
-          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">Почта &middot; Сайт</div>
-          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;line-height:1.5;"><b>info@kub.team</b><br>kub.house</div>
-        </td>
-        <td valign="top" style="padding-right:14pt;width:25%;">
-          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">Офис</div>
-          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;line-height:1.5;"><b>Москва</b>, Малая<br>Ордынка 39 с1</div>
-        </td>
-        <td valign="top" style="width:25%;">
-          <div style="font-family:Arial,sans-serif;font-size:8pt;letter-spacing:.16em;color:#8c8378;text-transform:uppercase;margin-bottom:6pt;">График</div>
-          <div style="font-family:Georgia,serif;font-size:11pt;color:#1d1a17;line-height:1.5;">Пн&ndash;Пт 10:00&ndash;18:00<br>Сб&ndash;Вс: выходной</div>
-        </td>
+<div class="page"><table class="layout"><tr>
+<td class="side">
+  <div class="logo-tile">
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M 12 12 L 12 188 L 188 188 L 188 70 M 188 12 L 12 12" fill="none" stroke="#1f1a15" stroke-width="7" stroke-linejoin="miter" stroke-linecap="square"/>
+      <text x="28" y="92" font-family="Helvetica, Arial, sans-serif" font-weight="900" font-size="44" fill="#1f1a15">KUB</text>
+      <text x="28" y="138" font-family="Helvetica, Arial, sans-serif" font-weight="900" font-size="44" fill="#1f1a15">HOUSE</text>
+    </svg>
+  </div>
+  <div class="stamp">
+    <div><b style="letter-spacing:.22em">KUB&nbsp;HOUSE</b></div>
+    <div class="accent">Modern Wood</div>
+    <div class="accent">Development</div>
+  </div>
+  <div class="side-foot">EST. 2014<br>MADE IN MOSCOW</div>
+</td>
+<td class="main">
+  <div class="meta">${metaLine}</div>
+  <h1 class="title">${titleLine}</h1>
+  ${recipientLine ? `<div class="recipient">${recipientLine}</div>` : ''}
+  <table class="contacts"><tr>
+    <td><div class="contacts-label">Телефон</div><div class="contacts-val"><b>+7 (495) 128&#8209;41&#8209;11</b></div></td>
+    <td><div class="contacts-label">Почта &middot; Сайт</div><div class="contacts-val"><b>info@kub.team</b><br>kub.house</div></td>
+    <td><div class="contacts-label">Офис</div><div class="contacts-val"><b>Москва</b>, Малая<br>Ордынка 39 с1</div></td>
+    <td><div class="contacts-label">График</div><div class="contacts-val"><b>Пн&ndash;Пт</b> 10:00&ndash;18:00<br>Сб&ndash;Вс: выходной</div></td>
+  </tr></table>
+  <div class="section-eyebrow">Ориентировочная смета</div>
+  <table class="estimate">
+    <thead><tr>
+      <th>&#8470;</th>
+      <th>Наименование</th>
+      <th class="right">Цена,&nbsp;&#8381;</th>
+      <th class="right">Кол&#8209;во</th>
+      <th class="right">Итого,&nbsp;&#8381;</th>
+    </tr></thead>
+    <tbody>${rowsHtml}
+      <tr class="total">
+        <td class="idx"></td>
+        <td class="name"><b>Итого по&nbsp;объекту</b></td>
+        <td></td><td></td>
+        <td class="right sum">${grandTotalStr}</td>
       </tr>
-    </table>
-    <div style="font-family:Arial,sans-serif;font-size:10pt;letter-spacing:.22em;color:#8c8378;text-transform:uppercase;margin-bottom:14pt;">Ориентировочная смета</div>
-    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
-      <thead>
-        <tr style="background:#1d1a17;color:#f3ebd9;">
-          <th style="padding:18pt 10pt;text-align:left;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;width:40pt;">&#8470;</th>
-          <th style="padding:18pt 10pt;text-align:left;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Наименование</th>
-          <th style="padding:18pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Цена, &#8381;</th>
-          <th style="padding:18pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Кол-во</th>
-          <th style="padding:18pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:9pt;letter-spacing:.16em;font-weight:600;">Итого, &#8381;</th>
-        </tr>
-      </thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
-    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:18pt;">
-      <tr>
-        <td style="padding:6pt 10pt;font-family:Georgia,serif;font-size:11pt;color:#4a4239;">Сумма без НДС</td>
-        <td style="padding:6pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:11pt;font-weight:600;color:#1d1a17;">${num(totals.subtotal)} &#8381;</td>
-      </tr>
-      <tr>
-        <td style="padding:6pt 10pt;font-family:Georgia,serif;font-size:11pt;color:#4a4239;">НДС 20%</td>
-        <td style="padding:6pt 10pt;text-align:right;font-family:Arial,sans-serif;font-size:11pt;font-weight:600;color:#1d1a17;">${num(totals.vat)} &#8381;</td>
-      </tr>
-      <tr>
-        <td style="padding:14pt 10pt 6pt;border-top:2pt solid #1d1a17;font-family:Georgia,serif;font-size:14pt;font-weight:700;color:#1d1a17;">Итого с НДС</td>
-        <td style="padding:14pt 10pt 6pt;border-top:2pt solid #1d1a17;text-align:right;font-family:Arial,sans-serif;font-size:14pt;font-weight:700;color:#1d1a17;">${num(totals.grand)} &#8381;</td>
-      </tr>
-    </table>
-  </td>
-</tr>
-</table>
-</div>
+    </tbody>
+  </table>
+  <table class="sign-row"><tr>
+    <td class="left sign">
+      <div class="lead">С уважением,</div>
+      <h3>${esc(estimator || 'Менеджер проекта')}</h3>
+      <p>KUB&nbsp;HOUSE<br>+7 (495) 128&#8209;41&#8209;11 &middot; info@kub.team</p>
+    </td>
+    <td class="r">
+      <div class="stamp-cell">
+        <div>Действительно до &middot; <b>${vu}</b></div>
+        <div>М.&nbsp;П.</div>
+      </div>
+    </td>
+  </tr></table>
+  <table class="page-foot"><tr>
+    <td>kub.house</td>
+    <td class="c"><span class="accent-bar"></span></td>
+    <td class="r">Стр. 01</td>
+  </tr></table>
+</td>
+</tr></table></div>
 </body></html>`;
 
     const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '').trim();
