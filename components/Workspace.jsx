@@ -786,6 +786,12 @@ function Workspace({ embedded = false, onTheme, theme }) {
     if (f) est.actions.handleFile(f);
     e.target.value = '';
   };
+  const addRowAndScroll = () => {
+    est.actions.addBlankRow();
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    });
+  };
 
   return (
     <div className="col" style={{
@@ -814,13 +820,13 @@ function Workspace({ embedded = false, onTheme, theme }) {
               onClose={() => est.actions.setQuery("")}
             />
           </div>
-          <PositionsHeader est={est} onAddRow={est.actions.addBlankRow} />
+          <PositionsHeader est={est} onAddRow={addRowAndScroll} />
           <EstimateSearch rows={est.state.estimate} />
           <ColumnsHeader />
           {est.state.estimate.length === 0 ? (
             <EmptyState
               onUpload={onUploadClick}
-              onAddRow={est.actions.addBlankRow}
+              onAddRow={addRowAndScroll}
               catalogReady={est.state.catalogReady}
             />
           ) : (
