@@ -142,10 +142,12 @@ function isRelevantCandidate(query, candidate) {
     const qStems = qTokens.map(stemToken);
     let matchIdx = -1;
     for (let i = 0; i < allTokens.length; i++) {
-        if (qStems.some(s => allTokens[i].startsWith(s))) { matchIdx = i; break; }
+        if (!qStems.some(s => allTokens[i].startsWith(s))) continue;
+        if (ADJECTIVE_ENDING.test(allTokens[i])) continue;
+        matchIdx = i;
+        break;
     }
     if (matchIdx === -1) return false;
-    if (ADJECTIVE_ENDING.test(allTokens[matchIdx])) return false;
     for (let i = 0; i < matchIdx; i++) {
         const t = allTokens[i];
         if (CONNECTOR_WORDS.has(t)) return false;
