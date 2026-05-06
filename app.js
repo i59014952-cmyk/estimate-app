@@ -169,7 +169,7 @@ function fuzzyFindIn(qTokens, pool) {
 }
 
 function fuzzyFind(query) {
-    const qTokens = tokenize(query);
+    const qTokens = Array.from(new Set(tokenize(query)));
     if (qTokens.length === 0) return null;
     const local = fuzzyFindIn(qTokens, catalog);
     if (local) return { ...local, source: 'local' };
