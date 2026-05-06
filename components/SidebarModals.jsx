@@ -292,43 +292,78 @@ function KHMaterialsView() {
 
 // ---------- Подрядчики ----------
 const KH_CONTRACTORS_KEY = 'kh-contractors-v1';
+const KH_SEEDED_KEY = 'kh-contractors-seeded-v2';
 window.KH_CONTRACTOR_FILES = window.KH_CONTRACTOR_FILES || new Map();
 const khLoadContractors = () => { try { return JSON.parse(localStorage.getItem(KH_CONTRACTORS_KEY) || '[]'); } catch { return []; } };
 const khSaveContractors = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); } catch {} };
 
-const KH_VENDORS = [
-  { name: 'ТЕХНОНИКОЛЬ',     url: 'https://www.tn.ru/',             type: 'Производитель', desc: 'Кровля, гидро- и теплоизоляция, фасады' },
-  { name: 'Segezha Group',    url: 'https://segezha-group.com/',     type: 'Производитель', desc: 'Пиломатериалы, фанера, клеёный брус, бумага' },
-  { name: 'CLT Development',  url: 'https://cltdevelopment.ru/products', type: 'Производитель', desc: 'CLT-панели, инжиниринг' },
-  { name: 'Adler-Werk',       url: 'https://adler-lacke.ru/',        type: 'Производитель', desc: 'ЛКМ для дерева, лаки, масла, краски' },
-  { name: 'КЗС',              url: 'https://kzs.ru/',                type: 'Поставщик',     desc: 'Стройматериалы' },
-  { name: 'Dörken',           url: 'https://www.doerken.com/ru/ru/start', type: 'Производитель', desc: 'DELTA-мембраны, гидро- и пароизоляция' },
+const KH_SEED = [
+  { name: 'ТЕХНОНИКОЛЬ',     type: 'Производитель', email: 'test1@mail.ru', website: 'https://www.tn.ru/',                  org: 'Кровля, гидро- и теплоизоляция, фасады' },
+  { name: 'Segezha Group',   type: 'Производитель', email: 'test2@mail.ru', website: 'https://segezha-group.com/',          org: 'Пиломатериалы, фанера, клеёный брус, бумага' },
+  { name: 'CLT Development', type: 'Производитель', email: 'test3@mail.ru', website: 'https://cltdevelopment.ru/products',  org: 'CLT-панели, инжиниринг' },
+  { name: 'Adler-Werk',      type: 'Производитель', email: 'test4@mail.ru', website: 'https://adler-lacke.ru/',             org: 'ЛКМ для дерева, лаки, масла, краски' },
+  { name: 'КЗС',             type: 'Поставщик',     email: 'test5@mail.ru', website: 'https://kzs.ru/',                     org: 'Стройматериалы' },
+  { name: 'Dörken',          type: 'Производитель', email: 'test6@mail.ru', website: 'https://www.doerken.com/ru/ru/start', org: 'DELTA-мембраны, гидро- и пароизоляция' },
 ];
+
+function khSeedIfNeeded(current) {
+  if (localStorage.getItem(KH_SEEDED_KEY)) return current;
+  const existing = new Set(current.map(c => (c.name || '').trim().toLowerCase()));
+  const fresh = KH_SEED
+    .filter(v => !existing.has(v.name.trim().toLowerCase()))
+    .map((v, i) => ({ id: 'seed-' + i + '-' + Date.now(), ...v }));
+  const next = [...fresh, ...current];
+  khSaveContractors(next);
+  try { localStorage.setItem(KH_SEEDED_KEY, '1'); } catch {}
+  return next;
+}
 
 function KHContractorsView() {
   const data = useKHData();
-  const [list, setList] = React.useState(khLoadContractors);
-  const [adding, setAdding] = React.useState(false);
-  const [draft, setDraft] = React.useState({ name: '', email: '', type: 'Поставщик', org: '', website: '' });
+  const [list, setList] = React.useState(() => khSeedIfNeeded(khLoadContractors()));
+  const [tab, setTab] = React.useState('Производители');
+  const [formOpen, setFormOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [draft, setDraft] = React.useState({ name: '', email: '', type: 'Производитель', org: '', website: '' });
   const [, force] = React.useReducer(x => x + 1, 0);
 
   const persist = (next) => { setList(next); khSaveContractors(next); };
 
-  const addOne = () => {
+  const counts = {
+    'Производители': list.filter(c => c.type === 'Производитель').length,
+    'Подрядчики':    list.filter(c => c.type !== 'Производитель').length,
+  };
+  const filtered = list.filter(c =>
+    tab === 'Производители' ? c.type === 'Производитель' : c.type !== 'Производитель'
+  );
+
+  const startAdd = () => {
+    setDraft({ name: '', email: '', type: tab === 'Производители' ? 'Производитель' : 'Поставщик', org: '', website: '' });
+    setEditingId(null);
+    setFormOpen(true);
+  };
+  const startEdit = (c) => {
+    setDraft({ name: c.name || '', email: c.email || '', type: c.type || 'Поставщик', org: c.org || '', website: c.website || '' });
+    setEditingId(c.id);
+    setFormOpen(true);
+  };
+  const cancelForm = () => { setFormOpen(false); setEditingId(null); };
+
+  const submitForm = (e) => {
+    if (e) e.preventDefault();
     const name = draft.name.trim(), email = draft.email.trim();
     if (!name || !email) return;
-    persist([{ id: 'u-' + Date.now(), name, email, type: draft.type, org: draft.org.trim(), website: draft.website.trim() }, ...list]);
-    setDraft({ name: '', email: '', type: 'Поставщик', org: '', website: '' });
-    setAdding(false);
-  };
-
-  const startAddFromVendor = (v) => {
-    setDraft({ name: v.name, email: '', type: v.type, org: '', website: v.url });
-    setAdding(true);
+    const fields = { name, email, type: draft.type, org: draft.org.trim(), website: draft.website.trim() };
+    if (editingId) {
+      persist(list.map(c => c.id === editingId ? { ...c, ...fields } : c));
+    } else {
+      persist([{ id: 'u-' + Date.now(), ...fields }, ...list]);
+    }
+    cancelForm();
   };
 
   const removeOne = (id) => {
-    if (!confirm('Удалить подрядчика?')) return;
+    if (!confirm('Удалить запись?')) return;
     persist(list.filter(c => c.id !== id));
     window.KH_CONTRACTOR_FILES.delete(id);
   };
@@ -360,11 +395,7 @@ function KHContractorsView() {
     if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
       try {
         try { await navigator.clipboard.writeText(c.email); } catch (_) {}
-        await navigator.share({
-          files: [f],
-          title: 'Запрос КП',
-          text: body,
-        });
+        await navigator.share({ files: [f], title: 'Запрос КП', text: body });
         return;
       } catch (err) {
         if (err && err.name === 'AbortError') return;
@@ -393,125 +424,101 @@ function KHContractorsView() {
 
   const sizeLabel = (n) => !n ? '' : n < 1024 ? `${n} Б` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} КБ` : `${(n / 1024 / 1024).toFixed(1)} МБ`;
 
+  const Tab = ({ id }) => (
+    <button
+      onClick={() => setTab(id)}
+      style={{
+        padding: '8px 14px', border: 'none', borderBottom: '2px solid ' + (tab === id ? 'var(--ink)' : 'transparent'),
+        background: 'transparent', color: tab === id ? 'var(--ink)' : 'var(--ink-3)',
+        fontWeight: tab === id ? 600 : 400, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--sans)',
+      }}
+    >{id} <span style={{ color: 'var(--ink-4)', marginLeft: 4 }}>· {counts[id]}</span></button>
+  );
+
   return (
-    <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="kh-toolbar" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <div style={{ flex: 1, color: 'var(--ink-3)', fontSize: 13 }}>
-          Свои подрядчики · {list.length}
-        </div>
-        {!adding && <button className="kh-btn-primary" onClick={() => setAdding(true)}>+ Добавить подрядчика</button>}
+    <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid var(--rule)' }}>
+        <Tab id="Производители" />
+        <Tab id="Подрядчики" />
+        {!formOpen && (
+          <button className="kh-btn-primary" onClick={startAdd} style={{ marginLeft: 'auto', marginBottom: 6 }}>
+            + Добавить {tab === 'Производители' ? 'производителя' : 'подрядчика'}
+          </button>
+        )}
       </div>
 
-      {adding && (
-        <form onSubmit={(e) => { e.preventDefault(); addOne(); }}
+      {formOpen && (
+        <form onSubmit={submitForm}
           className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
-          <div style={{ fontWeight: 600 }}>Новый подрядчик</div>
+          <div style={{ fontWeight: 600 }}>{editingId ? 'Редактировать запись' : 'Новая запись'}</div>
           <input autoFocus placeholder="Название / ФИО" value={draft.name}
             onChange={e => setDraft({ ...draft, name: e.target.value })} style={khInputStyle()} />
           <input placeholder="Email" type="email" value={draft.email}
             onChange={e => setDraft({ ...draft, email: e.target.value })} style={khInputStyle()} />
           <div style={{ display: 'flex', gap: 8 }}>
             <select value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value })} style={{ ...khInputStyle(), width: 200 }}>
-              <option>Поставщик</option><option>Бригада</option><option>Субподрядчик</option><option>Производитель</option>
+              <option>Производитель</option><option>Поставщик</option><option>Бригада</option><option>Субподрядчик</option>
             </select>
-            <input placeholder="Организация (необязательно)" value={draft.org}
+            <input placeholder="Описание / организация" value={draft.org}
               onChange={e => setDraft({ ...draft, org: e.target.value })} style={{ ...khInputStyle(), flex: 1 }} />
           </div>
           <input placeholder="Сайт (необязательно)" value={draft.website}
             onChange={e => setDraft({ ...draft, website: e.target.value })} style={khInputStyle()} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-sm" onClick={() => setAdding(false)}>Отмена</button>
-            <button type="submit" className="kh-btn-primary" disabled={!draft.name.trim() || !draft.email.trim()}>Сохранить</button>
+            <button type="button" className="btn btn-sm" onClick={cancelForm}>Отмена</button>
+            <button type="submit" className="kh-btn-primary" disabled={!draft.name.trim() || !draft.email.trim()}>
+              {editingId ? 'Сохранить изменения' : 'Сохранить'}
+            </button>
           </div>
         </form>
       )}
 
-      {list.length > 0 && (
-        <div className="kh-list">
-          {list.map(c => {
-            const fileInMem = window.KH_CONTRACTOR_FILES.get(c.id);
-            const hasFile = !!(fileInMem || c.fileName);
-            return (
-              <div key={c.id} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div>
-                    <div className="kh-card__title">{c.name}</div>
-                    <div className="kh-card__meta">{c.type}{c.org ? ' · ' + c.org : ''} · {c.email}</div>
-                    {c.website && (
-                      <div className="kh-card__meta">
-                        <a href={c.website} target="_blank" rel="noopener noreferrer"
-                           style={{ color: 'var(--moss)', textDecoration: 'none' }}>
-                          {c.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                        </a>
-                      </div>
-                    )}
-                  </div>
+      {filtered.length === 0 && !formOpen && (
+        <div className="kh-empty" style={{ padding: 16 }}>
+          {tab === 'Производители' ? 'Производителей нет' : 'Подрядчиков нет'} — нажмите «+ Добавить».
+        </div>
+      )}
+
+      <div className="kh-list">
+        {filtered.map(c => {
+          const fileInMem = window.KH_CONTRACTOR_FILES.get(c.id);
+          const hasFile = !!(fileInMem || c.fileName);
+          return (
+            <div key={c.id} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="kh-card__title">{c.name}</div>
+                  <div className="kh-card__meta">{c.type}{c.org ? ' · ' + c.org : ''} · {c.email}</div>
+                  {c.website && (
+                    <div className="kh-card__meta">
+                      <a href={c.website} target="_blank" rel="noopener noreferrer"
+                         style={{ color: 'var(--moss)', textDecoration: 'none' }}>
+                        {c.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                      </a>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn btn-sm" onClick={() => startEdit(c)} title="Редактировать">✎</button>
                   <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeOne(c.id)} title="Удалить">×</button>
                 </div>
-                <div style={{ fontSize: 12, color: hasFile ? 'var(--ink-2)' : 'var(--ink-4)' }}>
-                  {fileInMem
-                    ? `📎 ${fileInMem.name}${fileInMem.size ? ' · ' + sizeLabel(fileInMem.size) : ''}`
-                    : c.fileName
-                      ? `📎 ${c.fileName}${c.fileSize ? ' · ' + sizeLabel(c.fileSize) : ''} (нужно прикрепить заново)`
-                      : 'Файл не прикреплён'}
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <button className="btn btn-sm" onClick={() => attachFile(c.id)}>{hasFile ? 'Заменить файл' : 'Прикрепить файл'}</button>
-                  {hasFile && <button className="btn btn-sm" onClick={() => detachFile(c.id)}>Убрать файл</button>}
-                  <button className="kh-btn-primary" onClick={() => sendRequest(c)} style={{ marginLeft: 'auto' }}>Отправить запрос КП →</button>
-                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {!list.length && !adding && (
-        <div className="kh-empty" style={{ padding: 16 }}>
-          Своих подрядчиков пока нет — нажмите «+ Добавить подрядчика» или выберите готовую карточку ниже.
-        </div>
-      )}
-
-      <div>
-        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-3)', margin: '8px 0', letterSpacing: '.04em' }}>
-          ПРОИЗВОДИТЕЛИ · {KH_VENDORS.length}
-        </div>
-        <div className="kh-list">
-          {KH_VENDORS.map(v => (
-            <div key={v.url} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div className="kh-card__title">{v.name}</div>
-              <div className="kh-card__meta">{v.type} · {v.desc}</div>
-              <div className="kh-card__meta">
-                <a href={v.url} target="_blank" rel="noopener noreferrer"
-                   style={{ color: 'var(--moss)', textDecoration: 'none' }}>
-                  {v.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                </a>
+              <div style={{ fontSize: 12, color: hasFile ? 'var(--ink-2)' : 'var(--ink-4)' }}>
+                {fileInMem
+                  ? `📎 ${fileInMem.name}${fileInMem.size ? ' · ' + sizeLabel(fileInMem.size) : ''}`
+                  : c.fileName
+                    ? `📎 ${c.fileName}${c.fileSize ? ' · ' + sizeLabel(c.fileSize) : ''} (нужно прикрепить заново)`
+                    : 'Файл не прикреплён'}
               </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                <a href={v.url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ textDecoration: 'none' }}>Открыть сайт →</a>
-                <button className="kh-btn-primary" style={{ marginLeft: 'auto' }} onClick={() => startAddFromVendor(v)}>+ В свои</button>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                <button className="btn btn-sm" onClick={() => attachFile(c.id)}>{hasFile ? 'Заменить файл' : 'Прикрепить файл'}</button>
+                {hasFile && <button className="btn btn-sm" onClick={() => detachFile(c.id)}>Убрать файл</button>}
+                <button className="kh-btn-primary" onClick={() => sendRequest(c)} style={{ marginLeft: 'auto' }}>Отправить запрос КП →</button>
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
-
-      {data.contractors.length > 0 && (
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-3)', margin: '8px 0', letterSpacing: '.04em' }}>
-            ИЗ КАТАЛОГА · {data.contractors.length}
-          </div>
-          <div className="kh-list">
-            {data.contractors.map(c => (
-              <div key={c.id} className="kh-card kh-card--static">
-                <div className="kh-card__total">★ {c.rating}</div>
-                <div className="kh-card__title">{c.name}</div>
-                <div className="kh-card__meta">{c.type} · проектов: {c.projects}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
