@@ -93,7 +93,6 @@ const OBJECTS = [
 ];
 
 const NAV = [
-  { id: "estimates", label: "Сметы", icon: "doc", count: 24, active: true },
   { id: "objects", label: "Объекты", icon: "house", count: 18 },
   { id: "materials", label: "Материалы", icon: "cube", count: 2_078 },
   { id: "database", label: "База данных", icon: "layers" },
@@ -102,8 +101,6 @@ const NAV = [
 ];
 
 const NAV2 = [
-  { id: "works", label: "Работы", icon: "wrench" },
-  { id: "norms", label: "Нормативы", icon: "ruler" },
   { id: "templates", label: "Шаблоны", icon: "tpl" },
 ];
 
