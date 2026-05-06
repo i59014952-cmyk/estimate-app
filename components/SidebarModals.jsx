@@ -1058,6 +1058,54 @@ function khSeedTplsIfNeeded(current) {
   return next;
 }
 
+async function khParseTemplateFile(file) {
+  const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
+  let rows;
+  if (ext === 'csv') {
+    const text = await file.text();
+    rows = text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/[,;\t]/));
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    if (typeof XLSX === 'undefined') throw new Error('XLSX не загружен');
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+  } else {
+    throw new Error('поддерживаются Excel (.xlsx/.xls) и CSV');
+  }
+  if (!rows.length) return [];
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const head = rows[0].map(norm);
+  const detect = (...keys) => head.findIndex(h => keys.some(k => h.includes(k)));
+  const nameIdx = detect('наимен', 'name', 'позиц', 'товар', 'материал', 'работ');
+  const unitIdx = detect('ед.', 'ед ', 'unit', 'един');
+  const qtyIdx  = detect('кол-во', 'кол', 'qty', 'количеств');
+  const priceIdx = detect('цена', 'price', 'стоимост');
+  const hasHeader = nameIdx !== -1;
+  const start = hasHeader ? 1 : 0;
+  const toNum = (s) => parseFloat(String(s || '').replace(/[^0-9.,\-]/g, '').replace(',', '.')) || 0;
+  const out = [];
+  for (let i = start; i < rows.length; i++) {
+    const row = rows[i]; if (!row) continue;
+    const cells = row.map(c => c == null ? '' : String(c).trim());
+    let name = '', unit = '', qty = 0, price = 0;
+    if (hasHeader) {
+      name = cells[nameIdx] || '';
+      unit = unitIdx !== -1 ? cells[unitIdx] : '';
+      qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
+      price = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
+    } else {
+      name = cells[0] || '';
+      unit = cells[1] || '';
+      qty = toNum(cells[2]);
+      price = toNum(cells[3]);
+    }
+    if (!name || name.length < 2) continue;
+    out.push({ name, unit, qty, unitPrice: price });
+  }
+  return out;
+}
+
 function KHTemplatesView() {
   const [list, setList] = React.useState(() => khSeedTplsIfNeeded(khLoadTpls()));
   const [openId, setOpenId] = React.useState(null);
@@ -1065,6 +1113,9 @@ function KHTemplatesView() {
   const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '' });
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
+  const [uploadStatus, setUploadStatus] = React.useState(null);
+  const fileRef = React.useRef(null);
+  const uploadTplIdRef = React.useRef(null);
 
   const persist = (next) => { setList(next); khSaveTpls(next); };
   const totalOf = (t) => (t.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
@@ -1104,14 +1155,59 @@ function KHTemplatesView() {
     persist(list.map(t => t.id === tplId ? { ...t, items: t.items.filter(it => it.id !== itemId) } : t));
   };
 
+  const onUploadClick = (tplId) => {
+    uploadTplIdRef.current = tplId;
+    if (fileRef.current) fileRef.current.click();
+  };
+  const onFileChange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    const tplId = uploadTplIdRef.current;
+    if (!files.length || !tplId) return;
+    let totalAdded = 0; const errors = [];
+    let nextList = list;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setUploadStatus({ kind: 'busy', text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
+      try {
+        const parsed = await khParseTemplateFile(f);
+        const newItems = parsed.map((p, j) => ({ id: 'tpli-' + Date.now() + '-' + i + '-' + j, ...p }));
+        nextList = nextList.map(t => t.id === tplId ? { ...t, items: [...(t.items || []), ...newItems] } : t);
+        totalAdded += newItems.length;
+      } catch (err) {
+        errors.push(`${f.name}: ${err.message || err}`);
+      }
+    }
+    persist(nextList);
+    if (errors.length) {
+      setUploadStatus({ kind: 'error', text: `Ошибки: ${errors.join('; ')}` });
+      setTimeout(() => setUploadStatus(null), 8000);
+    } else {
+      setUploadStatus({ kind: 'ok', text: `Файлов: ${files.length}. Позиций добавлено: ${totalAdded}` });
+      setTimeout(() => setUploadStatus(null), 5000);
+    }
+  };
+
   const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
 
   return (
     <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <input ref={fileRef} type="file" multiple
+        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+        style={{ display: 'none' }} onChange={onFileChange} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid var(--rule)', paddingBottom: 8 }}>
         <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>Шаблонов · {list.length}</div>
         {!tplFormOpen && <button className="kh-btn-primary" onClick={startAddTpl} style={{ marginLeft: 'auto' }}>+ Добавить шаблон</button>}
       </div>
+
+      {uploadStatus && (
+        <div style={{
+          padding: '10px 12px', borderRadius: 8, fontSize: 13,
+          border: '1px solid ' + (uploadStatus.kind === 'error' ? 'var(--rust)' : 'var(--rule)'),
+          background: 'var(--paper-card)',
+          color: uploadStatus.kind === 'error' ? 'var(--rust)' : 'var(--ink-2)',
+        }}>{uploadStatus.text}</div>
+      )}
 
       {tplFormOpen && (
         <form onSubmit={submitTpl} className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
@@ -1160,12 +1256,15 @@ function KHTemplatesView() {
                   {total ? <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{num(total)} ₽</div> : null}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={() => setOpenId(isOpen ? null : t.id)}>
                   {isOpen ? 'Свернуть' : 'Состав'}
                 </button>
                 {isOpen && !isAddingItem && (
                   <button className="btn btn-sm" onClick={() => setItemDraft({ tplId: t.id, name: '', unit: '', qty: '', unitPrice: '' })}>+ Позиция</button>
+                )}
+                {isOpen && (
+                  <button className="btn btn-sm" onClick={() => onUploadClick(t.id)}>↑ Загрузить XLSX/CSV</button>
                 )}
               </div>
               {isOpen && (t.items || []).length > 0 && (
