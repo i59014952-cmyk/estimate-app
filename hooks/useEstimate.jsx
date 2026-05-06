@@ -521,14 +521,16 @@ function useEstimate() {
   .contacts-label{font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:600;letter-spacing:.22em;color:#7a5a36;margin-bottom:8px;text-transform:uppercase}
   .contacts-val{font-size:13pt;line-height:1.5;color:#5b524a}
   .contacts-val b{color:#1f1a15;font-weight:600}
-  .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6}
-  table.estimate{width:100%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9}
-  table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:left;border:0}
-  table.estimate th.right{text-align:right}
-  table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a}
-  table.estimate td.idx{color:#8a7f73;font-family:'Consolas','Courier New',monospace;font-weight:500;width:64px}
+  .section-eyebrow{font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.28em;color:#7a5a36;text-transform:uppercase;margin:36px 0 16px;padding-bottom:14px;border-bottom:1px solid #d9cdb6;text-align:center}
+  .estimate-wrap{margin:0 auto}
+  table.estimate{width:100%;border-collapse:collapse;border:1px solid #d9cdb6;background:#f6f1e9;margin:0 auto}
+  table.estimate th{background:#1f1a15;color:#f3ead8;font-family:'Consolas','Courier New',monospace;font-size:10px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;padding:16px 18px;text-align:center;border:0}
+  table.estimate th.left{text-align:left}
+  table.estimate td{padding:20px 18px;border-bottom:1px solid #d9cdb6;vertical-align:top;font-size:13pt;color:#5b524a;text-align:center}
+  table.estimate td.idx{color:#8a7f73;font-family:'Consolas','Courier New',monospace;font-weight:500;width:64px;text-align:center}
+  table.estimate td.name{text-align:left}
   table.estimate td.name b{display:block;color:#1f1a15;font-size:14pt;font-weight:600;margin-bottom:2px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif}
-  table.estimate td.right{text-align:right;color:#1f1a15}
+  table.estimate td.right{text-align:center;color:#1f1a15}
   table.estimate tr.total td{background:#efe7d7;border-bottom:0;padding:22px 18px}
   .sum{font-family:'Consolas','Courier New',monospace;font-size:18pt;font-weight:600;color:#7a5a36;letter-spacing:.02em}
   table.sign-row{width:100%;border-collapse:collapse;margin-top:48px}
@@ -557,7 +559,7 @@ function useEstimate() {
   <h1 class="title">${titleLine}</h1>
   ${recipientLine ? `<div class="recipient">${recipientLine}</div>` : ''}
   <table class="contacts"><tr>
-    <td><div class="contacts-label">Телефон</div><div class="contacts-val"><b>+7 (495) 128&#8209;41&#8209;11</b></div></td>
+    <td><div class="contacts-label">Телефон</div><div class="contacts-val" style="white-space:nowrap"><b>+7&nbsp;(495)&nbsp;128&#8209;41&#8209;11</b></div></td>
     <td><div class="contacts-label">Почта &middot; Сайт</div><div class="contacts-val"><b>info@kub.team</b><br>kub.house</div></td>
     <td><div class="contacts-label">Офис</div><div class="contacts-val"><b>Москва</b>, Малая<br>Ордынка 39 с1</div></td>
     <td><div class="contacts-label">График</div><div class="contacts-val"><b>Пн&ndash;Пт</b> 10:00&ndash;18:00<br>Сб&ndash;Вс: выходной</div></td>
@@ -566,10 +568,10 @@ function useEstimate() {
   <table class="estimate">
     <thead><tr>
       <th>&#8470;</th>
-      <th>Наименование</th>
-      <th class="right">Цена,&nbsp;&#8381;</th>
-      <th class="right">Кол&#8209;во</th>
-      <th class="right">Итого,&nbsp;&#8381;</th>
+      <th class="left">Наименование</th>
+      <th>Цена,&nbsp;&#8381;</th>
+      <th>Кол&#8209;во</th>
+      <th>Итого,&nbsp;&#8381;</th>
     </tr></thead>
     <tbody>${rowsHtml}
       <tr class="total">
