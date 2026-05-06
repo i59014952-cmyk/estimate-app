@@ -4,6 +4,7 @@
 function KHDatabaseView({ est }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState("all");
+  const [showHidden, setShowHidden] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
@@ -14,6 +15,10 @@ function KHDatabaseView({ est }) {
   const userCatalog = est.state.userCatalog;
   const localCatalog = est.state.catalog;
   const ddcCatalog = est.state.ddcCatalog;
+  const hiddenCatalog = est.state.hiddenCatalog || new Set();
+
+  const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
+  const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
 
   const merged = React.useMemo(() => [
     ...userCatalog.map(it => ({ ...it, _kind: "user" })),
@@ -21,19 +26,23 @@ function KHDatabaseView({ est }) {
     ...ddcCatalog.map(it => ({ ...it, _kind: "ddc" })),
   ], [userCatalog, localCatalog, ddcCatalog]);
 
+  const activeMerged = React.useMemo(() => merged.filter(it => !isHidden(it)), [merged, hiddenCatalog]);
+  const hiddenList = React.useMemo(() => merged.filter(isHidden), [merged, hiddenCatalog]);
+
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    let out = merged;
-    if (filter !== "all") out = out.filter(it => it._kind === filter);
+    let out = showHidden ? hiddenList : activeMerged;
+    if (!showHidden && filter !== "all") out = out.filter(it => it._kind === filter);
     if (q) out = out.filter(it => (it.name || "").toLowerCase().includes(q));
     return out.slice(0, 500);
-  }, [merged, query, filter]);
+  }, [activeMerged, hiddenList, query, filter, showHidden]);
 
   const totals = {
-    all: merged.length,
-    user: userCatalog.length,
-    local: localCatalog.length,
-    ddc: ddcCatalog.length,
+    all: activeMerged.length,
+    user: userCatalog.filter(it => !isHidden(it)).length,
+    local: localCatalog.filter(it => !isHidden(it)).length,
+    ddc: ddcCatalog.filter(it => !isHidden(it)).length,
+    hidden: hiddenList.length,
   };
 
   const startAdd = () => { setDraft({ name: "", unit: "", unitPrice: "" }); setAdding(true); };
@@ -101,12 +110,41 @@ function KHDatabaseView({ est }) {
         <button className="kh-btn-primary" onClick={onUploadClick}>↑ Загрузить XLSX/CSV</button>
       </div>
 
-      <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <FilterPill id="all" label="Все" count={totals.all} />
-        <FilterPill id="user" label="Моё" count={totals.user} />
-        <FilterPill id="local" label="JSON" count={totals.local} />
-        <FilterPill id="ddc" label="DDC" count={totals.ddc} />
-      </div>
+      {!showHidden && (
+        <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <FilterPill id="all" label="Все" count={totals.all} />
+          <FilterPill id="user" label="Моё" count={totals.user} />
+          <FilterPill id="local" label="JSON" count={totals.local} />
+          <FilterPill id="ddc" label="DDC" count={totals.ddc} />
+          {totals.hidden > 0 && (
+            <button
+              onClick={() => setShowHidden(true)}
+              className="kh-pill"
+              style={{
+                cursor: "pointer", border: "1px solid var(--rule)",
+                background: "var(--paper-card)", color: "var(--ink-3)", marginLeft: "auto",
+              }}
+              title="Показать скрытые позиции"
+            >Скрыто · {totals.hidden}</button>
+          )}
+        </div>
+      )}
+
+      {showHidden && (
+        <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button onClick={() => setShowHidden(false)} className="btn btn-sm">← К активным</button>
+          <div style={{ color: "var(--ink-3)", fontSize: 13 }}>
+            Скрытые позиции ({totals.hidden}) — не участвуют в поиске и импорте
+          </div>
+          {totals.hidden > 0 && (
+            <button
+              className="btn btn-sm"
+              style={{ marginLeft: "auto", color: "var(--rust)" }}
+              onClick={() => { if (confirm("Восстановить все скрытые позиции?")) est.actions.clearHiddenCatalog(); }}
+            >Восстановить все</button>
+          )}
+        </div>
+      )}
 
       {uploadStatus && (
         <div
@@ -179,19 +217,32 @@ function KHDatabaseView({ est }) {
                 <td className="num">{it.unitPrice ? fmt(Math.round(it.unitPrice)) + " ₽" : "—"}</td>
                 <td>
                   <div className="row" style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    <button
-                      className="btn btn-sm"
-                      title="Добавить в смету"
-                      onClick={() => est.actions.addRow({
-                        name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: 1,
-                        notFound: false, source: it._kind === "ddc" ? "ddc" : (it._kind === "user" ? "manual" : "local"),
-                      })}
-                    >+ В смету</button>
-                    {it._kind === "user" && (
+                    {!showHidden && (
                       <button
                         className="btn btn-sm"
-                        title="Удалить из базы"
-                        onClick={() => est.actions.removeCatalogItem(it.name, it.unit)}
+                        title="Добавить в смету"
+                        onClick={() => est.actions.addRow({
+                          name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: 1,
+                          notFound: false, source: it._kind === "ddc" ? "ddc" : (it._kind === "user" ? "manual" : "local"),
+                        })}
+                      >+ В смету</button>
+                    )}
+                    {showHidden ? (
+                      <button
+                        className="btn btn-sm"
+                        title="Восстановить"
+                        onClick={() => est.actions.restoreCatalogItem(it.name, it.unit)}
+                      >↺ Восстановить</button>
+                    ) : (
+                      <button
+                        className="btn btn-sm"
+                        title={it._kind === "user" ? "Удалить из базы" : "Скрыть из базы (можно восстановить)"}
+                        onClick={() => {
+                          const msg = it._kind === "user"
+                            ? `Удалить «${it.name}» из своей базы?`
+                            : `Скрыть «${it.name}» из базы? Позицию можно будет восстановить.`;
+                          if (confirm(msg)) est.actions.removeCatalogItem(it.name, it.unit, it._kind);
+                        }}
                         style={{ color: "var(--rust)" }}
                       >×</button>
                     )}

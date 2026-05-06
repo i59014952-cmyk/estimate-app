@@ -1,6 +1,23 @@
 // useEstimate.jsx — React hook owning estimate state and actions.
 
 const USER_CATALOG_KEY = "kh-user-catalog-v1";
+const HIDDEN_CATALOG_KEY = "kh-hidden-catalog-v1";
+
+const hiddenKey = (name, unit) => `${String(name || "").trim().toLowerCase()}|${String(unit || "").trim().toLowerCase()}`;
+
+function loadHiddenCatalog() {
+  try {
+    const saved = localStorage.getItem(HIDDEN_CATALOG_KEY);
+    if (!saved) return new Set();
+    const arr = JSON.parse(saved);
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter(x => typeof x === "string"));
+  } catch (_) { return new Set(); }
+}
+
+function saveHiddenCatalog(set) {
+  try { localStorage.setItem(HIDDEN_CATALOG_KEY, JSON.stringify([...set])); } catch (_) {}
+}
 
 function loadUserCatalog() {
   try {
@@ -70,7 +87,16 @@ function useEstimate() {
   const [catalog, setCatalog] = React.useState([]);
   const [ddcCatalog, setDdcCatalog] = React.useState([]);
   const [userCatalog, setUserCatalog] = React.useState(loadUserCatalog);
+  const [hiddenCatalog, setHiddenCatalog] = React.useState(loadHiddenCatalog);
   const [catalogReady, setCatalogReady] = React.useState(false);
+
+  const isHidden = React.useCallback(
+    (it) => hiddenCatalog.has(hiddenKey(it.name, it.unit)),
+    [hiddenCatalog]
+  );
+  const visibleUserCatalog = React.useMemo(() => userCatalog.filter(it => !isHidden(it)), [userCatalog, isHidden]);
+  const visibleCatalog = React.useMemo(() => catalog.filter(it => !isHidden(it)), [catalog, isHidden]);
+  const visibleDdcCatalog = React.useMemo(() => ddcCatalog.filter(it => !isHidden(it)), [ddcCatalog, isHidden]);
   const [estimate, setEstimate] = React.useState([]);
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
@@ -108,14 +134,14 @@ function useEstimate() {
     if (!query || query.length < 2) return [];
     const q = query.toLowerCase();
     const out = [];
-    for (const item of userCatalog) {
+    for (const item of visibleUserCatalog) {
       if (item.name.toLowerCase().includes(q)) {
         out.push(item);
         if (out.length >= MAX_RESULTS) break;
       }
     }
     if (out.length < MAX_RESULTS) {
-      for (const item of catalog) {
+      for (const item of visibleCatalog) {
         if (item.name.toLowerCase().includes(q)) {
           out.push(item);
           if (out.length >= MAX_RESULTS) break;
@@ -123,7 +149,7 @@ function useEstimate() {
       }
     }
     return out;
-  }, [query, catalog, userCatalog]);
+  }, [query, visibleCatalog, visibleUserCatalog]);
 
   const totals = React.useMemo(() => {
     const subtotal = estimate.reduce((s, r) => r.notFound ? s : s + r.qty * r.unitPrice, 0);
@@ -226,7 +252,7 @@ function useEstimate() {
       const reason = skipReason(name);
       if (reason) { skipped++; continue; }
       const q = isFinite(qty) && qty > 0 ? qty : 1;
-      const match = fuzzyFind(name, [...userCatalog, ...catalog], ddcCatalog);
+      const match = fuzzyFind(name, [...visibleUserCatalog, ...visibleCatalog], visibleDdcCatalog);
       if (match) {
         additions.push({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source });
       } else {
@@ -249,7 +275,7 @@ function useEstimate() {
       return out;
     });
     return { imported, notFoundCount, skipped };
-  }, [catalog, ddcCatalog, userCatalog]);
+  }, [visibleCatalog, visibleDdcCatalog, visibleUserCatalog]);
 
   const handleFile = React.useCallback((file) => {
     setStatus({ kind: "busy", text: `Обработка: ${file.name}…` });
@@ -397,10 +423,36 @@ function useEstimate() {
     });
   }, []);
 
-  const removeCatalogItem = React.useCallback((name, unit) => {
-    setUserCatalog(prev => {
-      const next = prev.filter(it => !(it.name === name && (it.unit || "") === (unit || "")));
-      saveUserCatalog(next);
+  const removeCatalogItem = React.useCallback((name, unit, kind) => {
+    if (kind === "user") {
+      setUserCatalog(prev => {
+        const next = prev.filter(it => !(it.name === name && (it.unit || "") === (unit || "")));
+        saveUserCatalog(next);
+        return next;
+      });
+      return;
+    }
+    setHiddenCatalog(prev => {
+      const next = new Set(prev);
+      next.add(hiddenKey(name, unit));
+      saveHiddenCatalog(next);
+      return next;
+    });
+  }, []);
+
+  const restoreCatalogItem = React.useCallback((name, unit) => {
+    setHiddenCatalog(prev => {
+      const next = new Set(prev);
+      next.delete(hiddenKey(name, unit));
+      saveHiddenCatalog(next);
+      return next;
+    });
+  }, []);
+
+  const clearHiddenCatalog = React.useCallback(() => {
+    setHiddenCatalog(() => {
+      const next = new Set();
+      saveHiddenCatalog(next);
       return next;
     });
   }, []);
@@ -456,11 +508,11 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
+    state: { catalog, ddcCatalog, userCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
       setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, addBlankRow,
-      addCatalogItem, removeCatalogItem, uploadCatalogFile,
+      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, uploadCatalogFile,
     },
   };
 }
