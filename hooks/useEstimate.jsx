@@ -403,6 +403,125 @@ function useEstimate() {
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
   }, [estimate, totals]);
 
+  const exportDoc = React.useCallback(() => {
+    if (estimate.length === 0) return;
+
+    let meta = {};
+    try { meta = JSON.parse(localStorage.getItem('kh-meta-v1') || '{}'); } catch (_) {}
+
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
+    const qty = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const todayStr = `${dd}.${mm}.${yyyy}`;
+    const validUntil = new Date(today.getTime() + 14 * 86400000);
+    const vu = `${String(validUntil.getDate()).padStart(2, '0')}.${String(validUntil.getMonth() + 1).padStart(2, '0')}.${validUntil.getFullYear()}`;
+    const kpNo = `КП-${yyyy}/${mm}${dd}`;
+
+    const title = meta.title || 'Смета';
+    const code = meta.code || '';
+    const kind = meta.kind || 'Резиденция';
+    const construction = meta.construction || 'Деревянный каркас';
+    const areaText = meta.areaText || '';
+    const location = meta.location || '';
+    const estimator = meta.estimator || '';
+
+    const rowsHtml = estimate.map((r, i) => `
+      <tr>
+        <td>${String(i + 1).padStart(2, '0')}</td>
+        <td>${esc(r.name)}</td>
+        <td>${esc(r.unit || '')}</td>
+        <td style="text-align:right">${qty(r.qty)}</td>
+        <td style="text-align:right">${r.notFound ? '—' : num(r.unitPrice)}</td>
+        <td style="text-align:right">${r.notFound ? '—' : num(r.qty * r.unitPrice)}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>Коммерческое предложение ${kpNo}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+@page { size: A4; margin: 2cm; }
+body { font-family: Georgia, 'Times New Roman', serif; color: #1d1a17; font-size: 11pt; }
+.brand { font-size: 28pt; letter-spacing: .14em; font-weight: 700; font-family: Georgia, serif; }
+.tag { font-size: 9pt; color: #6b6258; letter-spacing: .08em; margin-bottom: 18pt; text-transform: uppercase; }
+table.head { width: 100%; border-collapse: collapse; margin-bottom: 18pt; }
+table.head td { vertical-align: top; padding: 0; border: 0; }
+table.head td.r { text-align: right; }
+.label { color: #8c8378; font-size: 9pt; letter-spacing: .06em; text-transform: uppercase; }
+h1.kp-title { font-size: 18pt; font-weight: 600; margin: 12pt 0 4pt; font-family: Georgia, serif; }
+.kp-title em { font-style: italic; }
+.client { font-size: 11pt; color: #2b2722; margin-bottom: 14pt; }
+table.items { width: 100%; border-collapse: collapse; margin: 14pt 0; font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 10pt; }
+table.items th, table.items td { border: 1px solid #d6cfc4; padding: 6pt 8pt; text-align: left; }
+table.items th { background: #f0e9dc; font-weight: 600; font-size: 9pt; letter-spacing: .04em; text-transform: uppercase; }
+table.totals { width: 100%; border-collapse: collapse; margin-top: 10pt; font-size: 11pt; }
+table.totals td { padding: 4pt 0; border: 0; }
+table.totals td.v { text-align: right; font-weight: 600; }
+table.totals tr.grand td { font-size: 14pt; font-weight: 700; border-top: 2px solid #1d1a17; padding-top: 8pt; }
+.footer { margin-top: 24pt; font-size: 10pt; color: #4a4239; line-height: 1.6; border-top: 1px solid #d6cfc4; padding-top: 14pt; }
+.footer b { color: #1d1a17; }
+</style>
+</head>
+<body>
+<table class="head"><tr>
+  <td>
+    <div class="brand">KUB·HOUSE</div>
+    <div class="tag">Modern Wood Development · Est. 2014 · Made in Moscow</div>
+  </td>
+  <td class="r">
+    <div><span class="label">Ком. предложение №</span> <b>${kpNo}</b></div>
+    <div><span class="label">Дата</span> <b>${todayStr}</b></div>
+    <div><span class="label">Действ. до</span> <b>${vu}</b></div>
+    ${estimator ? `<div><span class="label">Менеджер</span> <b>${esc(estimator)}</b></div>` : ''}
+  </td>
+</tr></table>
+
+<h1 class="kp-title">${esc(kind)} <em>«${esc(title)}»</em>${code ? ` · ${esc(code)}` : ''}</h1>
+<div class="client">${esc(construction)}${areaText ? ' · ' + esc(areaText) : ''}${location ? ' · ' + esc(location) : ''}</div>
+
+<table class="items">
+<thead><tr>
+  <th style="width:30pt">№</th>
+  <th>Наименование</th>
+  <th style="width:55pt">Ед.</th>
+  <th style="width:60pt;text-align:right">Кол-во</th>
+  <th style="width:80pt;text-align:right">Цена, ₽</th>
+  <th style="width:95pt;text-align:right">Сумма, ₽</th>
+</tr></thead>
+<tbody>${rowsHtml}</tbody>
+</table>
+
+<table class="totals">
+<tr><td>Сумма без НДС</td><td class="v">${num(totals.subtotal)} ₽</td></tr>
+<tr><td>НДС 20%</td><td class="v">${num(totals.vat)} ₽</td></tr>
+<tr class="grand"><td>Итого с НДС</td><td class="v">${num(totals.grand)} ₽</td></tr>
+</table>
+
+<div class="footer">
+<b>Контакты:</b> +7 (495) 128-41-11 · info@kub.team · kub.house<br>
+<b>Офис:</b> Москва, Малая Ордынка 39 с1 · пн–пт 10:00–18:00<br>
+<b>Гарантия:</b> 10 лет
+</div>
+</body></html>`;
+
+    const blob = new Blob(['﻿', html], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `KUB-HOUSE-${kpNo}.doc`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  }, [estimate, totals]);
+
   const addBlankRow = React.useCallback(() => {
     addRow({ name: 'Новая позиция', unit: '', unitPrice: 0, qty: 1, notFound: true, source: 'none' });
   }, [addRow]);
@@ -511,7 +630,7 @@ function useEstimate() {
     state: { catalog, ddcCatalog, userCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
       setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
-      applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, addBlankRow,
+      applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
       addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, uploadCatalogFile,
     },
   };

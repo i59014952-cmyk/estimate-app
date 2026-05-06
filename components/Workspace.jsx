@@ -478,7 +478,7 @@ function PositionsHeader({ est, onAddRow }) {
         </button>
         <button
           className="btn btn-sm"
-          onClick={est.actions.exportCsv}
+          onClick={est.actions.exportDoc}
           disabled={rowCount === 0}
         >
           <Icon name="export" size={13} /> Экспорт
