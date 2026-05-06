@@ -337,11 +337,27 @@ function KHContractorsView() {
     persist(list.map(c => c.id === id ? { ...c, fileName: undefined, fileSize: undefined, fileTime: undefined } : c));
   };
 
-  const sendRequest = (c) => {
+  const sendRequest = async (c) => {
     if (!c.email) { alert('У подрядчика не указан email'); return; }
     const f = window.KH_CONTRACTOR_FILES.get(c.id);
     const fileLine = (f || c.fileName) ? `\n\nВо вложении: ${f ? f.name : c.fileName}.` : '';
-    const body = `Здравствуйте!\n\nПросим прислать коммерческое предложение по приложенной спецификации.${fileLine}\n\nС уважением,`;
+    const body = `Здравствуйте!\n\nПросим прислать коммерческое предложение по приложенной спецификации.${fileLine}\n\nОтвет, пожалуйста, на ${c.email}\n\nС уважением,`;
+
+    if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
+      try {
+        try { await navigator.clipboard.writeText(c.email); } catch (_) {}
+        await navigator.share({
+          files: [f],
+          title: 'Запрос КП',
+          text: body,
+        });
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        console.warn('Web Share failed, falling back to Mail.ru', err);
+      }
+    }
+
     const url = `https://e.mail.ru/compose/?To=${encodeURIComponent(c.email)}&Subject=${encodeURIComponent('Запрос КП')}&Body=${encodeURIComponent(body)}`;
 
     if (f) {
@@ -351,7 +367,7 @@ function KHContractorsView() {
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(href), 8000);
       window.open(url, '_blank', 'noopener,noreferrer');
-      setTimeout(() => alert(`Откроется Mail.ru с заполненным письмом для ${c.email}.\n\nФайл «${f.name}» скачан в папку «Загрузки» — перетащите его в окно письма (Mail.ru не позволяет прикрепить файл через ссылку).`), 100);
+      setTimeout(() => alert(`Системное «Поделиться» с файлом не поддерживается этим браузером.\n\nОткроется Mail.ru с заполненным письмом для ${c.email}, файл «${f.name}» скачан в «Загрузки» — перетащите его в окно письма.`), 100);
     } else if (c.fileName) {
       alert(`Файл «${c.fileName}» был прикреплён в прошлой сессии и забыт после обновления страницы.\nПрикрепите файл заново и нажмите «Отправить» ещё раз.`);
     } else {
