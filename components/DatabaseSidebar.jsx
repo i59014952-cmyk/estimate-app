@@ -17,14 +17,41 @@ function KHDatabaseView({ est }) {
   const ddcCatalog = est.state.ddcCatalog;
   const hiddenCatalog = est.state.hiddenCatalog || new Set();
 
+  const [vendorRows, setVendorRows] = React.useState([]);
+  const [vendorMap, setVendorMap] = React.useState({});
+  React.useEffect(() => {
+    if (!window.SB) return;
+    let cancelled = false;
+    Promise.all([
+      window.SB.selectAll('kh_vendor_prices', 'order=updated_at.desc&select=id,vendor_slug,name,unit,unit_price,source_file,updated_at'),
+      window.SB.selectAll('kh_contractors', 'select=slug,name'),
+    ]).then(([rows, vendors]) => {
+      if (cancelled) return;
+      setVendorRows(Array.isArray(rows) ? rows : []);
+      const m = {};
+      (vendors || []).forEach(v => { if (v.slug) m[v.slug] = v.name || ''; });
+      setVendorMap(m);
+    }).catch(e => console.warn('cloud vendor prices:', e));
+    return () => { cancelled = true; };
+  }, []);
+
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
 
   const merged = React.useMemo(() => [
     ...userCatalog.map(it => ({ ...it, _kind: "user" })),
+    ...vendorRows.map(it => ({
+      name: it.name, unit: it.unit || '',
+      unitPrice: Number(it.unit_price) || 0,
+      _kind: "vendor",
+      _vendorSlug: it.vendor_slug,
+      _vendorName: vendorMap[it.vendor_slug] || '',
+      _sourceFile: it.source_file || '',
+      _updated: it.updated_at,
+    })),
     ...localCatalog.map(it => ({ ...it, _kind: "local" })),
     ...ddcCatalog.map(it => ({ ...it, _kind: "ddc" })),
-  ], [userCatalog, localCatalog, ddcCatalog]);
+  ], [userCatalog, vendorRows, vendorMap, localCatalog, ddcCatalog]);
 
   const activeMerged = React.useMemo(() => merged.filter(it => !isHidden(it)), [merged, hiddenCatalog]);
   const hiddenList = React.useMemo(() => merged.filter(isHidden), [merged, hiddenCatalog]);
@@ -40,6 +67,7 @@ function KHDatabaseView({ est }) {
   const totals = {
     all: activeMerged.length,
     user: userCatalog.filter(it => !isHidden(it)).length,
+    vendor: activeMerged.filter(it => it._kind === 'vendor').length,
     local: localCatalog.filter(it => !isHidden(it)).length,
     ddc: ddcCatalog.filter(it => !isHidden(it)).length,
     hidden: hiddenList.length,
@@ -84,8 +112,9 @@ function KHDatabaseView({ est }) {
     }
   };
 
-  const kindBadge = (kind) => {
+  const kindBadge = (kind, vendorName) => {
     if (kind === "user") return { label: "Моё", color: "var(--moss)" };
+    if (kind === "vendor") return { label: vendorName ? `КП · ${vendorName}` : "КП подрядчика", color: "var(--rust)" };
     if (kind === "local") return { label: "JSON", color: "var(--ink-3)" };
     return { label: "DDC", color: "var(--ink-3)" };
   };
@@ -126,6 +155,7 @@ function KHDatabaseView({ est }) {
         <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <FilterPill id="all" label="Все" count={totals.all} />
           <FilterPill id="user" label="Моё" count={totals.user} />
+          <FilterPill id="vendor" label="КП подрядчиков" count={totals.vendor} />
           <FilterPill id="local" label="JSON" count={totals.local} />
           <FilterPill id="ddc" label="DDC" count={totals.ddc} />
           {totals.hidden > 0 && (
@@ -220,7 +250,7 @@ function KHDatabaseView({ est }) {
         </thead>
         <tbody>
           {visible.map((it, i) => {
-            const badge = kindBadge(it._kind);
+            const badge = kindBadge(it._kind, it._vendorName);
             return (
               <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
                 <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>

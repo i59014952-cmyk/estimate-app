@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Загрузка КП — KUB HOUSE</title>
+<style>
+  :root{
+    --paper:#f6f1e9; --paper-2:#efe7d7; --ink:#1f1a15; --ink-2:#5b524a;
+    --ink-3:#8a7f73; --rule:#d9cdb6; --moss:#5b8362; --rust:#a44a3f;
+    --wood-deep:#7a5a36;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#e8e0cf;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}
+  .wrap{max-width:1000px;margin:32px auto;padding:32px 36px;background:var(--paper);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--rule)}
+  .mark{display:inline-block;border:2px solid var(--ink);padding:8px 12px;font-weight:700;line-height:1;font-size:13px}
+  .mark span{display:block}
+  h1{margin:0 0 4px;font-family:Georgia,serif;font-size:28pt;font-weight:500}
+  h1 em{font-style:italic;color:var(--wood-deep);font-weight:500}
+  .greeting{color:var(--ink-2);font-size:15pt;margin-bottom:4px}
+  .meta{color:var(--ink-3);font-size:12px;letter-spacing:.06em}
+  .actions{display:flex;gap:8px;margin:18px 0;flex-wrap:wrap}
+  button,.btn{padding:10px 16px;border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit}
+  button:hover{background:#e6dec8}
+  button.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  button.primary:hover{background:#000}
+  button.danger{color:var(--rust);border-color:transparent;background:transparent}
+  .status{padding:10px 14px;border-radius:6px;font-size:14px;margin-bottom:14px}
+  .status.busy{background:#f0e8d3;color:var(--ink-2)}
+  .status.ok{background:#e0eed4;color:#3a5a3e}
+  .status.err{background:#f4dbd5;color:var(--rust)}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);font-size:14px}
+  th{background:var(--paper-2);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+  td input{width:100%;padding:6px 8px;border:1px solid transparent;background:transparent;font-size:14px;font-family:inherit;border-radius:4px}
+  td input:focus{outline:none;border-color:var(--moss);background:#fff}
+  td.num input{text-align:right}
+  .empty{padding:32px;text-align:center;color:var(--ink-3)}
+  .err-page{padding:60px;text-align:center}
+  .small{font-size:12px;color:var(--ink-3);margin-top:8px}
+</style>
+</head>
+<body>
+
+<div id="root" class="wrap">
+  <div class="brand">
+    <div class="mark"><span>KUB</span><span>HOUSE</span></div>
+    <div>
+      <div style="font-weight:600">KUB HOUSE</div>
+      <div class="meta">Modern Wood Development</div>
+    </div>
+  </div>
+  <div id="content"><div class="status busy">Загрузка…</div></div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script>
+const SB_URL = 'https://jvqogyyjlrwbjjotxvue.supabase.co';
+const SB_KEY = 'sb_publishable_Yud_fsFEOxUAiPboEqVO1g_17BKYlDh';
+const HEADERS = {
+  apikey: SB_KEY,
+  Authorization: 'Bearer ' + SB_KEY,
+  'Content-Type': 'application/json',
+};
+
+const params = new URLSearchParams(location.search);
+const token = params.get('token') || '';
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
+
+let vendor = null;
+let prices = [];
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, { headers: HEADERS, ...opts });
+  if (!r.ok) throw new Error(r.status + ' ' + (await r.text()));
+  if (r.status === 204) return null;
+  return r.json();
+}
+
+async function loadVendor() {
+  const r = await fetchJSON(`${SB_URL}/rest/v1/kh_contractors?slug=eq.${encodeURIComponent(token)}&select=name,email,org`);
+  vendor = r && r[0] || null;
+}
+async function loadPrices() {
+  prices = await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?vendor_slug=eq.${encodeURIComponent(token)}&order=updated_at.desc&select=*`) || [];
+}
+
+async function upsert(items, sourceFile) {
+  const payload = items.map(it => ({
+    vendor_slug: token,
+    name: it.name,
+    unit: it.unit || '',
+    unit_price: Number(it.unitPrice) || 0,
+    source_file: sourceFile || null,
+    updated_at: new Date().toISOString(),
+  }));
+  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?on_conflict=vendor_slug,name,unit`, {
+    method: 'POST',
+    headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(payload),
+  });
+}
+async function update(id, patch) {
+  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { ...HEADERS, Prefer: 'return=representation' },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+  });
+}
+async function remove(id) {
+  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?id=eq.${id}`, { method: 'DELETE', headers: { ...HEADERS, Prefer: 'return=minimal' } });
+}
+
+function setStatus(kind, text) {
+  const el = $('#status');
+  if (!el) return;
+  if (!kind) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = '';
+  el.className = 'status ' + (kind === 'error' ? 'err' : kind === 'busy' ? 'busy' : 'ok');
+  el.textContent = text;
+}
+
+async function parseFile(file) {
+  const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
+  let allRows = [];
+  if (ext === 'csv') {
+    const text = await file.text();
+    allRows = text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/[,;\t]/));
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    if (typeof XLSX === 'undefined') throw new Error('XLSX не загружен');
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    for (const sn of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' });
+      if (rows && rows.length > 1) { allRows = rows; break; }
+    }
+  } else throw new Error('поддерживаются Excel (.xlsx/.xls) и CSV');
+  if (!allRows.length) return [];
+  const norm = s => String(s == null ? '' : s).trim().toLowerCase();
+  const toNum = s => parseFloat(String(s == null ? '' : s).replace(/ /g,'').replace(/[^\d,.\-]/g,'').replace(',','.')) || 0;
+  let hRow = -1, nIdx = -1, uIdx = -1, pIdx = -1;
+  for (let i = 0; i < Math.min(8, allRows.length); i++) {
+    const cells = (allRows[i] || []).map(norm);
+    const idx = cells.findIndex(h => /наимен|name|позиц|товар|материал|работ/.test(h));
+    if (idx !== -1) {
+      hRow = i; nIdx = idx;
+      uIdx = cells.findIndex(h => /^ед\b|unit|един|изм/.test(h));
+      pIdx = cells.findIndex(h => /цена|price|стоим|тариф|расц/.test(h));
+      break;
+    }
+  }
+  const out = [];
+  if (hRow !== -1) {
+    for (let i = hRow + 1; i < allRows.length; i++) {
+      const r = allRows[i]; if (!r) continue;
+      const c = r.map(x => x == null ? '' : String(x).trim());
+      const name = (c[nIdx] || '').trim();
+      if (!name || name.length < 2) continue;
+      out.push({ name, unit: uIdx !== -1 ? c[uIdx] : '', unitPrice: pIdx !== -1 ? toNum(c[pIdx]) : 0 });
+    }
+  } else {
+    for (const r of allRows) {
+      if (!r) continue;
+      const c = r.map(x => x == null ? '' : String(x).trim());
+      const name = (c[0] || '').trim();
+      if (!name || name.length < 2) continue;
+      if (/наимен|name|позиц|итог|сумма|кол|цена|ед\.|^№$/i.test(name)) continue;
+      out.push({ name, unit: c[1] || '', unitPrice: toNum(c[2]) });
+    }
+  }
+  return out;
+}
+
+async function onUpload(e) {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (!files.length) return;
+  let added = 0; const errors = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    setStatus('busy', `Загрузка ${i + 1}/${files.length}: ${f.name}…`);
+    try {
+      const items = await parseFile(f);
+      if (!items.length) { errors.push(`${f.name}: позиций не найдено`); continue; }
+      await upsert(items, f.name);
+      added += items.length;
+    } catch (err) { errors.push(`${f.name}: ${err.message || err}`); }
+  }
+  await loadPrices();
+  render();
+  if (errors.length) setStatus('error', `Ошибки: ${errors.join('; ')}`);
+  else setStatus('ok', `Загружено позиций: ${added}. Совпадающие по названию + ед. обновлены.`);
+  setTimeout(() => setStatus(null), 8000);
+}
+
+async function onChangeName(id, value) {
+  await update(id, { name: value });
+  await loadPrices(); render();
+}
+async function onChangePrice(id, value) {
+  await update(id, { unit_price: parseFloat(String(value).replace(',', '.')) || 0 });
+  await loadPrices(); render();
+}
+async function onRemove(id) {
+  if (!confirm('Удалить позицию?')) return;
+  await remove(id);
+  await loadPrices(); render();
+}
+
+function render() {
+  const greet = vendor.org ? `${esc(vendor.name)} <span style="color:var(--ink-3)">· ${esc(vendor.org)}</span>` : esc(vendor.name);
+  const rows = prices.map(p => `
+    <tr data-id="${p.id}">
+      <td><input type="text" value="${esc(p.name)}" data-field="name"></td>
+      <td>${esc(p.unit || '—')}</td>
+      <td class="num"><input type="text" inputmode="decimal" value="${fmt(p.unit_price)}" data-field="unit_price"></td>
+      <td class="num">${p.source_file ? `<span style="color:var(--ink-3);font-size:12px">${esc(p.source_file)}</span>` : ''}</td>
+      <td><button class="danger" data-action="remove">×</button></td>
+    </tr>`).join('');
+
+  $('#content').innerHTML = `
+    <h1>Загрузка прайса <em>«${greet}»</em></h1>
+    <div class="meta">Это ваша личная страница для отправки цен в KUB HOUSE. Никто, кроме вас и заказчика, не видит этих позиций.</div>
+    <div id="status" style="display:none"></div>
+    <div class="actions">
+      <input type="file" id="file" multiple accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none">
+      <button class="primary" id="upload-btn">↑ Загрузить XLSX/CSV (можно несколько)</button>
+      <span class="meta" style="align-self:center">Совпадающие по названию и единице — обновятся.</span>
+    </div>
+    ${prices.length === 0 ? '<div class="empty">Прайса ещё нет — загрузите файл, чтобы добавить позиции.</div>' :
+    `<table>
+      <thead><tr><th>Название</th><th>Ед.</th><th class="num">Цена, ₽</th><th class="num">Файл</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="small">Всего позиций: ${prices.length}. Обновлено: ${new Date(prices[0].updated_at).toLocaleString('ru-RU')}</div>`}
+  `;
+
+  $('#upload-btn').onclick = () => $('#file').click();
+  $('#file').onchange = onUpload;
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('blur', () => {
+        if (inp.dataset.field === 'name') onChangeName(id, inp.value.trim());
+        else if (inp.dataset.field === 'unit_price') onChangePrice(id, inp.value);
+      });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+    });
+    const btn = tr.querySelector('button[data-action="remove"]');
+    if (btn) btn.onclick = () => onRemove(id);
+  });
+}
+
+(async function init() {
+  if (!token) {
+    $('#content').innerHTML = '<div class="err-page"><h1 style="color:var(--rust)">Нет токена</h1><div>Откройте ссылку, которую прислал заказчик. Она должна содержать <code>?token=…</code>.</div></div>';
+    return;
+  }
+  try {
+    await loadVendor();
+    if (!vendor) {
+      $('#content').innerHTML = '<div class="err-page"><h1 style="color:var(--rust)">Ссылка недействительна</h1><div>Проверьте полный адрес или попросите заказчика прислать новую ссылку.</div></div>';
+      return;
+    }
+    await loadPrices();
+    render();
+  } catch (e) {
+    $('#content').innerHTML = `<div class="err-page"><h1 style="color:var(--rust)">Ошибка соединения</h1><div>${esc(e.message || e)}</div></div>`;
+  }
+})();
+</script>
+
+</body>
+</html>
