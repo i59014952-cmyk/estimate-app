@@ -29,17 +29,37 @@ function KHDatabaseView({ est }) {
       window.SB.selectAll('kh_contractors', 'select=slug,name'),
     ]).then(([rows, vendors]) => {
       if (cancelled) return;
-      console.log('[KHDatabase] vendor prices loaded:', rows && rows.length, 'vendors:', vendors && vendors.length);
-      setVendorRows(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      console.log('[KHDatabase] vendor prices loaded:', list.length, 'vendors:', vendors && vendors.length);
+      setVendorRows(list);
       const m = {};
       (vendors || []).forEach(v => { if (v.slug) m[v.slug] = v.name || ''; });
       setVendorMap(m);
+      const stale = [];
+      for (const r of list) {
+        const k = hiddenKeyOf({ name: r.name, unit: r.unit });
+        if (hiddenCatalog.has(k)) stale.push(k);
+      }
+      if (stale.length) {
+        console.log('[KHDatabase] auto-unhiding', stale.length, 'vendor keys');
+        est.actions.unhideKeys(stale);
+      }
     }).catch(e => {
       console.error('[KHDatabase] cloud vendor prices error:', e);
       alert('Не удалось загрузить КП подрядчиков:\n' + (e.message || e) + '\n\nПроверьте, что SQL-скрипт прогнан в Supabase.');
     });
     return () => { cancelled = true; };
   }, [refreshTick]);
+
+  React.useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshVendors(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refreshVendors);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refreshVendors);
+    };
+  }, [refreshVendors]);
 
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
@@ -50,6 +70,7 @@ function KHDatabaseView({ est }) {
       name: it.name, unit: it.unit || '',
       unitPrice: Number(it.unit_price) || 0,
       _kind: "vendor",
+      _id: it.id,
       _vendorSlug: it.vendor_slug,
       _vendorName: vendorMap[it.vendor_slug] || '',
       _sourceFile: it.source_file || '',
@@ -118,9 +139,9 @@ function KHDatabaseView({ est }) {
     }
   };
 
-  const kindBadge = (kind, vendorName) => {
+  const kindBadge = (kind) => {
     if (kind === "user") return { label: "Моё", color: "var(--moss)" };
-    if (kind === "vendor") return { label: vendorName ? `КП · ${vendorName}` : "КП подрядчика", color: "var(--rust)" };
+    if (kind === "vendor") return { label: "КП", color: "var(--rust)" };
     if (kind === "local") return { label: "JSON", color: "var(--ink-3)" };
     return { label: "DDC", color: "var(--ink-3)" };
   };
@@ -252,18 +273,37 @@ function KHDatabaseView({ est }) {
             <th>Наименование</th>
             <th style={{ width: 80 }}>Ед.</th>
             <th className="num" style={{ width: 130 }}>Цена</th>
-            <th style={{ width: 110 }}></th>
+            <th style={{ width: 150 }}>Подрядчик</th>
+            <th style={{ width: showHidden ? 220 : 110 }}></th>
           </tr>
         </thead>
         <tbody>
           {visible.map((it, i) => {
-            const badge = kindBadge(it._kind, it._vendorName);
+            const badge = kindBadge(it._kind);
             return (
               <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
                 <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>
                 <td>{it.name}</td>
                 <td>{it.unit || "—"}</td>
                 <td className="num">{it.unitPrice ? fmt(Math.round(it.unitPrice)) + " ₽" : "—"}</td>
+                <td>
+                  {it._kind === "vendor" && it._vendorName ? (
+                    <span
+                      title={it._sourceFile ? `Файл: ${it._sourceFile}` : ''}
+                      style={{
+                        display: "inline-block",
+                        fontSize: 11, fontWeight: 600, letterSpacing: ".02em",
+                        color: "var(--rust)",
+                        border: "1px solid var(--rust)",
+                        padding: "2px 8px", borderRadius: 999,
+                        whiteSpace: "nowrap", maxWidth: "100%",
+                        overflow: "hidden", textOverflow: "ellipsis",
+                      }}
+                    >{it._vendorName}</span>
+                  ) : (
+                    <span style={{ color: "var(--ink-3)" }}>—</span>
+                  )}
+                </td>
                 <td>
                   <div className="row" style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     {!showHidden && (
@@ -277,16 +317,51 @@ function KHDatabaseView({ est }) {
                       >+ В смету</button>
                     )}
                     {showHidden ? (
-                      <button
-                        className="btn btn-sm"
-                        title="Восстановить"
-                        onClick={() => est.actions.restoreCatalogItem(it.name, it.unit)}
-                      >↺ Восстановить</button>
+                      <>
+                        <button
+                          className="btn btn-sm"
+                          title="Восстановить"
+                          onClick={() => est.actions.restoreCatalogItem(it.name, it.unit)}
+                        >↺ Восстановить</button>
+                        {(it._kind === "user" || it._kind === "vendor") && (
+                          <button
+                            className="btn btn-sm"
+                            style={{ color: "var(--rust)" }}
+                            title={it._kind === "user" ? "Удалить из своей базы навсегда" : "Удалить из прайса подрядчика навсегда"}
+                            onClick={() => {
+                              const msg = it._kind === "user"
+                                ? `Удалить «${it.name}» из своей базы навсегда?`
+                                : `Удалить «${it.name}» из прайса подрядчика навсегда? Подрядчик увидит, что строки нет.`;
+                              if (!confirm(msg)) return;
+                              const key = hiddenKeyOf(it);
+                              if (it._kind === "vendor") {
+                                est.actions.removeVendorPrice(it._id)
+                                  .then(() => { est.actions.unhideKeys([key]); refreshVendors(); })
+                                  .catch(err => alert('Не удалось удалить из облака: ' + (err.message || err)));
+                              } else {
+                                est.actions.removeCatalogItem(it.name, it.unit, "user");
+                                est.actions.unhideKeys([key]);
+                              }
+                            }}
+                          >× Удалить</button>
+                        )}
+                      </>
                     ) : (
                       <button
                         className="btn btn-sm"
-                        title={it._kind === "user" ? "Удалить из базы" : "Скрыть из базы (можно восстановить)"}
+                        title={
+                          it._kind === "user" ? "Удалить из базы" :
+                          it._kind === "vendor" ? "Удалить позицию подрядчика из облака" :
+                          "Скрыть из базы (можно восстановить)"
+                        }
                         onClick={() => {
+                          if (it._kind === "vendor") {
+                            if (!confirm(`Удалить «${it.name}» из прайса подрядчика? Действие необратимо — подрядчик увидит, что строки нет.`)) return;
+                            est.actions.removeVendorPrice(it._id)
+                              .then(() => refreshVendors())
+                              .catch(err => alert('Не удалось удалить из облака: ' + (err.message || err)));
+                            return;
+                          }
                           const msg = it._kind === "user"
                             ? `Удалить «${it.name}» из своей базы?`
                             : `Скрыть «${it.name}» из базы? Позицию можно будет восстановить.`;

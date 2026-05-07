@@ -672,6 +672,28 @@ function useEstimate() {
     if (window.SB) window.SB.remove('kh_hidden', 'key=neq.__never__').catch(e => console.warn('cloud hidden clear:', e));
   }, []);
 
+  const unhideKeys = React.useCallback((keys) => {
+    if (!keys || !keys.length) return;
+    setHiddenCatalog(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const k of keys) if (next.delete(k)) changed = true;
+      if (!changed) return prev;
+      saveHiddenCatalog(next);
+      return next;
+    });
+    if (window.SB) {
+      const list = keys.map(k => `"${k.replace(/"/g, '\\"')}"`).join(',');
+      window.SB.remove('kh_hidden', `key=in.(${list})`).catch(e => console.warn('cloud hidden bulk unhide:', e));
+    }
+  }, []);
+
+  const removeVendorPrice = React.useCallback((id) => {
+    if (!id || !window.SB) return Promise.resolve();
+    return window.SB.remove('kh_vendor_prices', `id=eq.${encodeURIComponent(id)}`)
+      .catch(e => { console.warn('cloud vendor price del:', e); throw e; });
+  }, []);
+
   const uploadCatalogFile = React.useCallback((file) => {
     const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
     const mime = (file.type || '').toLowerCase();
@@ -727,7 +749,7 @@ function useEstimate() {
     actions: {
       setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
-      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, uploadCatalogFile,
+      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, uploadCatalogFile,
     },
   };
 }
