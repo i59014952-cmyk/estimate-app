@@ -1110,26 +1110,46 @@ function KHTemplatesView() {
   const [list, setList] = React.useState(() => khSeedTplsIfNeeded(khLoadTpls()));
   const [openId, setOpenId] = React.useState(null);
   const [tplFormOpen, setTplFormOpen] = React.useState(false);
-  const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '' });
+  const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '', file: null });
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);
+  const tplFormFileRef = React.useRef(null);
   const uploadTplIdRef = React.useRef(null);
 
   const persist = (next) => { setList(next); khSaveTpls(next); };
   const totalOf = (t) => (t.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
 
-  const startAddTpl = () => { setTplDraft({ name: '', area: '', note: '' }); setEditingTplId(null); setTplFormOpen(true); };
-  const startEditTpl = (t) => { setTplDraft({ name: t.name || '', area: t.area ?? '', note: t.note || '' }); setEditingTplId(t.id); setTplFormOpen(true); };
-  const cancelTpl = () => { setTplFormOpen(false); setEditingTplId(null); };
-  const submitTpl = (e) => {
+  const startAddTpl = () => { setTplDraft({ name: '', area: '', note: '', file: null }); setEditingTplId(null); setTplFormOpen(true); };
+  const startEditTpl = (t) => { setTplDraft({ name: t.name || '', area: t.area ?? '', note: t.note || '', file: null }); setEditingTplId(t.id); setTplFormOpen(true); };
+  const cancelTpl = () => { setTplFormOpen(false); setEditingTplId(null); setTplDraft({ name: '', area: '', note: '', file: null }); };
+  const submitTpl = async (e) => {
     if (e) e.preventDefault();
     const name = tplDraft.name.trim();
     if (!name) return;
     const fields = { name, area: tplDraft.area === '' ? '' : Number(tplDraft.area) || '', note: tplDraft.note.trim() };
-    if (editingTplId) persist(list.map(t => t.id === editingTplId ? { ...t, ...fields } : t));
-    else persist([{ id: 't-' + Date.now(), items: [], ...fields }, ...list]);
+    if (editingTplId) {
+      persist(list.map(t => t.id === editingTplId ? { ...t, ...fields } : t));
+      cancelTpl();
+      return;
+    }
+    const newId = 't-' + Date.now();
+    let items = [];
+    if (tplDraft.file) {
+      setUploadStatus({ kind: 'busy', text: `Загрузка ${tplDraft.file.name}…` });
+      try {
+        const parsed = await khParseTemplateFile(tplDraft.file);
+        items = parsed.map((p, j) => ({ id: 'tpli-' + newId + '-' + j, ...p }));
+        setUploadStatus({ kind: 'ok', text: `Позиций добавлено: ${items.length}` });
+        setTimeout(() => setUploadStatus(null), 5000);
+      } catch (err) {
+        setUploadStatus({ kind: 'error', text: err.message || String(err) });
+        setTimeout(() => setUploadStatus(null), 8000);
+      }
+    }
+    persist([{ id: newId, items, ...fields }, ...list]);
+    setOpenId(newId);
     cancelTpl();
   };
   const removeTpl = (id) => {
@@ -1219,6 +1239,23 @@ function KHTemplatesView() {
           <textarea placeholder="Описание (необязательно)" value={tplDraft.note}
             onChange={e => setTplDraft({ ...tplDraft, note: e.target.value })}
             rows={2} style={{ ...khInputStyle(), resize: 'vertical' }} />
+          {!editingTplId && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input ref={tplFormFileRef} type="file"
+                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files && e.target.files[0]; setTplDraft({ ...tplDraft, file: f || null }); e.target.value = ''; }} />
+              <button type="button" className="btn btn-sm" onClick={() => tplFormFileRef.current && tplFormFileRef.current.click()}>
+                {tplDraft.file ? 'Заменить файл' : '↑ Прикрепить XLSX/CSV со списком'}
+              </button>
+              {tplDraft.file && (
+                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+                  📎 {tplDraft.file.name}
+                  <button type="button" className="btn btn-sm" style={{ marginLeft: 8, color: 'var(--rust)' }} onClick={() => setTplDraft({ ...tplDraft, file: null })}>×</button>
+                </span>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-sm" onClick={cancelTpl}>Отмена</button>
             <button type="submit" className="kh-btn-primary" disabled={!tplDraft.name.trim()}>
