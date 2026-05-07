@@ -579,15 +579,30 @@ function KHMaterialsView() {
 const KH_CONTRACTORS_KEY = 'kh-contractors-v1';
 const KH_SEEDED_KEY = 'kh-contractors-seeded-v3';
 window.KH_CONTRACTOR_FILES = window.KH_CONTRACTOR_FILES || new Map();
-const khLoadContractors = () => { try { return JSON.parse(localStorage.getItem(KH_CONTRACTORS_KEY) || '[]'); } catch { return []; } };
+const khLoadContractors = () => {
+  try { return JSON.parse(localStorage.getItem(KH_CONTRACTORS_KEY) || '[]'); }
+  catch { return []; }
+};
+const khGenSlug = () => {
+  const a = new Uint8Array(16);
+  (window.crypto || window.msCrypto).getRandomValues(a);
+  return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+};
+const khEnsureSlug = (c) => c.slug ? c : { ...c, slug: khGenSlug() };
+const khVendorLink = (slug) => {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  return base + 'vendor.html?token=' + slug;
+};
 const khSaveContractorsLocal = (l) => { try { localStorage.setItem(KH_CONTRACTORS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
 const khSaveContractors = (l) => {
-  khSaveContractorsLocal(l);
+  const withSlugs = l.map(khEnsureSlug);
+  khSaveContractorsLocal(withSlugs);
   if (window.SB) {
-    const cleaned = l.map(c => ({
+    const cleaned = withSlugs.map(c => ({
       id: String(c.id), name: c.name || '',
       email: c.email || '', phone: c.phone || '',
       type: c.type || '', org: c.org || '', website: c.website || '',
+      slug: c.slug,
       file_name: c.fileName || null,
       file_size: c.fileSize == null ? null : Number(c.fileSize),
       file_time: c.fileTime == null ? null : Number(c.fileTime),
@@ -857,6 +872,15 @@ function KHContractorsView() {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                 <button className="btn btn-sm" onClick={() => attachFile(c.id)}>{hasFile ? 'Заменить файл' : 'Прикрепить файл'}</button>
                 {hasFile && <button className="btn btn-sm" onClick={() => detachFile(c.id)}>Убрать файл</button>}
+                <button className="btn btn-sm" onClick={() => {
+                  const cur = c.slug ? c : khEnsureSlug(c);
+                  if (!c.slug) persist(list.map(x => x.id === c.id ? cur : x));
+                  const link = khVendorLink(cur.slug);
+                  navigator.clipboard.writeText(link).then(
+                    () => alert('Ссылка скопирована в буфер:\n\n' + link + '\n\nОтправь подрядчику — он откроет страницу и сможет загрузить свои цены.'),
+                    () => prompt('Скопируй ссылку вручную:', link)
+                  );
+                }}>🔗 Ссылка для загрузки КП</button>
                 <button className="kh-btn-primary" onClick={() => sendRequest(c)} style={{ marginLeft: 'auto' }}>Отправить запрос КП →</button>
               </div>
             </div>
