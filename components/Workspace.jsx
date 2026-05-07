@@ -478,6 +478,20 @@ function PositionsHeader({ est, onAddRow }) {
         </button>
         <button
           className="btn btn-sm"
+          onClick={() => {
+            if (rowCount === 0) return;
+            if (confirm(`Сбросить смету (${rowCount} строк)? Действие отменить нельзя.`)) {
+              est.actions.resetEstimate();
+            }
+          }}
+          disabled={rowCount === 0}
+          title="Очистить все строки сметы"
+          style={{ color: rowCount === 0 ? undefined : "var(--rust)" }}
+        >
+          <Icon name="x" size={13} /> Сброс
+        </button>
+        <button
+          className="btn btn-sm"
           onClick={est.actions.exportDoc}
           disabled={rowCount === 0}
         >
