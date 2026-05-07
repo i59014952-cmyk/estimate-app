@@ -274,7 +274,7 @@ function KHDatabaseView({ est }) {
             <th style={{ width: 80 }}>Ед.</th>
             <th className="num" style={{ width: 130 }}>Цена</th>
             <th style={{ width: 150 }}>Подрядчик</th>
-            <th style={{ width: 110 }}></th>
+            <th style={{ width: showHidden ? 220 : 110 }}></th>
           </tr>
         </thead>
         <tbody>
@@ -317,11 +317,35 @@ function KHDatabaseView({ est }) {
                       >+ В смету</button>
                     )}
                     {showHidden ? (
-                      <button
-                        className="btn btn-sm"
-                        title="Восстановить"
-                        onClick={() => est.actions.restoreCatalogItem(it.name, it.unit)}
-                      >↺ Восстановить</button>
+                      <>
+                        <button
+                          className="btn btn-sm"
+                          title="Восстановить"
+                          onClick={() => est.actions.restoreCatalogItem(it.name, it.unit)}
+                        >↺ Восстановить</button>
+                        {(it._kind === "user" || it._kind === "vendor") && (
+                          <button
+                            className="btn btn-sm"
+                            style={{ color: "var(--rust)" }}
+                            title={it._kind === "user" ? "Удалить из своей базы навсегда" : "Удалить из прайса подрядчика навсегда"}
+                            onClick={() => {
+                              const msg = it._kind === "user"
+                                ? `Удалить «${it.name}» из своей базы навсегда?`
+                                : `Удалить «${it.name}» из прайса подрядчика навсегда? Подрядчик увидит, что строки нет.`;
+                              if (!confirm(msg)) return;
+                              const key = hiddenKeyOf(it);
+                              if (it._kind === "vendor") {
+                                est.actions.removeVendorPrice(it._id)
+                                  .then(() => { est.actions.unhideKeys([key]); refreshVendors(); })
+                                  .catch(err => alert('Не удалось удалить из облака: ' + (err.message || err)));
+                              } else {
+                                est.actions.removeCatalogItem(it.name, it.unit, "user");
+                                est.actions.unhideKeys([key]);
+                              }
+                            }}
+                          >× Удалить</button>
+                        )}
+                      </>
                     ) : (
                       <button
                         className="btn btn-sm"
