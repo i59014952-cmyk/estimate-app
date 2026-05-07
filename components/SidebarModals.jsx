@@ -1060,48 +1060,65 @@ function khSeedTplsIfNeeded(current) {
 
 async function khParseTemplateFile(file) {
   const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
-  let rows;
+  let allRows = [];
   if (ext === 'csv') {
     const text = await file.text();
-    rows = text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/[,;\t]/));
+    allRows = text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/[,;\t]/));
   } else if (ext === 'xlsx' || ext === 'xls') {
     if (typeof XLSX === 'undefined') throw new Error('XLSX не загружен');
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+      if (rows && rows.length > 1) { allRows = rows; break; }
+    }
   } else {
     throw new Error('поддерживаются Excel (.xlsx/.xls) и CSV');
   }
-  if (!rows.length) return [];
-  const norm = (s) => String(s || '').trim().toLowerCase();
-  const head = rows[0].map(norm);
-  const detect = (...keys) => head.findIndex(h => keys.some(k => h.includes(k)));
-  const nameIdx = detect('наимен', 'name', 'позиц', 'товар', 'материал', 'работ');
-  const unitIdx = detect('ед.', 'ед ', 'unit', 'един');
-  const qtyIdx  = detect('кол-во', 'кол', 'qty', 'количеств');
-  const priceIdx = detect('цена', 'price', 'стоимост');
-  const hasHeader = nameIdx !== -1;
-  const start = hasHeader ? 1 : 0;
-  const toNum = (s) => parseFloat(String(s || '').replace(/[^0-9.,\-]/g, '').replace(',', '.')) || 0;
-  const out = [];
-  for (let i = start; i < rows.length; i++) {
-    const row = rows[i]; if (!row) continue;
-    const cells = row.map(c => c == null ? '' : String(c).trim());
-    let name = '', unit = '', qty = 0, price = 0;
-    if (hasHeader) {
-      name = cells[nameIdx] || '';
-      unit = unitIdx !== -1 ? cells[unitIdx] : '';
-      qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
-      price = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
-    } else {
-      name = cells[0] || '';
-      unit = cells[1] || '';
-      qty = toNum(cells[2]);
-      price = toNum(cells[3]);
+  if (!allRows.length) return [];
+  const norm = (s) => String(s == null ? '' : s).trim().toLowerCase();
+  const toNum = (s) => {
+    const v = String(s == null ? '' : s).replace(/ /g, '').replace(/[^\d,.\-]/g, '').replace(',', '.');
+    return parseFloat(v) || 0;
+  };
+  let headerRowIdx = -1, nameIdx = -1, unitIdx = -1, qtyIdx = -1, priceIdx = -1;
+  const lookup = Math.min(8, allRows.length);
+  for (let i = 0; i < lookup; i++) {
+    const cells = (allRows[i] || []).map(norm);
+    const nIdx = cells.findIndex(h => /наимен|name|позиц|товар|материал|работ/.test(h));
+    if (nIdx !== -1) {
+      headerRowIdx = i; nameIdx = nIdx;
+      unitIdx  = cells.findIndex(h => /^ед\b|unit|един|изм/.test(h));
+      qtyIdx   = cells.findIndex(h => /кол|qty|количеств|объ[её]м|объ.ем/.test(h));
+      priceIdx = cells.findIndex(h => /цена|price|стоим|тариф|расц/.test(h));
+      break;
     }
-    if (!name || name.length < 2) continue;
-    out.push({ name, unit, qty, unitPrice: price });
+  }
+  const out = [];
+  if (headerRowIdx !== -1) {
+    for (let i = headerRowIdx + 1; i < allRows.length; i++) {
+      const row = allRows[i]; if (!row) continue;
+      const cells = row.map(c => c == null ? '' : String(c).trim());
+      const name = (cells[nameIdx] || '').trim();
+      if (!name || name.length < 2) continue;
+      out.push({
+        name,
+        unit: unitIdx !== -1 ? (cells[unitIdx] || '') : '',
+        qty: qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0,
+        unitPrice: priceIdx !== -1 ? toNum(cells[priceIdx]) : 0,
+      });
+    }
+  } else {
+    for (const row of allRows) {
+      if (!row) continue;
+      const cells = row.map(c => c == null ? '' : String(c).trim());
+      const name = (cells[0] || '').trim();
+      if (!name || name.length < 2) continue;
+      const looksHeader = /наимен|name|позиц|итог|сумма|кол|цена|ед\.|^№$/i.test(name);
+      if (looksHeader) continue;
+      out.push({ name, unit: cells[1] || '', qty: toNum(cells[2]), unitPrice: toNum(cells[3]) });
+    }
   }
   return out;
 }
@@ -1129,26 +1146,35 @@ function KHTemplatesView() {
     const name = tplDraft.name.trim();
     if (!name) return;
     const fields = { name, area: tplDraft.area === '' ? '' : Number(tplDraft.area) || '', note: tplDraft.note.trim() };
-    if (editingTplId) {
-      persist(list.map(t => t.id === editingTplId ? { ...t, ...fields } : t));
-      cancelTpl();
-      return;
-    }
-    const newId = 't-' + Date.now();
-    let items = [];
+
+    let extraItems = [];
     if (tplDraft.file) {
-      setUploadStatus({ kind: 'busy', text: `Загрузка ${tplDraft.file.name}…` });
+      setUploadStatus({ kind: 'busy', text: `Парсинг ${tplDraft.file.name}…` });
       try {
         const parsed = await khParseTemplateFile(tplDraft.file);
-        items = parsed.map((p, j) => ({ id: 'tpli-' + newId + '-' + j, ...p }));
-        setUploadStatus({ kind: 'ok', text: `Позиций добавлено: ${items.length}` });
-        setTimeout(() => setUploadStatus(null), 5000);
+        extraItems = parsed.map((p, j) => ({ id: 'tpli-' + Date.now() + '-' + j, ...p }));
+        if (extraItems.length) {
+          setUploadStatus({ kind: 'ok', text: `Позиций добавлено: ${extraItems.length}` });
+        } else {
+          setUploadStatus({ kind: 'error', text: `В файле «${tplDraft.file.name}» не найдено ни одной позиции. Проверь, что есть колонки «Наименование», «Ед.», «Кол-во», «Цена».` });
+        }
+        setTimeout(() => setUploadStatus(null), 8000);
       } catch (err) {
         setUploadStatus({ kind: 'error', text: err.message || String(err) });
         setTimeout(() => setUploadStatus(null), 8000);
       }
     }
-    persist([{ id: newId, items, ...fields }, ...list]);
+
+    if (editingTplId) {
+      persist(list.map(t => t.id === editingTplId
+        ? { ...t, ...fields, items: [...(t.items || []), ...extraItems] }
+        : t));
+      if (extraItems.length) setOpenId(editingTplId);
+      cancelTpl();
+      return;
+    }
+    const newId = 't-' + Date.now();
+    persist([{ id: newId, items: extraItems, ...fields }, ...list]);
     setOpenId(newId);
     cancelTpl();
   };
@@ -1239,23 +1265,21 @@ function KHTemplatesView() {
           <textarea placeholder="Описание (необязательно)" value={tplDraft.note}
             onChange={e => setTplDraft({ ...tplDraft, note: e.target.value })}
             rows={2} style={{ ...khInputStyle(), resize: 'vertical' }} />
-          {!editingTplId && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input ref={tplFormFileRef} type="file"
-                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-                style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files && e.target.files[0]; setTplDraft({ ...tplDraft, file: f || null }); e.target.value = ''; }} />
-              <button type="button" className="btn btn-sm" onClick={() => tplFormFileRef.current && tplFormFileRef.current.click()}>
-                {tplDraft.file ? 'Заменить файл' : '↑ Прикрепить XLSX/CSV со списком'}
-              </button>
-              {tplDraft.file && (
-                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-                  📎 {tplDraft.file.name}
-                  <button type="button" className="btn btn-sm" style={{ marginLeft: 8, color: 'var(--rust)' }} onClick={() => setTplDraft({ ...tplDraft, file: null })}>×</button>
-                </span>
-              )}
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input ref={tplFormFileRef} type="file"
+              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files && e.target.files[0]; setTplDraft({ ...tplDraft, file: f || null }); e.target.value = ''; }} />
+            <button type="button" className="btn btn-sm" onClick={() => tplFormFileRef.current && tplFormFileRef.current.click()}>
+              {tplDraft.file ? 'Заменить файл' : (editingTplId ? '↑ Дозалить позиции из XLSX/CSV' : '↑ Прикрепить XLSX/CSV со списком')}
+            </button>
+            {tplDraft.file && (
+              <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+                📎 {tplDraft.file.name}
+                <button type="button" className="btn btn-sm" style={{ marginLeft: 8, color: 'var(--rust)' }} onClick={() => setTplDraft({ ...tplDraft, file: null })}>×</button>
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-sm" onClick={cancelTpl}>Отмена</button>
             <button type="submit" className="kh-btn-primary" disabled={!tplDraft.name.trim()}>
