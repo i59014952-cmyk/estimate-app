@@ -29,11 +29,21 @@ function KHDatabaseView({ est }) {
       window.SB.selectAll('kh_contractors', 'select=slug,name'),
     ]).then(([rows, vendors]) => {
       if (cancelled) return;
-      console.log('[KHDatabase] vendor prices loaded:', rows && rows.length, 'vendors:', vendors && vendors.length);
-      setVendorRows(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      console.log('[KHDatabase] vendor prices loaded:', list.length, 'vendors:', vendors && vendors.length);
+      setVendorRows(list);
       const m = {};
       (vendors || []).forEach(v => { if (v.slug) m[v.slug] = v.name || ''; });
       setVendorMap(m);
+      const stale = [];
+      for (const r of list) {
+        const k = hiddenKeyOf({ name: r.name, unit: r.unit });
+        if (hiddenCatalog.has(k)) stale.push(k);
+      }
+      if (stale.length) {
+        console.log('[KHDatabase] auto-unhiding', stale.length, 'vendor keys');
+        est.actions.unhideKeys(stale);
+      }
     }).catch(e => {
       console.error('[KHDatabase] cloud vendor prices error:', e);
       alert('Не удалось загрузить КП подрядчиков:\n' + (e.message || e) + '\n\nПроверьте, что SQL-скрипт прогнан в Supabase.');
@@ -60,6 +70,7 @@ function KHDatabaseView({ est }) {
       name: it.name, unit: it.unit || '',
       unitPrice: Number(it.unit_price) || 0,
       _kind: "vendor",
+      _id: it.id,
       _vendorSlug: it.vendor_slug,
       _vendorName: vendorMap[it.vendor_slug] || '',
       _sourceFile: it.source_file || '',
@@ -295,8 +306,19 @@ function KHDatabaseView({ est }) {
                     ) : (
                       <button
                         className="btn btn-sm"
-                        title={it._kind === "user" ? "Удалить из базы" : "Скрыть из базы (можно восстановить)"}
+                        title={
+                          it._kind === "user" ? "Удалить из базы" :
+                          it._kind === "vendor" ? "Удалить позицию подрядчика из облака" :
+                          "Скрыть из базы (можно восстановить)"
+                        }
                         onClick={() => {
+                          if (it._kind === "vendor") {
+                            if (!confirm(`Удалить «${it.name}» из прайса подрядчика? Действие необратимо — подрядчик увидит, что строки нет.`)) return;
+                            est.actions.removeVendorPrice(it._id)
+                              .then(() => refreshVendors())
+                              .catch(err => alert('Не удалось удалить из облака: ' + (err.message || err)));
+                            return;
+                          }
                           const msg = it._kind === "user"
                             ? `Удалить «${it.name}» из своей базы?`
                             : `Скрыть «${it.name}» из базы? Позицию можно будет восстановить.`;
