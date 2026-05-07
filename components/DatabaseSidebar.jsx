@@ -139,9 +139,9 @@ function KHDatabaseView({ est }) {
     }
   };
 
-  const kindBadge = (kind, vendorName) => {
+  const kindBadge = (kind) => {
     if (kind === "user") return { label: "Моё", color: "var(--moss)" };
-    if (kind === "vendor") return { label: vendorName ? `КП · ${vendorName}` : "КП подрядчика", color: "var(--rust)" };
+    if (kind === "vendor") return { label: "КП", color: "var(--rust)" };
     if (kind === "local") return { label: "JSON", color: "var(--ink-3)" };
     return { label: "DDC", color: "var(--ink-3)" };
   };
@@ -273,18 +273,37 @@ function KHDatabaseView({ est }) {
             <th>Наименование</th>
             <th style={{ width: 80 }}>Ед.</th>
             <th className="num" style={{ width: 130 }}>Цена</th>
+            <th style={{ width: 150 }}>Подрядчик</th>
             <th style={{ width: 110 }}></th>
           </tr>
         </thead>
         <tbody>
           {visible.map((it, i) => {
-            const badge = kindBadge(it._kind, it._vendorName);
+            const badge = kindBadge(it._kind);
             return (
               <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
                 <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>
                 <td>{it.name}</td>
                 <td>{it.unit || "—"}</td>
                 <td className="num">{it.unitPrice ? fmt(Math.round(it.unitPrice)) + " ₽" : "—"}</td>
+                <td>
+                  {it._kind === "vendor" && it._vendorName ? (
+                    <span
+                      title={it._sourceFile ? `Файл: ${it._sourceFile}` : ''}
+                      style={{
+                        display: "inline-block",
+                        fontSize: 11, fontWeight: 600, letterSpacing: ".02em",
+                        color: "var(--rust)",
+                        border: "1px solid var(--rust)",
+                        padding: "2px 8px", borderRadius: 999,
+                        whiteSpace: "nowrap", maxWidth: "100%",
+                        overflow: "hidden", textOverflow: "ellipsis",
+                      }}
+                    >{it._vendorName}</span>
+                  ) : (
+                    <span style={{ color: "var(--ink-3)" }}>—</span>
+                  )}
+                </td>
                 <td>
                   <div className="row" style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     {!showHidden && (
