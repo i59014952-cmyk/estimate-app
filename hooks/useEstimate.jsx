@@ -694,6 +694,14 @@ function useEstimate() {
       .catch(e => { console.warn('cloud vendor price del:', e); throw e; });
   }, []);
 
+  const updateVendorPrice = React.useCallback((id, unitPrice) => {
+    if (!id || !window.SB) return Promise.resolve();
+    return window.SB.patch('kh_vendor_prices', `id=eq.${encodeURIComponent(id)}`, {
+      unit_price: Number(unitPrice) || 0,
+      updated_at: new Date().toISOString(),
+    }).catch(e => { console.warn('cloud vendor price patch:', e); throw e; });
+  }, []);
+
   const uploadCatalogFile = React.useCallback((file) => {
     const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
     const mime = (file.type || '').toLowerCase();
@@ -749,7 +757,7 @@ function useEstimate() {
     actions: {
       setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
-      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, uploadCatalogFile,
+      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile,
     },
   };
 }
