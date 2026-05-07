@@ -144,7 +144,6 @@ function HeroBlock({ est, meta, updateMeta }) {
       { k: "Каталог", v: fmt(total), u: "позиций", d: est.state.catalogReady ? "Загружено" : "Загрузка…", live: !est.state.catalogReady, dir: "up" },
       { k: "Своя база", v: fmt(localCount), u: "материалов", d: "JSON" },
       { k: "DDC цены", v: fmt(ddcCount), u: "записей", d: "Синх. активна", live: true },
-      { k: "Маржа проекта", v: "18.4", u: "%", d: "−2.1 п.п.", dir: "down" },
     ];
   }, [est.state.catalog.length, est.state.ddcCatalog.length, est.state.catalogReady]);
 
