@@ -19,6 +19,8 @@ function KHDatabaseView({ est }) {
 
   const [vendorRows, setVendorRows] = React.useState([]);
   const [vendorMap, setVendorMap] = React.useState({});
+  const [refreshTick, setRefreshTick] = React.useState(0);
+  const refreshVendors = React.useCallback(() => setRefreshTick(t => t + 1), []);
   React.useEffect(() => {
     if (!window.SB) return;
     let cancelled = false;
@@ -27,13 +29,17 @@ function KHDatabaseView({ est }) {
       window.SB.selectAll('kh_contractors', 'select=slug,name'),
     ]).then(([rows, vendors]) => {
       if (cancelled) return;
+      console.log('[KHDatabase] vendor prices loaded:', rows && rows.length, 'vendors:', vendors && vendors.length);
       setVendorRows(Array.isArray(rows) ? rows : []);
       const m = {};
       (vendors || []).forEach(v => { if (v.slug) m[v.slug] = v.name || ''; });
       setVendorMap(m);
-    }).catch(e => console.warn('cloud vendor prices:', e));
+    }).catch(e => {
+      console.error('[KHDatabase] cloud vendor prices error:', e);
+      alert('Не удалось загрузить КП подрядчиков:\n' + (e.message || e) + '\n\nПроверьте, что SQL-скрипт прогнан в Supabase.');
+    });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshTick]);
 
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
@@ -149,6 +155,7 @@ function KHDatabaseView({ est }) {
         />
         <button className="kh-btn-primary" onClick={startAdd}>+ Добавить</button>
         <button className="kh-btn-primary" onClick={onUploadClick}>↑ Загрузить XLSX/CSV (можно несколько)</button>
+        <button className="btn btn-sm" onClick={refreshVendors} title="Перечитать КП подрядчиков из облака">⟳ Обновить</button>
       </div>
 
       {!showHidden && (
