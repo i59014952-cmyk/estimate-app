@@ -2,8 +2,42 @@
 
 const USER_CATALOG_KEY = "kh-user-catalog-v1";
 const HIDDEN_CATALOG_KEY = "kh-hidden-catalog-v1";
+const ESTIMATE_KEY = "kh-estimate-v1";
 
 const hiddenKey = (name, unit) => `${String(name || "").trim().toLowerCase()}|${String(unit || "").trim().toLowerCase()}`;
+
+function loadEstimate() {
+  try {
+    const saved = localStorage.getItem(ESTIMATE_KEY);
+    if (!saved) return [];
+    const arr = JSON.parse(saved);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(x => x && typeof x.name === "string").map(x => ({
+      id: Number(x.id) || 0,
+      name: String(x.name),
+      unit: String(x.unit || ""),
+      unitPrice: Number(x.unitPrice) || 0,
+      qty: Number(x.qty) || 0,
+      notFound: !!x.notFound,
+      source: String(x.source || "local"),
+      url: String(x.url || ""),
+      expanded: false,
+      candidates: null,
+      candidatesLoading: false,
+      candidatesError: null,
+    }));
+  } catch (_) { return []; }
+}
+
+function saveEstimate(rows) {
+  try {
+    const slim = rows.map(r => ({
+      id: r.id, name: r.name, unit: r.unit, unitPrice: r.unitPrice,
+      qty: r.qty, notFound: !!r.notFound, source: r.source, url: r.url || "",
+    }));
+    localStorage.setItem(ESTIMATE_KEY, JSON.stringify(slim));
+  } catch (_) {}
+}
 
 function loadHiddenCatalog() {
   try {
@@ -138,7 +172,7 @@ function useEstimate() {
     window.KH_DB_COUNT = visibleUserCatalog.length + visibleCatalog.length + visibleDdcCatalog.length;
     window.dispatchEvent(new Event('kh-storage'));
   }, [visibleUserCatalog.length, visibleCatalog.length, visibleDdcCatalog.length]);
-  const [estimate, setEstimate] = React.useState([]);
+  const [estimate, setEstimate] = React.useState(loadEstimate);
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
   const [pricesBusy, setPricesBusy] = React.useState(false);
@@ -146,6 +180,13 @@ function useEstimate() {
   const nextIdRef = React.useRef(1);
   const estimateRef = React.useRef([]);
   React.useEffect(() => { estimateRef.current = estimate; }, [estimate]);
+
+  React.useEffect(() => {
+    const maxId = estimate.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0);
+    if (nextIdRef.current <= maxId) nextIdRef.current = maxId + 1;
+  }, []);
+
+  React.useEffect(() => { saveEstimate(estimate); }, [estimate]);
 
   React.useEffect(() => {
     const filtered = estimate.filter(r => !isHiddenCategory(r.name));
@@ -220,6 +261,12 @@ function useEstimate() {
 
   const removeRow = React.useCallback((id) => {
     setEstimate(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const resetEstimate = React.useCallback(() => {
+    setEstimate([]);
+    nextIdRef.current = 1;
+    try { localStorage.removeItem(ESTIMATE_KEY); } catch (_) {}
   }, []);
 
   const updateQty = React.useCallback((id, qty) => {
@@ -755,7 +802,7 @@ function useEstimate() {
   return {
     state: { catalog, ddcCatalog, userCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
-      setQuery, addRow, removeRow, updateQty, updateRow, togglePicker, applyCandidate,
+      setQuery, addRow, removeRow, resetEstimate, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
       addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile,
     },
