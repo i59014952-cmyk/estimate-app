@@ -1,6 +1,88 @@
 // KHDatabaseView — содержимое модалки «База данных»: поиск, ручное добавление,
 // загрузка XLSX/CSV, фильтры по источнику, добавление в смету.
 
+function PriceCell({ item, est, onSaved }) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const inputRef = React.useRef(null);
+
+  const editable = item._kind === "user" || item._kind === "vendor";
+  const display = item.unitPrice ? fmt(Math.round(item.unitPrice)) + " ₽" : "—";
+
+  const startEdit = () => {
+    if (!editable || busy) return;
+    setDraft(item.unitPrice ? String(Math.round(item.unitPrice)) : "");
+    setEditing(true);
+    setTimeout(() => { if (inputRef.current) { inputRef.current.focus(); inputRef.current.select(); } }, 0);
+  };
+
+  const cancel = () => { setEditing(false); setDraft(""); };
+
+  const commit = async () => {
+    const next = parseFloat(String(draft).replace(/\s+/g, "").replace(",", "."));
+    if (!isFinite(next) || next < 0) { cancel(); return; }
+    if (Math.round(next) === Math.round(item.unitPrice || 0)) { cancel(); return; }
+    setBusy(true);
+    try {
+      if (item._kind === "user") {
+        est.actions.addCatalogItem({ name: item.name, unit: item.unit || "", unitPrice: next });
+      } else if (item._kind === "vendor") {
+        await est.actions.updateVendorPrice(item._id, next);
+        if (onSaved) onSaved();
+      }
+      setEditing(false);
+    } catch (err) {
+      alert("Не удалось сохранить цену: " + (err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editable) {
+    return <span style={{ color: "var(--ink-2)" }}>{display}</span>;
+  }
+
+  if (!editing) {
+    return (
+      <span
+        onClick={startEdit}
+        title="Нажмите, чтобы изменить цену"
+        style={{
+          cursor: "pointer",
+          borderBottom: "1px dashed var(--rule)",
+          padding: "2px 4px",
+          display: "inline-block",
+          minWidth: 60,
+          textAlign: "right",
+        }}
+      >{display}</span>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      value={draft}
+      disabled={busy}
+      inputMode="decimal"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      }}
+      style={{
+        width: 100, textAlign: "right",
+        border: "1px solid var(--moss)", borderRadius: 6,
+        padding: "4px 6px", outline: "none",
+        background: "var(--paper)", color: "var(--ink)",
+        fontSize: 13, fontFamily: "var(--sans)",
+      }}
+    />
+  );
+}
+
 function KHDatabaseView({ est }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState("all");
@@ -285,7 +367,9 @@ function KHDatabaseView({ est }) {
                 <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>
                 <td>{it.name}</td>
                 <td>{it.unit || "—"}</td>
-                <td className="num">{it.unitPrice ? fmt(Math.round(it.unitPrice)) + " ₽" : "—"}</td>
+                <td className="num">
+                  <PriceCell item={it} est={est} onSaved={refreshVendors} />
+                </td>
                 <td>
                   {it._kind === "vendor" && it._vendorName ? (
                     <span
