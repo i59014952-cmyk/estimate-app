@@ -13,9 +13,10 @@
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#e8e0cf;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}
   .wrap{max-width:1000px;margin:32px auto;padding:32px 36px;background:var(--paper);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-  .brand{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--rule)}
-  .mark{display:inline-block;border:2px solid var(--ink);padding:8px 12px;font-weight:700;line-height:1;font-size:13px}
-  .mark span{display:block}
+  .brand{margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--rule)}
+  .mark{display:inline-flex;flex-direction:column;align-items:stretch;border:2px solid var(--ink);width:88px;font-family:'Helvetica Neue',Arial,sans-serif;font-weight:900;font-size:18px;letter-spacing:.04em;line-height:1;color:var(--ink);text-align:center}
+  .mark span{display:block;padding:10px 0}
+  .mark span:last-child{border-top:1.5px solid var(--ink)}
   h1{margin:0 0 4px;font-family:Georgia,serif;font-size:28pt;font-weight:500}
   h1 em{font-style:italic;color:var(--wood-deep);font-weight:500}
   .greeting{color:var(--ink-2);font-size:15pt;margin-bottom:4px}
@@ -46,10 +47,6 @@
 <div id="root" class="wrap">
   <div class="brand">
     <div class="mark"><span>KUB</span><span>HOUSE</span></div>
-    <div>
-      <div style="font-weight:600">KUB HOUSE</div>
-      <div class="meta">Modern Wood Development</div>
-    </div>
   </div>
   <div id="content"><div class="status busy">Загрузка…</div></div>
 </div>
@@ -211,7 +208,6 @@ async function onRemove(id) {
 }
 
 function render() {
-  const greet = vendor.org ? `${esc(vendor.name)} <span style="color:var(--ink-3)">· ${esc(vendor.org)}</span>` : esc(vendor.name);
   const rows = prices.map(p => `
     <tr data-id="${p.id}">
       <td><input type="text" value="${esc(p.name)}" data-field="name"></td>
@@ -222,8 +218,9 @@ function render() {
     </tr>`).join('');
 
   $('#content').innerHTML = `
-    <h1>Загрузка прайса <em>«${greet}»</em></h1>
-    <div class="meta">Это ваша личная страница для отправки цен в KUB HOUSE. Никто, кроме вас и заказчика, не видит этих позиций.</div>
+    <h1 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Загрузка прайса <em>«${esc(vendor.name)}»</em></h1>
+    ${vendor.org ? `<div class="meta" style="font-size:14px;color:var(--ink-2);margin-top:2px">${esc(vendor.org)}</div>` : ''}
+    <div class="meta" style="margin-top:6px">Это ваша личная страница для отправки цен в KUB HOUSE. Никто, кроме вас и заказчика, не видит этих позиций.</div>
     <div id="status" style="display:none"></div>
     <div class="actions">
       <input type="file" id="file" multiple accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none">
