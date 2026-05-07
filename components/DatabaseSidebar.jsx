@@ -41,6 +41,16 @@ function KHDatabaseView({ est }) {
     return () => { cancelled = true; };
   }, [refreshTick]);
 
+  React.useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshVendors(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refreshVendors);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refreshVendors);
+    };
+  }, [refreshVendors]);
+
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
 
