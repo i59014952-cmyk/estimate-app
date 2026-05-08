@@ -492,6 +492,22 @@ function PositionsHeader({ est, onAddRow }) {
         </button>
         <button
           className="btn btn-sm"
+          onClick={async () => {
+            try {
+              const url = await est.actions.createClientLink();
+              try { await navigator.clipboard.writeText(url); } catch (_) {}
+              window.prompt("Ссылка для клиента (скопирована в буфер):", url);
+            } catch (err) {
+              alert("Не удалось создать ссылку: " + (err.message || err));
+            }
+          }}
+          disabled={rowCount === 0}
+          title="Создать ссылку для клиента: он сможет менять количество и удалять строки, но не цены"
+        >
+          <Icon name="users" size={13} /> Для клиента
+        </button>
+        <button
+          className="btn btn-sm"
           onClick={est.actions.exportDoc}
           disabled={rowCount === 0}
         >
