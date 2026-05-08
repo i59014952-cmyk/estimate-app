@@ -279,3 +279,22 @@ input[type="number"]{-moz-appearance:textfield;appearance:textfield}
 /* Селект-фокус */
 .focusable{outline:none}
 .focusable:focus-visible{box-shadow:0 0 0 3px rgba(92,58,30,.18)}
+
+/* iOS / mobile baseline */
+html{-webkit-text-size-adjust:100%}
+body{overscroll-behavior-y:none}
+
+/* Tablet (iPad portrait and below): hide right rail to free up width */
+@media (max-width:1024px){
+  main ~ aside{display:none !important}
+  main{overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+
+/* Phone: hide left navigation rail, give main full width */
+@media (max-width:760px){
+  aside{display:none !important}
+  .container{padding:0 12px}
+  /* Sticky TopBar content can wrap and use less padding */
+  body > div#root header,
+  body > div#root .row.center.between{flex-wrap:wrap;gap:8px}
+}

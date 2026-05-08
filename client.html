@@ -2,7 +2,9 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
 <title>Смета — KUB HOUSE</title>
 <style>
   :root{
@@ -36,6 +38,12 @@
   .err-page{padding:60px;text-align:center}
   .saved{position:fixed;bottom:24px;right:24px;background:#3a5a3e;color:#e0eed4;padding:10px 16px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .2s}
   .saved.show{opacity:1}
+  @media (max-width:760px){
+    .wrap{margin:0;padding:18px 14px;border-radius:0;box-shadow:none}
+    h1{font-size:22pt}
+    table{display:block;overflow-x:auto;white-space:nowrap}
+    .totals{flex-direction:column;align-items:flex-start;gap:6px}
+  }
 </style>
 </head>
 <body>
