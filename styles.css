@@ -282,19 +282,78 @@ input[type="number"]{-moz-appearance:textfield;appearance:textfield}
 
 /* iOS / mobile baseline */
 html{-webkit-text-size-adjust:100%}
-body{overscroll-behavior-y:none}
+body{overscroll-behavior-y:none;overflow-x:hidden}
+#root{overflow-x:hidden}
 
-/* Tablet (iPad portrait and below): hide right rail to free up width */
+/* Tablet (iPad portrait and below): hide right rail, scale hero down */
 @media (max-width:1024px){
   main ~ aside{display:none !important}
-  main{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  main{min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  .kh-hero{padding:24px 24px 22px !important}
+  .kh-hero__title{font-size:46px !important;white-space:normal !important;word-break:break-word}
+  .kh-hero__top{flex-wrap:wrap;gap:14px !important}
+  .kh-hero__meta{align-items:flex-start !important;flex-direction:row;flex-wrap:wrap;gap:6px 14px !important;white-space:normal !important}
+
+  .kh-toolbar-bar{padding:14px 24px !important}
+  .kh-positions{padding:14px 24px 12px !important}
+  .kh-est-search{padding:0 24px 12px !important}
+  .kh-cols{padding:10px 24px !important}
+  .kh-est-row__inner{padding:12px 24px !important}
+  .kh-statusbar{padding:8px 24px !important}
 }
 
-/* Phone: hide left navigation rail, give main full width */
+/* Phone: stack everything, hide rails, shrink hero */
 @media (max-width:760px){
   aside{display:none !important}
   .container{padding:0 12px}
-  /* Sticky TopBar content can wrap and use less padding */
-  body > div#root header,
-  body > div#root .row.center.between{flex-wrap:wrap;gap:8px}
+
+  body, #root, .col[style*="min-height: 100vh"], .col[style*="minHeight: 100vh"]{min-width:0}
+
+  /* TopBar */
+  .kh-topbar{padding:10px 14px !important;flex-wrap:wrap;gap:8px !important;row-gap:10px !important}
+  .kh-topbar__brand{gap:10px !important;flex:1;min-width:0}
+  .kh-topbar__crumbs{margin-left:0 !important;flex-wrap:wrap;font-size:10px !important;row-gap:2px}
+  .kh-topbar__actions{gap:6px !important;flex-wrap:wrap;justify-content:flex-end}
+  .kh-topbar__autosave{display:none !important}
+  .kh-topbar__new{padding:6px 10px !important;font-size:11px !important}
+
+  /* Hero */
+  .kh-hero{padding:18px 14px 18px !important}
+  .kh-hero__top{flex-direction:column;align-items:flex-start !important;gap:10px !important}
+  .kh-hero__title{font-size:30px !important;line-height:1.05 !important;white-space:normal !important;word-break:break-word}
+  .kh-hero__sub{font-size:10px !important;line-height:1.5}
+  .kh-hero__meta{align-self:stretch;align-items:flex-start !important;flex-direction:row;flex-wrap:wrap;gap:4px 12px !important;white-space:normal !important;font-size:10px !important}
+  .kh-hero__stats{flex-direction:column;margin-top:18px !important;gap:10px !important}
+  .kh-hero__stat{flex:0 0 auto !important;padding:0 !important;border-right:0 !important;border-bottom:1px dashed var(--rule);padding-bottom:10px !important}
+  .kh-hero__stat:last-child{border-bottom:0;padding-bottom:0 !important}
+  .kh-hero__stat .serif{font-size:30px !important}
+
+  /* Toolbar */
+  .kh-toolbar-bar{padding:12px 14px !important;gap:8px !important}
+  .kh-toolbar-bar__search{min-width:0 !important;flex:1 1 100% !important}
+  .kh-toolbar-bar__hint{display:none !important}
+  .kh-toolbar-bar__tabs{flex-wrap:wrap;gap:4px !important}
+
+  /* Positions header */
+  .kh-positions{padding:12px 14px 10px !important;align-items:flex-start !important}
+  .kh-positions > .col{width:100%}
+  .kh-positions__actions{flex-wrap:wrap;gap:6px !important;width:100%}
+  .kh-positions__actions .btn-sm{padding:6px 10px !important;font-size:11px !important}
+
+  /* Estimate search */
+  .kh-est-search{padding:0 14px 10px !important}
+
+  /* Estimate table — let it scroll horizontally inside main */
+  .kh-cols, .kh-est-row__inner{padding-left:14px !important;padding-right:14px !important;min-width:760px}
+
+  /* Empty state */
+  .kh-empty{padding:24px 14px 32px !important}
+
+  /* Status bar */
+  .kh-statusbar{padding:8px 14px !important;flex-wrap:wrap;gap:6px !important;font-size:10px !important;letter-spacing:.06em !important}
+  .kh-statusbar > .row{flex-wrap:wrap;gap:8px !important}
+
+  /* Floating helpers */
+  .kh-prices-card{padding:24px 20px 22px}
 }
