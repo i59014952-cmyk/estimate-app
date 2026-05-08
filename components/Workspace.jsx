@@ -19,13 +19,21 @@ function StatCell({ k, v, u, d, dir, live }) {
   );
 }
 
-function TopBar({ onTheme, theme }) {
+function TopBar({ onTheme, theme, onMenu }) {
   return (
     <div className="row center between kh-topbar" style={{
       padding: "14px 28px", borderBottom: "1px solid var(--rule)",
       background: "var(--paper)", position: "sticky", top: 0, zIndex: 10
     }}>
       <div className="row center gap-6 kh-topbar__brand">
+        <button
+          onClick={onMenu}
+          className="btn btn-icon kh-topbar__burger"
+          aria-label="Открыть меню"
+          title="Меню"
+        >
+          <Icon name="menu" size={16} />
+        </button>
         <KubLogo size={32} />
         <div className="row center gap-3 mono kh-topbar__crumbs" style={{ fontSize: 11, color: "var(--ink-3)", letterSpacing: ".04em", marginLeft: 8 }}>
           <span>Workspace</span>
@@ -67,7 +75,7 @@ function khReadDynamicCounts() {
   return { objects: activeObjects, contractors, database };
 }
 
-function Sidebar({ active, onPick, meta, updateMeta }) {
+function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
   const [counts, setCounts] = React.useState(khReadDynamicCounts);
   React.useEffect(() => {
     const refresh = () => setCounts(khReadDynamicCounts());
@@ -78,12 +86,18 @@ function Sidebar({ active, onPick, meta, updateMeta }) {
       window.removeEventListener('kh-storage', refresh);
     };
   }, []);
+  React.useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape' && onClose) onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobileOpen, onClose]);
   const Item = ({ it }) => {
     const dynamic = counts[it.id];
     const count = dynamic != null ? dynamic : it.count;
     return (
       <button
-        onClick={() => onPick && onPick(it.id)}
+        onClick={() => { onPick && onPick(it.id); onClose && onClose(); }}
         className="row center between focusable"
         style={{
           width: "100%", padding: "9px 12px", borderRadius: 8,
@@ -106,12 +120,34 @@ function Sidebar({ active, onPick, meta, updateMeta }) {
     );
   };
   return (
-    <aside className="col" style={{
-      width: 232, padding: "20px 16px 18px", gap: 4,
-      borderRight: "1px solid var(--rule)", background: "var(--paper-2)",
-      minHeight: "100%"
-    }}>
-      <div className="eyebrow" style={{ padding: "0 12px 8px" }}>Рабочая область</div>
+    <>
+      {mobileOpen && (
+        <div
+          className="kh-sidebar-backdrop"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={"col kh-sidebar" + (mobileOpen ? " kh-sidebar--open" : "")}
+        style={{
+          width: 232, padding: "20px 16px 18px", gap: 4,
+          borderRight: "1px solid var(--rule)", background: "var(--paper-2)",
+          minHeight: "100%"
+        }}
+      >
+      <div className="row center between kh-sidebar__head">
+        <div className="eyebrow" style={{ padding: "0 12px 8px" }}>Рабочая область</div>
+        <button
+          onClick={onClose}
+          className="btn btn-icon kh-sidebar__close"
+          aria-label="Закрыть меню"
+          title="Закрыть"
+          style={{ width: 28, height: 28, marginBottom: 8 }}
+        >
+          <Icon name="x" size={14} />
+        </button>
+      </div>
       {NAV.map(it => <Item key={it.id} it={it} />)}
       <div className="eyebrow" style={{ padding: "16px 12px 8px" }}>Справочники</div>
       {NAV2.map(it => <Item key={it.id} it={it} />)}
@@ -132,6 +168,7 @@ function Sidebar({ active, onPick, meta, updateMeta }) {
         </div>
       </div>
     </aside>
+    </>
   );
 }
 
@@ -814,6 +851,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const [tab, setTab] = useState("all");
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
   const est = useEstimate();
   const [meta, updateMeta] = useEditableMeta();
   const fileInputRef = React.useRef(null);
@@ -857,9 +895,16 @@ function Workspace({ embedded = false, onTheme, theme }) {
         style={{ display: "none" }}
         onChange={onFileChange}
       />
-      <TopBar onTheme={onTheme} theme={theme} />
+      <TopBar onTheme={onTheme} theme={theme} onMenu={() => setNavOpen(true)} />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
-        <Sidebar active={navActive} onPick={(id) => { setNavActive(id); setKhModalTab(id); }} meta={meta} updateMeta={updateMeta} />
+        <Sidebar
+          active={navActive}
+          onPick={(id) => { setNavActive(id); setKhModalTab(id); }}
+          meta={meta}
+          updateMeta={updateMeta}
+          mobileOpen={navOpen}
+          onClose={() => setNavOpen(false)}
+        />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
           <HeroBlock est={est} meta={meta} updateMeta={updateMeta} />
           <div style={{ position: "relative" }}>
