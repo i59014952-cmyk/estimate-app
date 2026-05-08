@@ -172,6 +172,46 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
   );
 }
 
+function MobileNav({ active, onPick }) {
+  const [counts, setCounts] = React.useState(khReadDynamicCounts);
+  React.useEffect(() => {
+    const refresh = () => setCounts(khReadDynamicCounts());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('kh-storage', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('kh-storage', refresh);
+    };
+  }, []);
+  const items = [...NAV, ...NAV2];
+  return (
+    <nav className="kh-mobile-nav" aria-label="Разделы">
+      <div className="kh-mobile-nav__scroll">
+        {items.map((it) => {
+          const dynamic = counts[it.id];
+          const count = dynamic != null ? dynamic : it.count;
+          const isActive = active === it.id;
+          return (
+            <button
+              key={it.id}
+              type="button"
+              onClick={() => onPick && onPick(it.id)}
+              className="kh-mobile-nav__chip"
+              data-active={isActive ? "true" : "false"}
+            >
+              <Icon name={it.icon} size={14} />
+              <span>{it.label}</span>
+              {count != null && (
+                <span className="mono kh-mobile-nav__count">{fmt(count)}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 function HeroBlock({ est, meta, updateMeta }) {
   const stats = React.useMemo(() => {
     const localCount = est.state.catalog.length;
@@ -896,6 +936,10 @@ function Workspace({ embedded = false, onTheme, theme }) {
         onChange={onFileChange}
       />
       <TopBar onTheme={onTheme} theme={theme} onMenu={() => setNavOpen(true)} />
+      <MobileNav
+        active={navActive}
+        onPick={(id) => { setNavActive(id); setKhModalTab(id); }}
+      />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
         <Sidebar
           active={navActive}
