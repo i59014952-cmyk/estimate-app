@@ -2,7 +2,9 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
 <title>Загрузка КП — KUB HOUSE</title>
 <style>
   :root{
@@ -40,6 +42,13 @@
   .empty{padding:32px;text-align:center;color:var(--ink-3)}
   .err-page{padding:60px;text-align:center}
   .small{font-size:12px;color:var(--ink-3);margin-top:8px}
+  @media (max-width:760px){
+    .wrap{margin:0;padding:18px 14px;border-radius:0;box-shadow:none}
+    h1{font-size:22pt}
+    table{display:block;overflow-x:auto;white-space:nowrap}
+    .actions{flex-direction:column;align-items:stretch}
+    .actions .meta{align-self:flex-start !important}
+  }
 </style>
 </head>
 <body>
