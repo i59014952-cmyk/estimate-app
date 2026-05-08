@@ -60,6 +60,7 @@ function Icon({ name, size=16 }) {
     case "layers": return <svg {...props}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>;
     case "bell": return <svg {...props}><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>;
     case "spark": return <svg {...props}><path d="M12 2l2.5 7L22 11l-7.5 2L12 20l-2.5-7L2 11l7.5-2z"/></svg>;
+    case "menu": return <svg {...props}><path d="M3 6h18M3 12h18M3 18h18"/></svg>;
     default: return null;
   }
 }

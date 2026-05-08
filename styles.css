@@ -285,6 +285,44 @@ html{-webkit-text-size-adjust:100%}
 body{overscroll-behavior-y:none;overflow-x:hidden}
 #root{overflow-x:hidden}
 
+/* Mobile-only nav burger + sidebar drawer (defaults — desktop hides them) */
+.kh-topbar__burger{display:none}
+.kh-sidebar__head{display:none}
+.kh-sidebar-backdrop{display:none}
+.kh-mobile-nav{display:none}
+.kh-mobile-nav__scroll{
+  display:flex;gap:6px;padding:10px 14px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.kh-mobile-nav__scroll::-webkit-scrollbar{display:none}
+.kh-mobile-nav{
+  background:var(--paper);
+  border-bottom:1px solid var(--rule);
+}
+.kh-mobile-nav__chip{
+  display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
+  padding:7px 12px;border-radius:99px;
+  border:1px solid var(--rule);background:var(--paper-card);
+  color:var(--ink-2);font-size:12px;font-family:var(--sans);
+  cursor:pointer;white-space:nowrap;
+}
+.kh-mobile-nav__chip[data-active="true"]{
+  background:var(--ink);color:var(--paper);border-color:var(--ink);
+}
+.kh-mobile-nav__count{
+  font-size:10px;opacity:.6;margin-left:2px;
+}
+@media (max-width:760px){
+  .kh-sidebar-backdrop{
+    display:block;
+    position:fixed;inset:0;z-index:40;
+    background:rgba(20,16,12,.42);
+    backdrop-filter:blur(2px);
+    animation:kh-fade-in .18s ease-out;
+  }
+}
+
 /* Tablet (iPad portrait and below): hide right rail, scale hero down */
 @media (max-width:1024px){
   main ~ aside{display:none !important}
@@ -303,9 +341,26 @@ body{overscroll-behavior-y:none;overflow-x:hidden}
   .kh-statusbar{padding:8px 24px !important}
 }
 
-/* Phone: stack everything, hide rails, shrink hero */
+/* Phone: stack everything, sidebar becomes drawer, shrink hero */
 @media (max-width:760px){
-  aside{display:none !important}
+  /* By default hide both rails on phones */
+  main ~ aside{display:none !important}
+  aside.kh-sidebar{
+    display:flex !important;
+    position:fixed;top:0;bottom:0;left:0;
+    width:min(280px, 82vw);
+    transform:translateX(-100%);
+    transition:transform .25s ease;
+    z-index:50;
+    box-shadow:0 30px 80px -20px rgba(20,16,12,.45);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  aside.kh-sidebar.kh-sidebar--open{transform:translateX(0)}
+  .kh-sidebar__head{display:flex !important}
+  .kh-topbar__burger{display:inline-flex !important}
+  .kh-mobile-nav{display:block !important}
+
   .container{padding:0 12px}
 
   body, #root, .col[style*="min-height: 100vh"], .col[style*="minHeight: 100vh"]{min-width:0}
