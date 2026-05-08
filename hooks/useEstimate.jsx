@@ -269,6 +269,26 @@ function useEstimate() {
     try { localStorage.removeItem(ESTIMATE_KEY); } catch (_) {}
   }, []);
 
+  const createClientLink = React.useCallback(async () => {
+    if (!window.SB) throw new Error("Supabase не подключён");
+    const rows = estimateRef.current;
+    if (!rows || !rows.length) throw new Error("Смета пуста");
+    const buf = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(buf);
+    const token = Array.from(buf, b => b.toString(16).padStart(2, "0")).join("");
+    const slim = rows.map(r => ({
+      id: r.id, name: r.name, unit: r.unit || "",
+      unitPrice: Number(r.unitPrice) || 0, qty: Number(r.qty) || 0,
+      notFound: !!r.notFound, source: r.source || "local", url: r.url || "",
+    }));
+    const now = new Date().toISOString();
+    await window.SB.upsert("kh_client_estimates", [{
+      token, rows: slim, created_at: now, updated_at: now,
+    }], "token");
+    const base = location.origin + location.pathname.replace(/[^/]*$/, "");
+    return base + "client.html?token=" + token;
+  }, []);
+
   const updateQty = React.useCallback((id, qty) => {
     const n = isFinite(qty) && qty >= 0 ? qty : 0;
     setEstimate(prev => prev.map(r => r.id === id ? { ...r, qty: n } : r));
@@ -802,7 +822,7 @@ function useEstimate() {
   return {
     state: { catalog, ddcCatalog, userCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
-      setQuery, addRow, removeRow, resetEstimate, updateQty, updateRow, togglePicker, applyCandidate,
+      setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
       addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile,
     },
