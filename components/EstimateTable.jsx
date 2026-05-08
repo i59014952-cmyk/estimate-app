@@ -40,8 +40,8 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
   };
 
   return (
-    <div id={`est-row-${row.id}`} style={{ borderBottom: "1px solid var(--rule)" }}>
-      <div className="row" style={{
+    <div id={`est-row-${row.id}`} className="kh-est-row" style={{ borderBottom: "1px solid var(--rule)" }}>
+      <div className="row kh-est-row__inner" style={{
         padding: "12px 32px",
         alignItems: "center",
         background: row.notFound ? "rgba(194,88,66,0.04)" : "transparent",

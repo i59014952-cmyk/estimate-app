@@ -21,13 +21,13 @@ function StatCell({ k, v, u, d, dir, live }) {
 
 function TopBar({ onTheme, theme }) {
   return (
-    <div className="row center between" style={{
+    <div className="row center between kh-topbar" style={{
       padding: "14px 28px", borderBottom: "1px solid var(--rule)",
       background: "var(--paper)", position: "sticky", top: 0, zIndex: 10
     }}>
-      <div className="row center gap-6">
+      <div className="row center gap-6 kh-topbar__brand">
         <KubLogo size={32} />
-        <div className="row center gap-3 mono" style={{ fontSize: 11, color: "var(--ink-3)", letterSpacing: ".04em", marginLeft: 8 }}>
+        <div className="row center gap-3 mono kh-topbar__crumbs" style={{ fontSize: 11, color: "var(--ink-3)", letterSpacing: ".04em", marginLeft: 8 }}>
           <span>Workspace</span>
           <span style={{ opacity: .5 }}>›</span>
           <span>Сметы</span>
@@ -35,9 +35,9 @@ function TopBar({ onTheme, theme }) {
           <span style={{ color: "var(--ink)" }}>Новый расчёт</span>
         </div>
       </div>
-      <div className="row center gap-3">
-        <button className="btn btn-sm"><Icon name="plus" size={14} /> Новая смета</button>
-        <div className="row center gap-2 mono tiny" style={{
+      <div className="row center gap-3 kh-topbar__actions">
+        <button className="btn btn-sm kh-topbar__new"><Icon name="plus" size={14} /> Новая смета</button>
+        <div className="row center gap-2 mono tiny kh-topbar__autosave" style={{
           padding: "7px 12px", border: "1px solid var(--rule)", borderRadius: 99, color: "var(--ink-3)"
         }}>
           <span style={{
@@ -148,14 +148,14 @@ function HeroBlock({ est, meta, updateMeta }) {
   }, [est.state.catalog.length, est.state.ddcCatalog.length, est.state.catalogReady]);
 
   return (
-    <div className="frame" style={{ position: "relative", padding: "30px 40px 28px", borderTop: "1px solid var(--rule-2)", borderBottom: "1px solid var(--rule-2)" }}>
+    <div className="frame kh-hero" style={{ position: "relative", padding: "30px 40px 28px", borderTop: "1px solid var(--rule-2)", borderBottom: "1px solid var(--rule-2)" }}>
       <div className="frame-bl" /><div className="frame-br" />
-      <div className="row between" style={{ alignItems: "flex-start", gap: 24 }}>
+      <div className="row between kh-hero__top" style={{ alignItems: "flex-start", gap: 24 }}>
         <div className="col gap-3">
-          <div className="serif" style={{ fontSize: 60, lineHeight: .92, letterSpacing: "-0.025em", whiteSpace: "nowrap" }}>
+          <div className="serif kh-hero__title" style={{ fontSize: 60, lineHeight: .92, letterSpacing: "-0.025em", whiteSpace: "nowrap" }}>
             Смета <span className="serif-it" style={{ fontStyle: "italic" }}>«<Editable value={meta.title} onChange={(v) => updateMeta("title", v)} />»</span>
           </div>
-          <div className="mono tiny" style={{ color: "var(--ink-3)", letterSpacing: ".08em" }}>
+          <div className="mono tiny kh-hero__sub" style={{ color: "var(--ink-3)", letterSpacing: ".08em" }}>
             <b style={{ color: "var(--ink)" }}><Editable value={meta.code} onChange={(v) => updateMeta("code", v)} /></b>
             <span style={{ margin: "0 8px", color: "var(--ink-4)" }}>·</span>
             <Editable value={meta.kind || "Резиденция"} onChange={(v) => updateMeta("kind", v)} />
@@ -165,16 +165,16 @@ function HeroBlock({ est, meta, updateMeta }) {
             <Editable value={meta.areaText || "284 м²"} onChange={(v) => updateMeta("areaText", v)} />
           </div>
         </div>
-        <div className="col mono tiny" style={{ alignItems: "flex-end", gap: 4, color: "var(--ink-3)", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
+        <div className="col mono tiny kh-hero__meta" style={{ alignItems: "flex-end", gap: 4, color: "var(--ink-3)", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
           <div>РЕВИЗИЯ <b style={{ color: "var(--ink)" }}><Editable value={meta.revision} onChange={(v) => updateMeta("revision", v)} /></b></div>
           <div>ДАТА <b style={{ color: "var(--ink)" }}><Editable value={meta.date} onChange={(v) => updateMeta("date", v)} /></b></div>
           <div>СМЕТЧИК <b style={{ color: "var(--ink)" }}><Editable value={meta.estimator} onChange={(v) => updateMeta("estimator", v)} /></b></div>
         </div>
       </div>
 
-      <div className="row" style={{ marginTop: 28, gap: 0 }}>
+      <div className="row kh-hero__stats" style={{ marginTop: 28, gap: 0 }}>
         {stats.map((s, i) => (
-          <div key={i} className="row" style={{ flex: 1, paddingRight: 24, borderRight: i < stats.length - 1 ? "1px dashed var(--rule)" : 0, paddingLeft: i ? 24 : 0 }}>
+          <div key={i} className="row kh-hero__stat" style={{ flex: 1, paddingRight: 24, borderRight: i < stats.length - 1 ? "1px dashed var(--rule)" : 0, paddingLeft: i ? 24 : 0 }}>
             <StatCell {...s} />
           </div>
         ))}
@@ -191,8 +191,8 @@ function Toolbar({ tab, onTab, query, onQuery }) {
     { id: "tree", label: "Дерево" },
   ];
   return (
-    <div className="row between center" style={{ padding: "16px 32px", gap: 12, flexWrap: "wrap" }}>
-      <div className="row center gap-3" style={{
+    <div className="row between center kh-toolbar-bar" style={{ padding: "16px 32px", gap: 12, flexWrap: "wrap" }}>
+      <div className="row center gap-3 kh-toolbar-bar__search" style={{
         flex: 1, minWidth: 280, padding: "9px 14px",
         border: "1px solid var(--rule)", borderRadius: 99, background: "var(--paper-card)"
       }}>
@@ -202,9 +202,9 @@ function Toolbar({ tab, onTab, query, onQuery }) {
           placeholder="Найти работу, материал или подрядчика…"
           style={{ flex: 1, border: 0, background: "transparent", outline: "none", color: "var(--ink)", fontSize: 13, fontFamily: "var(--sans)" }}
         />
-        <span className="mono tiny" style={{ color: "var(--ink-4)", border: "1px solid var(--rule)", borderRadius: 4, padding: "2px 6px" }}>⌘K</span>
+        <span className="mono tiny kh-toolbar-bar__hint" style={{ color: "var(--ink-4)", border: "1px solid var(--rule)", borderRadius: 4, padding: "2px 6px" }}>⌘K</span>
       </div>
-      <div className="row center" style={{ gap: 6 }}>
+      <div className="row center kh-toolbar-bar__tabs" style={{ gap: 6 }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => onTab(t.id)} className="btn btn-sm"
             style={{
@@ -418,7 +418,7 @@ function HouseSketch() {
 
 function EmptyState({ onUpload, onAddRow, catalogReady }) {
   return (
-    <div className="col center" style={{ padding: "40px 32px 44px", alignItems: "center", textAlign: "center" }}>
+    <div className="col center kh-empty" style={{ padding: "40px 32px 44px", alignItems: "center", textAlign: "center" }}>
       <HouseSketch />
       <div className="serif" style={{ fontSize: 28, lineHeight: 1.1, marginTop: 20, marginBottom: 10, letterSpacing:"-0.01em" }}>
         Начните <span className="serif-it" style={{ fontStyle: "italic" }}>с чистого листа</span>
@@ -447,7 +447,7 @@ function PositionsHeader({ est, onAddRow }) {
   const rowCount = est.state.estimate.length;
   const grand = est.state.totals.grand;
   return (
-    <div className="row between" style={{ padding: "14px 32px 12px", flexWrap:"wrap", gap:12, alignItems: "flex-end" }}>
+    <div className="row between kh-positions" style={{ padding: "14px 32px 12px", flexWrap:"wrap", gap:12, alignItems: "flex-end" }}>
       <div className="col gap-2">
         <div className="row center gap-3">
           <span className="serif" style={{ fontSize: 30, letterSpacing: "-0.02em", lineHeight: 1 }}>
@@ -461,7 +461,7 @@ function PositionsHeader({ est, onAddRow }) {
           итого <b className="serif" style={{ color:"var(--ink)", fontSize:15 }}>{grand > 0 ? fmtMoney(grand) : "— ₽"}</b>
         </div>
       </div>
-      <div className="row gap-2 center">
+      <div className="row gap-2 center kh-positions__actions">
         <button
           className="btn btn-sm"
           onClick={onAddRow}
@@ -547,7 +547,7 @@ function EstimateSearch({ rows }) {
   };
 
   return (
-    <div style={{ position: "relative", padding: "0 32px 12px" }}>
+    <div className="kh-est-search" style={{ position: "relative", padding: "0 32px 12px" }}>
       <div className="row center gap-3" style={{
         padding: "8px 14px",
         border: "1px solid var(--rule)", borderRadius: 99,
@@ -616,7 +616,7 @@ function EstimateSearch({ rows }) {
 
 function ColumnsHeader() {
   return (
-    <div className="row" style={{ padding: "10px 32px", borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)", color: "var(--ink-4)", background: "var(--paper-2)" }}>
+    <div className="row kh-cols" style={{ padding: "10px 32px", borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)", color: "var(--ink-4)", background: "var(--paper-2)" }}>
       <div className="mono tiny" style={{ width: 56, letterSpacing: ".08em" }}>#</div>
       <div className="mono tiny" style={{ flex: 1, letterSpacing: ".08em" }}>НАИМЕНОВАНИЕ</div>
       <div className="mono tiny" style={{ width: 64, textAlign: "center", letterSpacing: ".08em" }}>ЕД. ИЗМ.</div>
@@ -790,7 +790,7 @@ function ScrollToTop() {
 
 function StatusBar() {
   return (
-    <div className="row between mono tiny" style={{
+    <div className="row between mono tiny kh-statusbar" style={{
       padding: "8px 28px", borderTop: "1px solid var(--rule)",
       color: "var(--ink-3)", letterSpacing: ".08em", background: "var(--paper)"
     }}>
