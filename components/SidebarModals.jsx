@@ -1087,15 +1087,23 @@ async function khParseTemplateFile(file) {
   let allRows = [];
   if (ext === 'csv') {
     const text = await file.text();
-    allRows = text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/[,;\t]/));
+    if (typeof window.parseCsv === 'function') {
+      allRows = window.parseCsv(text);
+    } else {
+      allRows = text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/[,;\t]/));
+    }
   } else if (ext === 'xlsx' || ext === 'xls') {
     if (typeof XLSX === 'undefined') throw new Error('XLSX не загружен');
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    for (const sheetName of wb.SheetNames) {
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
-      if (rows && rows.length > 1) { allRows = rows; break; }
+    if (typeof window.readXlsx === 'function') {
+      allRows = window.readXlsx(new Uint8Array(buf));
+    } else {
+      const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+      for (const sheetName of wb.SheetNames) {
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+        if (rows && rows.length > 1) { allRows = rows; break; }
+      }
     }
   } else {
     throw new Error('поддерживаются Excel (.xlsx/.xls) и CSV');
@@ -1106,6 +1114,11 @@ async function khParseTemplateFile(file) {
     const v = String(s == null ? '' : s).replace(/ /g, '').replace(/[^\d,.\-]/g, '').replace(',', '.');
     return parseFloat(v) || 0;
   };
+  const cleanN = (s) => typeof window.cleanName === 'function'
+    ? window.cleanName(s)
+    : String(s == null ? '' : s).trim();
+  const isHidden = typeof window.isHiddenCategory === 'function' ? window.isHiddenCategory : () => false;
+  const skipR = typeof window.skipReason === 'function' ? window.skipReason : () => '';
   let headerRowIdx = -1, nameIdx = -1, unitIdx = -1, qtyIdx = -1, priceIdx = -1;
   const lookup = Math.min(8, allRows.length);
   for (let i = 0; i < lookup; i++) {
@@ -1119,30 +1132,33 @@ async function khParseTemplateFile(file) {
       break;
     }
   }
+  const startIdx = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
   const out = [];
-  if (headerRowIdx !== -1) {
-    for (let i = headerRowIdx + 1; i < allRows.length; i++) {
-      const row = allRows[i]; if (!row) continue;
-      const cells = row.map(c => c == null ? '' : String(c).trim());
-      const name = (cells[nameIdx] || '').trim();
-      if (!name || name.length < 2) continue;
-      out.push({
-        name,
-        unit: unitIdx !== -1 ? (cells[unitIdx] || '') : '',
-        qty: qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0,
-        unitPrice: priceIdx !== -1 ? toNum(cells[priceIdx]) : 0,
-      });
+  for (let i = startIdx; i < allRows.length; i++) {
+    const row = allRows[i];
+    if (!row) continue;
+    if (row._colored || row._sectionLike) continue;
+
+    const cells = row.map(c => c == null ? '' : String(c).trim());
+    let rawName, unit, qty, unitPrice;
+    if (headerRowIdx !== -1) {
+      rawName = cells[nameIdx] || '';
+      unit = unitIdx !== -1 ? (cells[unitIdx] || '') : '';
+      qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
+      unitPrice = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
+    } else {
+      rawName = cells[0] || '';
+      unit = cells[1] || '';
+      qty = toNum(cells[2]);
+      unitPrice = toNum(cells[3]);
     }
-  } else {
-    for (const row of allRows) {
-      if (!row) continue;
-      const cells = row.map(c => c == null ? '' : String(c).trim());
-      const name = (cells[0] || '').trim();
-      if (!name || name.length < 2) continue;
-      const looksHeader = /наимен|name|позиц|итог|сумма|кол|цена|ед\.|^№$/i.test(name);
-      if (looksHeader) continue;
-      out.push({ name, unit: cells[1] || '', qty: toNum(cells[2]), unitPrice: toNum(cells[3]) });
-    }
+
+    const name = cleanN(rawName);
+    if (!name || name.length < 2) continue;
+    if (isHidden(name)) continue;
+    if (skipR(name)) continue;
+
+    out.push({ name, unit, qty, unitPrice });
   }
   return out;
 }
