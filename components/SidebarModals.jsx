@@ -1133,19 +1133,69 @@ async function khParseTemplateFile(file) {
   const isHidden = typeof window.isHiddenCategory === 'function' ? window.isHiddenCategory : () => false;
   const skipR = typeof window.skipReason === 'function' ? window.skipReason : () => '';
   let headerRowIdx = -1, nameIdx = -1, unitIdx = -1, qtyIdx = -1, priceIdx = -1;
-  const lookup = Math.min(8, allRows.length);
+  const lookup = Math.min(12, allRows.length);
   for (let i = 0; i < lookup; i++) {
     const cells = (allRows[i] || []).map(norm);
     const nIdx = cells.findIndex(h => /наимен|name|позиц|товар|материал|работ/.test(h));
-    if (nIdx !== -1) {
-      headerRowIdx = i; nameIdx = nIdx;
-      unitIdx  = cells.findIndex(h => /^ед\b|unit|един|изм/.test(h));
-      qtyIdx   = cells.findIndex(h => /кол|qty|количеств|объ[её]м|объ.ем/.test(h));
-      priceIdx = cells.findIndex(h => /цена|price|стоим|тариф|расц/.test(h));
-      break;
-    }
+    if (nIdx === -1) continue;
+    const u = cells.findIndex(h => /^ед\b|unit|един|изм/.test(h));
+    const q = cells.findIndex(h => /кол|qty|количеств|объ[её]м|объ.ем/.test(h));
+    const p = cells.findIndex(h => /цена|price|стоим|тариф|расц/.test(h));
+    // Treat as a real table header only if it has at least one quantity/price sibling.
+    // Otherwise it's likely a stand-alone title row above the actual table.
+    if (q === -1 && p === -1 && u === -1) continue;
+    headerRowIdx = i; nameIdx = nIdx;
+    unitIdx = u; qtyIdx = q; priceIdx = p;
+    break;
   }
   const startIdx = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+
+  // Auto-detect missing numeric columns by scanning a sample of data rows.
+  if (qtyIdx === -1 || priceIdx === -1) {
+    const numericByCol = new Map();
+    let sampled = 0;
+    for (let i = startIdx; i < allRows.length && sampled < 30; i++) {
+      const row = allRows[i];
+      if (!row || row._colored || row._sectionLike) continue;
+      const cells = row.map(c => String(c == null ? '' : c).trim());
+      if (cells.filter(c => c !== '').length < 2) continue;
+      sampled++;
+      cells.forEach((c, idx) => {
+        if (!c || idx === nameIdx || idx === unitIdx) return;
+        if (!/\d/.test(c)) return;
+        const n = toNum(c);
+        if (n > 0) numericByCol.set(idx, (numericByCol.get(idx) || 0) + 1);
+      });
+    }
+    const numericCols = Array.from(numericByCol.entries())
+      .filter(([, cnt]) => cnt >= Math.max(2, sampled * 0.3))
+      .sort((a, b) => a[0] - b[0])
+      .map(([idx]) => idx);
+    if (numericCols.length === 1) {
+      if (priceIdx === -1) priceIdx = numericCols[0];
+    } else if (numericCols.length >= 2) {
+      if (qtyIdx === -1) qtyIdx = numericCols[0];
+      if (priceIdx === -1) priceIdx = numericCols[numericCols.length - 1];
+    }
+  }
+
+  // Auto-detect missing name column if header detection didn't find it.
+  if (nameIdx === -1) {
+    let bestCol = 0, bestText = -1;
+    for (let col = 0; col < 8; col++) {
+      let textCount = 0;
+      for (let i = startIdx; i < allRows.length && i < startIdx + 30; i++) {
+        const row = allRows[i];
+        if (!row || row._colored || row._sectionLike) continue;
+        const c = String(row[col] == null ? '' : row[col]).trim();
+        if (!c || col === qtyIdx || col === priceIdx || col === unitIdx) continue;
+        if (/\p{L}{3,}/u.test(c) && !/^\s*[\d.,\s]+$/.test(c)) textCount++;
+      }
+      if (textCount > bestText) { bestText = textCount; bestCol = col; }
+    }
+    nameIdx = bestCol;
+  }
+  const knowsPrice = qtyIdx !== -1 || priceIdx !== -1;
   const out = [];
   for (let i = startIdx; i < allRows.length; i++) {
     const row = allRows[i];
@@ -1153,18 +1203,10 @@ async function khParseTemplateFile(file) {
     if (row._colored || row._sectionLike) continue;
 
     const cells = row.map(c => c == null ? '' : String(c).trim());
-    let rawName, unit, qty, unitPrice;
-    if (headerRowIdx !== -1) {
-      rawName = cells[nameIdx] || '';
-      unit = unitIdx !== -1 ? (cells[unitIdx] || '') : '';
-      qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
-      unitPrice = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
-    } else {
-      rawName = cells[0] || '';
-      unit = cells[1] || '';
-      qty = toNum(cells[2]);
-      unitPrice = toNum(cells[3]);
-    }
+    const rawName = cells[nameIdx] || '';
+    const unit = unitIdx !== -1 ? (cells[unitIdx] || '') : '';
+    const qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
+    const unitPrice = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
 
     const name = cleanN(rawName);
     if (!name || name.length < 2) continue;
@@ -1172,16 +1214,17 @@ async function khParseTemplateFile(file) {
     if (isHidden(name)) continue;
     if (skipR(name)) continue;
 
-    // Section-header heuristic: line trails with ":" or has no numeric data at all.
+    // Section-header heuristic: line trails with ":" or has no numeric data at all
+    // (the "both zero" check only fires when we actually located a numeric column).
     if (/[:：]\s*$/.test(name)) continue;
-    if ((!qty || qty <= 0) && (!unitPrice || unitPrice <= 0)) continue;
+    if (knowsPrice && (!qty || qty <= 0) && (!unitPrice || unitPrice <= 0)) continue;
 
     out.push({ name, unit, qty, unitPrice });
   }
   return out;
 }
 
-function KHTemplatesView() {
+function KHTemplatesView({ est, onClose }) {
   const [list, setList] = React.useState(() => khSeedTplsIfNeeded(khLoadTpls()));
   const [openId, setOpenId] = React.useState(null);
   const [tplFormOpen, setTplFormOpen] = React.useState(false);
@@ -1300,6 +1343,44 @@ function KHTemplatesView() {
     }
   };
 
+  const importTplToEstimate = (tplId) => {
+    const t = list.find(x => x.id === tplId);
+    if (!t) return;
+    const items = (t.items || []).filter(it => !khIsJunkTplItem(it));
+    if (items.length === 0) {
+      setUploadStatus({ kind: 'error', text: 'В шаблоне нет позиций для импорта' });
+      setTimeout(() => setUploadStatus(null), 4000);
+      return;
+    }
+    if (!est || !est.actions || typeof est.actions.addRow !== 'function') {
+      setUploadStatus({ kind: 'error', text: 'Не удалось получить доступ к смете' });
+      setTimeout(() => setUploadStatus(null), 4000);
+      return;
+    }
+    if (!confirm(`Перенести ${items.length} позиций из шаблона «${t.name}» в текущую смету?`)) return;
+    let added = 0;
+    for (const it of items) {
+      const unitPrice = Number(it.unitPrice) || 0;
+      const qty = Number(it.qty) || 1;
+      try {
+        est.actions.addRow({
+          name: it.name,
+          unit: it.unit || 'шт',
+          unitPrice,
+          qty,
+          notFound: unitPrice <= 0,
+          source: unitPrice > 0 ? 'manual' : 'none',
+        });
+        added++;
+      } catch (_) { /* ignore */ }
+    }
+    setUploadStatus({ kind: 'ok', text: `В смету добавлено: ${added} из ${items.length}` });
+    setTimeout(() => {
+      setUploadStatus(null);
+      if (typeof onClose === 'function') onClose();
+    }, 800);
+  };
+
   const cleanTplJunk = (tplId) => {
     const t = list.find(x => x.id === tplId);
     if (!t) return;
@@ -1413,6 +1494,14 @@ function KHTemplatesView() {
                 {isOpen && (t.items || []).length > 0 && (
                   <button className="btn btn-sm" onClick={() => cleanTplJunk(t.id)} title="Удалить строки-заголовки и пустые позиции">⌫ Очистить заголовки</button>
                 )}
+                {(t.items || []).length > 0 && est && est.actions && (
+                  <button
+                    className="kh-btn-primary"
+                    style={{ padding: '6px 12px', fontSize: 12 }}
+                    onClick={() => importTplToEstimate(t.id)}
+                    title="Перенести все позиции шаблона в текущую смету"
+                  >→ Импортировать в смету</button>
+                )}
               </div>
               {isOpen && (t.items || []).length > 0 && (
                 <table className="kh-table" style={{ marginTop: 4 }}>
@@ -1482,7 +1571,7 @@ function KHModalRoot({ activeId, onClose, est }) {
   const C = view ? view.comp : null;
   return (
     <KHModal open={!!activeId} onClose={onClose} title={view?.title} subtitle={view?.sub}>
-      {C && <C est={est} />}
+      {C && <C est={est} onClose={onClose} />}
     </KHModal>
   );
 }
