@@ -919,7 +919,12 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const addRowAndScroll = () => {
     est.actions.addBlankRow();
     requestAnimationFrame(() => {
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+      const header = document.querySelector('.kh-positions');
+      if (header && header.scrollIntoView) {
+        header.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     });
   };
 
