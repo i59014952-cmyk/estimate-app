@@ -679,8 +679,21 @@ function useEstimate() {
   }, [estimate, totals]);
 
   const addBlankRow = React.useCallback(() => {
-    addRow({ name: 'Новая позиция', unit: '', unitPrice: 0, qty: 1, notFound: true, source: 'none' });
-  }, [addRow]);
+    setEstimate(prev => [{
+      id: nextIdRef.current++,
+      name: 'Новая позиция',
+      unit: '',
+      unitPrice: 0,
+      qty: 1,
+      notFound: true,
+      source: 'none',
+      url: '',
+      expanded: false,
+      candidates: null,
+      candidatesLoading: false,
+      candidatesError: null,
+    }, ...prev]);
+  }, []);
 
   const addCatalogItem = React.useCallback(({ name, unit, unitPrice }) => {
     setUserCatalog(prev => {
