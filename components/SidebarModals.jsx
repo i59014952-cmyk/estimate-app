@@ -1082,6 +1082,41 @@ function khSeedTplsIfNeeded(current) {
   return next;
 }
 
+function khCompressImage(file, maxDim = 720, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type || '')) {
+      reject(new Error('файл не похож на картинку'));
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) throw new Error('пустая картинка');
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const cw = Math.max(1, Math.round(w * scale));
+        const ch = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, cw, ch);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        URL.revokeObjectURL(url);
+        resolve(dataUrl);
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('не удалось прочитать картинку'));
+    };
+    img.src = url;
+  });
+}
+
 function khIsJunkTplItem(item) {
   const name = String((item && item.name) || '').trim();
   if (!name || name.length < 2) return true;
@@ -1228,25 +1263,28 @@ function KHTemplatesView({ est, onClose }) {
   const [list, setList] = React.useState(() => khSeedTplsIfNeeded(khLoadTpls()));
   const [openId, setOpenId] = React.useState(null);
   const [tplFormOpen, setTplFormOpen] = React.useState(false);
-  const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '', file: null });
+  const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '', file: null, cover: '' });
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);
   const tplFormFileRef = React.useRef(null);
+  const tplFormCoverRef = React.useRef(null);
+  const coverRefByTpl = React.useRef({});
   const uploadTplIdRef = React.useRef(null);
+  const coverUploadTplIdRef = React.useRef(null);
 
   const persist = (next) => { setList(next); khSaveTpls(next); };
   const totalOf = (t) => (t.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
 
-  const startAddTpl = () => { setTplDraft({ name: '', area: '', note: '', file: null }); setEditingTplId(null); setTplFormOpen(true); };
-  const startEditTpl = (t) => { setTplDraft({ name: t.name || '', area: t.area ?? '', note: t.note || '', file: null }); setEditingTplId(t.id); setTplFormOpen(true); };
-  const cancelTpl = () => { setTplFormOpen(false); setEditingTplId(null); setTplDraft({ name: '', area: '', note: '', file: null }); };
+  const startAddTpl = () => { setTplDraft({ name: '', area: '', note: '', file: null, cover: '' }); setEditingTplId(null); setTplFormOpen(true); };
+  const startEditTpl = (t) => { setTplDraft({ name: t.name || '', area: t.area ?? '', note: t.note || '', file: null, cover: t.cover || '' }); setEditingTplId(t.id); setTplFormOpen(true); };
+  const cancelTpl = () => { setTplFormOpen(false); setEditingTplId(null); setTplDraft({ name: '', area: '', note: '', file: null, cover: '' }); };
   const submitTpl = async (e) => {
     if (e) e.preventDefault();
     const name = tplDraft.name.trim();
     if (!name) return;
-    const fields = { name, area: tplDraft.area === '' ? '' : Number(tplDraft.area) || '', note: tplDraft.note.trim() };
+    const fields = { name, area: tplDraft.area === '' ? '' : Number(tplDraft.area) || '', note: tplDraft.note.trim(), cover: tplDraft.cover || '' };
 
     let extraItems = [];
     if (tplDraft.file) {
@@ -1305,6 +1343,49 @@ function KHTemplatesView({ est, onClose }) {
   const onUploadClick = (tplId) => {
     uploadTplIdRef.current = tplId;
     if (fileRef.current) fileRef.current.click();
+  };
+
+  const onPickFormCover = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      setUploadStatus({ kind: 'busy', text: 'Сжатие фото…' });
+      const dataUrl = await khCompressImage(f);
+      setTplDraft(d => ({ ...d, cover: dataUrl }));
+      setUploadStatus({ kind: 'ok', text: 'Фото добавлено' });
+      setTimeout(() => setUploadStatus(null), 2500);
+    } catch (err) {
+      setUploadStatus({ kind: 'error', text: 'Не удалось обработать фото: ' + (err.message || err) });
+      setTimeout(() => setUploadStatus(null), 5000);
+    }
+  };
+
+  const onPickCardCover = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    const tplId = coverUploadTplIdRef.current;
+    if (!f || !tplId) return;
+    try {
+      setUploadStatus({ kind: 'busy', text: 'Сжатие фото…' });
+      const dataUrl = await khCompressImage(f);
+      persist(list.map(t => t.id === tplId ? { ...t, cover: dataUrl } : t));
+      setUploadStatus({ kind: 'ok', text: 'Фото обновлено' });
+      setTimeout(() => setUploadStatus(null), 2500);
+    } catch (err) {
+      setUploadStatus({ kind: 'error', text: 'Не удалось обработать фото: ' + (err.message || err) });
+      setTimeout(() => setUploadStatus(null), 5000);
+    }
+  };
+
+  const triggerCardCover = (tplId) => {
+    coverUploadTplIdRef.current = tplId;
+    const input = coverRefByTpl.current[tplId];
+    if (input) input.click();
+  };
+
+  const removeCover = (tplId) => {
+    persist(list.map(t => t.id === tplId ? { ...t, cover: '' } : t));
   };
   const onFileChange = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -1444,6 +1525,21 @@ function KHTemplatesView({ est, onClose }) {
               </span>
             )}
           </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input ref={tplFormCoverRef} type="file" accept="image/*"
+              style={{ display: 'none' }} onChange={onPickFormCover} />
+            <button type="button" className="btn btn-sm" onClick={() => tplFormCoverRef.current && tplFormCoverRef.current.click()}>
+              📷 {tplDraft.cover ? 'Заменить фото' : 'Добавить фото объекта'}
+            </button>
+            {tplDraft.cover && (
+              <>
+                <img src={tplDraft.cover} alt="Обложка"
+                  style={{ width: 96, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--rule)' }} />
+                <button type="button" className="btn btn-sm" style={{ color: 'var(--rust)' }}
+                  onClick={() => setTplDraft({ ...tplDraft, cover: '' })}>× Убрать фото</button>
+              </>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-sm" onClick={cancelTpl}>Отмена</button>
             <button type="submit" className="kh-btn-primary" disabled={!tplDraft.name.trim()}>
@@ -1464,7 +1560,12 @@ function KHTemplatesView({ est, onClose }) {
           const isAddingItem = itemDraft.tplId === t.id;
           return (
             <div key={t.id} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <input
+                type="file" accept="image/*" style={{ display: 'none' }}
+                ref={el => { coverRefByTpl.current[t.id] = el; }}
+                onChange={onPickCardCover}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="kh-card__title">{t.name}</div>
                   {t.note && <div className="kh-card__meta" style={{ marginTop: 4 }}>{t.note}</div>}
@@ -1472,6 +1573,44 @@ function KHTemplatesView({ est, onClose }) {
                     {t.area ? <span className="kh-pill">{t.area} м²</span> : null}
                     <span className="kh-pill">позиций: {(t.items || []).length}</span>
                   </div>
+                </div>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  {t.cover ? (
+                    <div style={{ position: 'relative' }}>
+                      <img src={t.cover} alt={t.name}
+                        style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--rule)', display: 'block', cursor: 'pointer' }}
+                        onClick={() => triggerCardCover(t.id)}
+                        title="Заменить фото" />
+                      <button
+                        type="button"
+                        onClick={() => removeCover(t.id)}
+                        title="Убрать фото"
+                        aria-label="Убрать фото"
+                        style={{
+                          position: 'absolute', top: 4, right: 4,
+                          width: 22, height: 22, borderRadius: 99, border: 0,
+                          background: 'rgba(20,16,12,.55)', color: '#fff',
+                          cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+                          display: 'grid', placeItems: 'center',
+                        }}
+                      >×</button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => triggerCardCover(t.id)}
+                      title="Добавить фото объекта"
+                      style={{
+                        width: 120, height: 90, padding: 0, borderRadius: 8,
+                        borderStyle: 'dashed', flexDirection: 'column', gap: 4,
+                        color: 'var(--ink-3)', fontSize: 11,
+                      }}
+                    >
+                      <span style={{ fontSize: 18 }}>📷</span>
+                      <span>Фото</span>
+                    </button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
                   <div style={{ display: 'flex', gap: 4 }}>
