@@ -1155,8 +1155,13 @@ async function khParseTemplateFile(file) {
 
     const name = cleanN(rawName);
     if (!name || name.length < 2) continue;
+    if (!/\p{L}{3,}/u.test(name)) continue;
     if (isHidden(name)) continue;
     if (skipR(name)) continue;
+
+    // Section-header heuristic: line trails with ":" or has no numeric data at all.
+    if (/[:：]\s*$/.test(name)) continue;
+    if ((!qty || qty <= 0) && (!unitPrice || unitPrice <= 0)) continue;
 
     out.push({ name, unit, qty, unitPrice });
   }
