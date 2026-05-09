@@ -1082,6 +1082,19 @@ function khSeedTplsIfNeeded(current) {
   return next;
 }
 
+function khIsJunkTplItem(item) {
+  const name = String((item && item.name) || '').trim();
+  if (!name || name.length < 2) return true;
+  if (!/\p{L}{3,}/u.test(name)) return true;
+  if (typeof window.isHiddenCategory === 'function' && window.isHiddenCategory(name)) return true;
+  if (typeof window.skipReason === 'function' && window.skipReason(name)) return true;
+  if (/[:：]\s*$/.test(name)) return true;
+  const qty = Number(item && item.qty) || 0;
+  const unitPrice = Number(item && item.unitPrice) || 0;
+  if (qty <= 0 && unitPrice <= 0) return true;
+  return false;
+}
+
 async function khParseTemplateFile(file) {
   const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
   let allRows = [];
@@ -1256,7 +1269,14 @@ function KHTemplatesView() {
     const tplId = uploadTplIdRef.current;
     if (!files.length || !tplId) return;
     let totalAdded = 0; const errors = [];
-    let nextList = list;
+    let removedJunk = 0;
+    let nextList = list.map(t => {
+      if (t.id !== tplId) return t;
+      const before = (t.items || []).length;
+      const cleaned = (t.items || []).filter(it => !khIsJunkTplItem(it));
+      removedJunk = before - cleaned.length;
+      return { ...t, items: cleaned };
+    });
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       setUploadStatus({ kind: 'busy', text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
@@ -1270,13 +1290,31 @@ function KHTemplatesView() {
       }
     }
     persist(nextList);
+    const junkSuffix = removedJunk > 0 ? `, очищено заголовков: ${removedJunk}` : '';
     if (errors.length) {
       setUploadStatus({ kind: 'error', text: `Ошибки: ${errors.join('; ')}` });
       setTimeout(() => setUploadStatus(null), 8000);
     } else {
-      setUploadStatus({ kind: 'ok', text: `Файлов: ${files.length}. Позиций добавлено: ${totalAdded}` });
-      setTimeout(() => setUploadStatus(null), 5000);
+      setUploadStatus({ kind: 'ok', text: `Файлов: ${files.length}. Позиций добавлено: ${totalAdded}${junkSuffix}` });
+      setTimeout(() => setUploadStatus(null), 6000);
     }
+  };
+
+  const cleanTplJunk = (tplId) => {
+    const t = list.find(x => x.id === tplId);
+    if (!t) return;
+    const before = (t.items || []).length;
+    const cleaned = (t.items || []).filter(it => !khIsJunkTplItem(it));
+    const removed = before - cleaned.length;
+    if (removed === 0) {
+      setUploadStatus({ kind: 'ok', text: 'Заголовков не найдено — шаблон уже чистый' });
+      setTimeout(() => setUploadStatus(null), 4000);
+      return;
+    }
+    if (!confirm(`Удалить ${removed} строк-заголовков из шаблона «${t.name}»?`)) return;
+    persist(list.map(x => x.id === tplId ? { ...x, items: cleaned } : x));
+    setUploadStatus({ kind: 'ok', text: `Удалено заголовков: ${removed}` });
+    setTimeout(() => setUploadStatus(null), 4000);
   };
 
   const num = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
@@ -1371,6 +1409,9 @@ function KHTemplatesView() {
                 )}
                 {isOpen && (
                   <button className="btn btn-sm" onClick={() => onUploadClick(t.id)}>↑ Загрузить XLSX/CSV</button>
+                )}
+                {isOpen && (t.items || []).length > 0 && (
+                  <button className="btn btn-sm" onClick={() => cleanTplJunk(t.id)} title="Удалить строки-заголовки и пустые позиции">⌫ Очистить заголовки</button>
                 )}
               </div>
               {isOpen && (t.items || []).length > 0 && (
