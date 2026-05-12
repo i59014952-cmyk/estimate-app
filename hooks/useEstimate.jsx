@@ -380,7 +380,12 @@ function useEstimate() {
           url: '', expanded: false, candidates: null, candidatesLoading: false, candidatesError: null,
         });
       }
-      return out;
+      // Stable sort: items without prices float to the top of the estimate.
+      return out.map((r, i) => [r, i]).sort((a, b) => {
+        const an = a[0].notFound ? 0 : 1;
+        const bn = b[0].notFound ? 0 : 1;
+        return an !== bn ? an - bn : a[1] - b[1];
+      }).map(p => p[0]);
     });
     return { imported, notFoundCount, skipped };
   }, [visibleCatalog, visibleDdcCatalog, visibleUserCatalog]);

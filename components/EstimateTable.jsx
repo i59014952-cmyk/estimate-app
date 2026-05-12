@@ -44,7 +44,8 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
       <div className="row kh-est-row__inner" style={{
         padding: "12px 32px",
         alignItems: "center",
-        background: row.notFound ? "rgba(194,88,66,0.04)" : "transparent",
+        background: row.notFound ? "rgba(194,88,66,0.16)" : "transparent",
+        boxShadow: row.notFound ? "inset 4px 0 0 var(--rust)" : "none",
       }}>
         <div className="mono tiny" style={{ width: 56, color: "var(--ink-4)" }}>
           {String(index).padStart(2, "0")}
