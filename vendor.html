@@ -167,28 +167,68 @@ function guessNameColumn(rows) {
   return bestIdx;
 }
 
+// Колонка-нумератор («№ п/п»): подряд идущие целые 1,2,3… — не цена.
+function detectIndexColumns(rows, startRow, skipCols) {
+  const width = rows.reduce((m, r) => Math.max(m, (r || []).length), 0);
+  const idx = new Set();
+  for (let col = 0; col < width; col++) {
+    if (skipCols && skipCols.has(col)) continue;
+    let expected = null, count = 0, ok = true;
+    for (let i = startRow; i < rows.length; i++) {
+      const r = rows[i]; if (!r) continue;
+      const raw = r[col];
+      if (raw === '' || raw == null) continue;
+      const n = Number(String(raw).replace(',', '.').replace(/\s+/g, ''));
+      if (!Number.isInteger(n)) { ok = false; break; }
+      if (expected === null) expected = n;
+      else if (n !== expected) { ok = false; break; }
+      expected++; count++;
+    }
+    if (ok && count >= 2) idx.add(col);
+  }
+  return idx;
+}
+
+function pickPriceFromRow(c, skipCols) {
+  let best = 0;
+  for (let k = 0; k < c.length; k++) {
+    if (skipCols && skipCols.has(k)) continue;
+    const v = c[k]; if (v === '' || v == null) continue;
+    const num = toNum(v);
+    if (num > best) best = num;
+  }
+  return best;
+}
+
 function parseSheet(rows) {
   if (!rows || !rows.length) return [];
   const header = findHeader(rows);
   const out = [];
   if (header) {
     const { hRow, nIdx, uIdx, pIdx } = header;
+    const skip = new Set([nIdx]);
+    if (uIdx !== -1) skip.add(uIdx);
+    const idxCols = pIdx === -1 ? detectIndexColumns(rows, hRow + 1, skip) : null;
     for (let i = hRow + 1; i < rows.length; i++) {
       const r = rows[i]; if (!r) continue;
       const c = r.map(x => x == null ? '' : String(x).trim());
       const name = (c[nIdx] || '').trim();
       if (!name || name.length < 2) continue;
       if (SKIP_NAME_RE.test(name)) continue;
+      let price;
+      if (pIdx !== -1) price = toNum(c[pIdx]);
+      else { const s = new Set(skip); idxCols.forEach(x => s.add(x)); price = pickPriceFromRow(c, s); }
       out.push({
         name,
         unit: uIdx !== -1 ? (c[uIdx] || '') : '',
-        unitPrice: pIdx !== -1 ? toNum(c[pIdx]) : 0,
+        unitPrice: price,
       });
     }
     return out;
   }
   const nameCol = guessNameColumn(rows);
   if (nameCol === -1) return [];
+  const idxCols = detectIndexColumns(rows, 0, new Set([nameCol]));
   for (const r of rows) {
     if (!r) continue;
     const c = r.map(x => x == null ? '' : String(x).trim());
@@ -197,15 +237,14 @@ function parseSheet(rows) {
     if (NUMERIC_NAME_RE.test(name)) continue;
     if (SKIP_NAME_RE.test(name)) continue;
     if (NAME_RE.test(name.toLowerCase()) && name.length < 30) continue;
-    let unit = '', priceCell = '';
+    let unit = '';
     for (let k = 0; k < c.length; k++) {
-      if (k === nameCol) continue;
+      if (k === nameCol || idxCols.has(k)) continue;
       const v = c[k]; if (!v) continue;
-      const num = toNum(v);
-      if (num > 0 && !priceCell) { priceCell = v; continue; }
-      if (!unit && /[а-яa-z]/i.test(v) && v.length <= 12) unit = v;
+      if (!unit && /[а-яa-z]/i.test(v) && !/\d/.test(v) && v.length <= 12) unit = v;
     }
-    out.push({ name, unit, unitPrice: toNum(priceCell) });
+    const skip = new Set(idxCols); skip.add(nameCol);
+    out.push({ name, unit, unitPrice: pickPriceFromRow(c, skip) });
   }
   return out;
 }
