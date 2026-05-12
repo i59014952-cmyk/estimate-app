@@ -216,13 +216,14 @@ function HeroBlock({ est, meta, updateMeta }) {
   const stats = React.useMemo(() => {
     const localCount = est.state.catalog.length;
     const ddcCount = est.state.ddcCatalog.length;
-    const total = localCount + ddcCount;
+    const vendorCount = (est.state.vendorCatalog || []).length;
+    const total = localCount + ddcCount + vendorCount;
     return [
       { k: "Каталог", v: fmt(total), u: "позиций", d: est.state.catalogReady ? "Загружено" : "Загрузка…", live: !est.state.catalogReady, dir: "up" },
       { k: "Своя база", v: fmt(localCount), u: "материалов", d: "JSON" },
       { k: "DDC цены", v: fmt(ddcCount), u: "записей", d: "Синх. активна", live: true },
     ];
-  }, [est.state.catalog.length, est.state.ddcCatalog.length, est.state.catalogReady]);
+  }, [est.state.catalog.length, est.state.ddcCatalog.length, (est.state.vendorCatalog || []).length, est.state.catalogReady]);
 
   return (
     <div className="frame kh-hero" style={{ position: "relative", padding: "30px 40px 28px", borderTop: "1px solid var(--rule-2)", borderBottom: "1px solid var(--rule-2)" }}>
