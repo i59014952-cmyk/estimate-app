@@ -145,7 +145,7 @@ function render() {
     </table>
     <div class="totals">
       <div>Без НДС: <b>${fmt(t.subtotal)} ₽</b></div>
-      <div>НДС 20%: <b>${fmt(t.vat)} ₽</b></div>
+      <div>НДС 22%: <b>${fmt(t.vat)} ₽</b></div>
       <div class="grand">Итого: ${fmt(t.grand)} ₽</div>
     </div>
   ` : '<div class="empty">Все позиции удалены.</div>';
@@ -186,7 +186,7 @@ function renderTotalsOnly() {
   if (!totalsEl) return;
   totalsEl.innerHTML = `
     <div>Без НДС: <b>${fmt(t.subtotal)} ₽</b></div>
-    <div>НДС 20%: <b>${fmt(t.vat)} ₽</b></div>
+    <div>НДС 22%: <b>${fmt(t.vat)} ₽</b></div>
     <div class="grand">Итого: ${fmt(t.grand)} ₽</div>
   `;
 }

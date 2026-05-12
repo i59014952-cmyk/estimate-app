@@ -710,7 +710,7 @@ function BudgetCard({ est }) {
   const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
   const items = [
     { label: "Сумма без НДС", value: subtotal },
-    { label: "НДС 20%", value: vat },
+    { label: "НДС 22%", value: vat },
   ];
   return (
     <div className="frame" style={{ padding:"18px 18px 16px", border:"1px solid var(--rule)", background:"var(--paper-card)", position:"relative" }}>

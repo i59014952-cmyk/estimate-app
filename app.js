@@ -25,7 +25,7 @@ function isHiddenCategory(name) {
         .trim();
     return HIDDEN_CATEGORIES.has(normalized);
 }
-const VAT_RATE = 0.20;
+const VAT_RATE = 0.22;
 const MAX_RESULTS = 20;
 const PRICES_BACKEND = 'https://petrovich-proxy.onrender.com';
 const PRICES_CONCURRENCY = 3;
@@ -516,7 +516,7 @@ function exportCsv() {
     const vat = subtotal * VAT_RATE;
     rows.push([]);
     rows.push(['', '', '', 'Сумма', subtotal.toFixed(2), '']);
-    rows.push(['', '', '', 'НДС 20%', vat.toFixed(2), '']);
+    rows.push(['', '', '', 'НДС 22%', vat.toFixed(2), '']);
     rows.push(['', '', '', 'Итого с НДС', (subtotal + vat).toFixed(2), '']);
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
 }
