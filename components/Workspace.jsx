@@ -7,7 +7,7 @@ function StatCell({ k, v, u, d, dir, live }) {
     <div className="col" style={{ gap: 6, minWidth: 0 }}>
       <div className="eyebrow">{live && <span className="dot" />}{k}</div>
       <div className="row" style={{ alignItems: "baseline", gap: 6 }}>
-        <span className="serif" style={{ fontSize: 38, lineHeight: .9, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{v}</span>
+        <span className="serif" style={{ fontSize: 38, lineHeight: .9, letterSpacing: "-0.02em", whiteSpace: "nowrap", fontVariantNumeric: "lining-nums tabular-nums", fontFeatureSettings: '"lnum" 1, "tnum" 1' }}>{v}</span>
         <span className="muted tiny" style={{ paddingBottom: 3 }}>{u}</span>
       </div>
       <div className="row center" style={{ gap: 4 }}>
@@ -710,7 +710,7 @@ function BudgetCard({ est }) {
   const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
   const items = [
     { label: "Сумма без НДС", value: subtotal },
-    { label: "НДС 20%", value: vat },
+    { label: "НДС 22%", value: vat },
   ];
   return (
     <div className="frame" style={{ padding:"18px 18px 16px", border:"1px solid var(--rule)", background:"var(--paper-card)", position:"relative" }}>

@@ -506,7 +506,7 @@ function useEstimate() {
     }
     rows.push([]);
     rows.push(['', '', '', 'Сумма', totals.subtotal.toFixed(2), '']);
-    rows.push(['', '', '', 'НДС 20%', totals.vat.toFixed(2), '']);
+    rows.push(['', '', '', 'НДС 22%', totals.vat.toFixed(2), '']);
     rows.push(['', '', '', 'Итого с НДС', totals.grand.toFixed(2), '']);
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
   }, [estimate, totals]);
