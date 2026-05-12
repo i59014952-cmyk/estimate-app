@@ -131,6 +131,7 @@ function useEstimate() {
   const [catalog, setCatalog] = React.useState([]);
   const [ddcCatalog, setDdcCatalog] = React.useState([]);
   const [userCatalog, setUserCatalog] = React.useState(loadUserCatalog);
+  const [vendorCatalog, setVendorCatalog] = React.useState([]);
   const [hiddenCatalog, setHiddenCatalog] = React.useState(loadHiddenCatalog);
   const [catalogReady, setCatalogReady] = React.useState(false);
 
@@ -149,6 +150,13 @@ function useEstimate() {
         try { localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(mapped.map(({ name, unit, unitPrice }) => ({ name, unit, unitPrice })))); } catch (_) {}
       }
     }).catch(e => console.warn('cloud load user_catalog:', e));
+    window.SB.selectAll('kh_vendor_prices', 'select=id,name,unit,unit_price').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      setVendorCatalog(remote.map(it => ({
+        name: String(it.name || ''), unit: String(it.unit || ''),
+        unitPrice: Number(it.unit_price) || 0,
+      })));
+    }).catch(e => console.warn('cloud load vendor_prices:', e));
     window.SB.selectAll('kh_hidden').then(remote => {
       if (cancelled || !Array.isArray(remote)) return;
       if (remote.length) {
@@ -167,11 +175,12 @@ function useEstimate() {
   const visibleUserCatalog = React.useMemo(() => userCatalog.filter(it => !isHidden(it)), [userCatalog, isHidden]);
   const visibleCatalog = React.useMemo(() => catalog.filter(it => !isHidden(it)), [catalog, isHidden]);
   const visibleDdcCatalog = React.useMemo(() => ddcCatalog.filter(it => !isHidden(it)), [ddcCatalog, isHidden]);
+  const visibleVendorCatalog = React.useMemo(() => vendorCatalog.filter(it => !isHidden(it)), [vendorCatalog, isHidden]);
 
   React.useEffect(() => {
-    window.KH_DB_COUNT = visibleUserCatalog.length + visibleCatalog.length + visibleDdcCatalog.length;
+    window.KH_DB_COUNT = visibleUserCatalog.length + visibleVendorCatalog.length + visibleCatalog.length + visibleDdcCatalog.length;
     window.dispatchEvent(new Event('kh-storage'));
-  }, [visibleUserCatalog.length, visibleCatalog.length, visibleDdcCatalog.length]);
+  }, [visibleUserCatalog.length, visibleVendorCatalog.length, visibleCatalog.length, visibleDdcCatalog.length]);
   const [estimate, setEstimate] = React.useState(loadEstimate);
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
@@ -838,7 +847,7 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
