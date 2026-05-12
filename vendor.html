@@ -96,15 +96,24 @@ async function upsert(items, sourceFile) {
     vendor_slug: token,
     name: it.name,
     unit: it.unit || '',
+    qty: Number(it.qty) > 0 ? Number(it.qty) : 1,
     unit_price: Number(it.unitPrice) || 0,
     source_file: sourceFile || null,
     updated_at: new Date().toISOString(),
   }));
-  const res = await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?on_conflict=vendor_slug,name,unit`, {
+  const post = body => fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?on_conflict=vendor_slug,name,unit`, {
     method: 'POST',
     headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
+  let res;
+  try {
+    res = await post(payload);
+  } catch (e) {
+    // Старая схема без колонки qty — повторяем без неё.
+    if (/\bqty\b/.test(String(e && e.message))) res = await post(payload.map(({ qty, ...rest }) => rest));
+    else throw e;
+  }
   return Array.isArray(res) ? res.length : 0;
 }
 async function update(id, patch) {
@@ -130,6 +139,7 @@ function setStatus(kind, text) {
 const NAME_RE = /наимен|name|позиц|товар|материал|работ|услуг|описан|продукт|ассортимент/;
 const UNIT_RE = /^ед\b|unit|един|изм|^е\.?и\.?$|^е\/и$/;
 const PRICE_RE = /цена|price|стоим|тариф|расц|руб|₽/;
+const QTY_RE = /кол-?в|кол\.|колич|объ[её]м|q-?ty|quantity|amount|^кол$/;
 const NUMERIC_NAME_RE = /^[\d.,\s\-]+$/;
 const SKIP_NAME_RE = /^(итог|всего|сумма|подытог|total|subtotal)\b|^№$|^п\/п$/i;
 
@@ -143,11 +153,12 @@ function findHeader(rows) {
     const nIdx = cells.findIndex(h => NAME_RE.test(h));
     if (nIdx === -1) continue;
     const uIdx = cells.findIndex(h => UNIT_RE.test(h));
+    const qIdx = cells.findIndex(h => QTY_RE.test(h));
     let pIdx = -1;
     for (let k = 0; k < cells.length; k++) {
       if (PRICE_RE.test(cells[k])) { pIdx = k; break; }
     }
-    return { hRow: i, nIdx, uIdx, pIdx };
+    return { hRow: i, nIdx, uIdx, qIdx, pIdx };
   }
   return null;
 }
@@ -205,9 +216,10 @@ function parseSheet(rows) {
   const header = findHeader(rows);
   const out = [];
   if (header) {
-    const { hRow, nIdx, uIdx, pIdx } = header;
+    const { hRow, nIdx, uIdx, qIdx, pIdx } = header;
     const skip = new Set([nIdx]);
     if (uIdx !== -1) skip.add(uIdx);
+    if (qIdx !== -1) skip.add(qIdx);
     const idxCols = pIdx === -1 ? detectIndexColumns(rows, hRow + 1, skip) : null;
     for (let i = hRow + 1; i < rows.length; i++) {
       const r = rows[i]; if (!r) continue;
@@ -221,6 +233,7 @@ function parseSheet(rows) {
       out.push({
         name,
         unit: uIdx !== -1 ? (c[uIdx] || '') : '',
+        qty: qIdx !== -1 ? (toNum(c[qIdx]) || 1) : 1,
         unitPrice: price,
       });
     }
@@ -244,7 +257,7 @@ function parseSheet(rows) {
       if (!unit && /[а-яa-z]/i.test(v) && !/\d/.test(v) && v.length <= 12) unit = v;
     }
     const skip = new Set(idxCols); skip.add(nameCol);
-    out.push({ name, unit, unitPrice: pickPriceFromRow(c, skip) });
+    out.push({ name, unit, qty: 1, unitPrice: pickPriceFromRow(c, skip) });
   }
   return out;
 }
@@ -315,6 +328,11 @@ async function onChangePrice(id, value) {
   await update(id, { unit_price: parseFloat(String(value).replace(',', '.')) || 0 });
   await loadPrices(); render();
 }
+async function onChangeQty(id, value) {
+  const q = parseFloat(String(value).replace(',', '.'));
+  await update(id, { qty: q > 0 ? q : 1 });
+  await loadPrices(); render();
+}
 async function onRemove(id) {
   if (!confirm('Удалить позицию?')) return;
   await remove(id);
@@ -326,6 +344,7 @@ function render() {
     <tr data-id="${p.id}">
       <td><input type="text" value="${esc(p.name)}" data-field="name"></td>
       <td>${esc(p.unit || '—')}</td>
+      <td class="num"><input type="text" inputmode="decimal" value="${esc(p.qty != null ? p.qty : 1)}" data-field="qty"></td>
       <td class="num"><input type="text" inputmode="decimal" value="${fmt(p.unit_price)}" data-field="unit_price"></td>
       <td class="num">${p.source_file ? `<span style="color:var(--ink-3);font-size:12px">${esc(p.source_file)}</span>` : ''}</td>
       <td><button class="danger" data-action="remove">×</button></td>
@@ -343,7 +362,7 @@ function render() {
     </div>
     ${prices.length === 0 ? '<div class="empty">Прайса ещё нет — загрузите файл, чтобы добавить позиции.</div>' :
     `<table>
-      <thead><tr><th>Название</th><th>Ед.</th><th class="num">Цена, ₽</th><th class="num">Файл</th><th></th></tr></thead>
+      <thead><tr><th>Название</th><th>Ед.</th><th class="num">Кол-во</th><th class="num">Цена, ₽</th><th class="num">Файл</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="small">Всего позиций: ${prices.length}. Обновлено: ${new Date(prices[0].updated_at).toLocaleString('ru-RU')}</div>`}
@@ -357,6 +376,7 @@ function render() {
       inp.addEventListener('blur', () => {
         if (inp.dataset.field === 'name') onChangeName(id, inp.value.trim());
         else if (inp.dataset.field === 'unit_price') onChangePrice(id, inp.value);
+        else if (inp.dataset.field === 'qty') onChangeQty(id, inp.value);
       });
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
     });
