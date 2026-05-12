@@ -243,7 +243,7 @@ function useEstimate() {
 
   const addRow = React.useCallback((row) => {
     if (isHiddenCategory(row.name)) return;
-    setEstimate(prev => [...prev, {
+    setEstimate(prev => [{
       id: nextIdRef.current++,
       name: row.name,
       unit: row.unit || '',
@@ -256,7 +256,7 @@ function useEstimate() {
       candidates: null,
       candidatesLoading: false,
       candidatesError: null,
-    }]);
+    }, ...prev]);
   }, []);
 
   const removeRow = React.useCallback((id) => {
