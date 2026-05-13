@@ -1776,10 +1776,18 @@ function KHTemplatesView({ est, onClose }) {
                         <td>{it.name}</td>
                         <td>{it.unit || '—'}</td>
                         <td className="num">
-                          <Editable
-                            value={Number(it.qty || 0).toLocaleString('ru-RU')}
-                            onChange={(v) => updateItemQty(t.id, it.id, v)}
-                            placeholder="0"
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={it.qty ?? 0}
+                            onChange={(e) => updateItemQty(t.id, it.id, e.target.value)}
+                            style={{
+                              width: 72, textAlign: 'right', padding: '4px 6px',
+                              border: '1px solid var(--rule)', borderRadius: 4,
+                              background: 'var(--paper)', color: 'var(--ink)',
+                              fontSize: 13, fontVariantNumeric: 'tabular-nums',
+                            }}
                           />
                         </td>
                         <td className="num">{num(it.unitPrice)} ₽</td>
