@@ -1167,7 +1167,7 @@ async function khParseTemplateFile(file) {
     : String(s == null ? '' : s).trim();
   const isHidden = typeof window.isHiddenCategory === 'function' ? window.isHiddenCategory : () => false;
   const skipR = typeof window.skipReason === 'function' ? window.skipReason : () => '';
-  let headerRowIdx = -1, nameIdx = -1, unitIdx = -1, qtyIdx = -1, priceIdx = -1;
+  let headerRowIdx = -1, nameIdx = -1, unitIdx = -1, qtyIdx = -1, priceIdx = -1, sumIdx = -1;
   const lookup = Math.min(12, allRows.length);
   for (let i = 0; i < lookup; i++) {
     const cells = (allRows[i] || []).map(norm);
@@ -1175,12 +1175,13 @@ async function khParseTemplateFile(file) {
     if (nIdx === -1) continue;
     const u = cells.findIndex(h => /^ед\b|unit|един|изм/.test(h));
     const q = cells.findIndex(h => /кол|qty|количеств|объ[её]м|объ.ем/.test(h));
-    const p = cells.findIndex(h => /цена|price|стоим|тариф|расц/.test(h));
-    // Treat as a real table header only if it has at least one quantity/price sibling.
+    const p = cells.findIndex(h => /цена|price|стоим|тариф|расц|прайс|за\s*ед|руб\s*\/\s*ед/.test(h));
+    const s = cells.findIndex((h, idx) => idx !== p && /сумма|итог|всего|^сум\b/.test(h));
+    // Treat as a real table header only if it has at least one quantity/price/sum sibling.
     // Otherwise it's likely a stand-alone title row above the actual table.
-    if (q === -1 && p === -1 && u === -1) continue;
+    if (q === -1 && p === -1 && s === -1 && u === -1) continue;
     headerRowIdx = i; nameIdx = nIdx;
-    unitIdx = u; qtyIdx = q; priceIdx = p;
+    unitIdx = u; qtyIdx = q; priceIdx = p; sumIdx = s;
     break;
   }
   const startIdx = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
@@ -1196,7 +1197,9 @@ async function khParseTemplateFile(file) {
       if (cells.filter(c => c !== '').length < 2) continue;
       sampled++;
       cells.forEach((c, idx) => {
-        if (!c || idx === nameIdx || idx === unitIdx) return;
+        if (!c) return;
+        if (idx === nameIdx || idx === unitIdx) return;
+        if (idx === qtyIdx || idx === priceIdx || idx === sumIdx) return;
         if (!/\d/.test(c)) return;
         const n = toNum(c);
         if (n > 0) numericByCol.set(idx, (numericByCol.get(idx) || 0) + 1);
@@ -1206,11 +1209,17 @@ async function khParseTemplateFile(file) {
       .filter(([, cnt]) => cnt >= Math.max(2, sampled * 0.3))
       .sort((a, b) => a[0] - b[0])
       .map(([idx]) => idx);
-    if (numericCols.length === 1) {
-      if (priceIdx === -1) priceIdx = numericCols[0];
-    } else if (numericCols.length >= 2) {
-      if (qtyIdx === -1) qtyIdx = numericCols[0];
-      if (priceIdx === -1) priceIdx = numericCols[numericCols.length - 1];
+    if (qtyIdx === -1 && priceIdx === -1) {
+      if (numericCols.length === 1) {
+        priceIdx = numericCols[0];
+      } else if (numericCols.length >= 2) {
+        qtyIdx = numericCols[0];
+        priceIdx = numericCols[numericCols.length - 1];
+      }
+    } else if (qtyIdx === -1 && numericCols.length >= 1) {
+      qtyIdx = numericCols[0];
+    } else if (priceIdx === -1 && numericCols.length >= 1) {
+      priceIdx = numericCols[numericCols.length - 1];
     }
   }
 
@@ -1230,7 +1239,7 @@ async function khParseTemplateFile(file) {
     }
     nameIdx = bestCol;
   }
-  const knowsPrice = qtyIdx !== -1 || priceIdx !== -1;
+  const knowsPrice = qtyIdx !== -1 || priceIdx !== -1 || sumIdx !== -1;
   const out = [];
   for (let i = startIdx; i < allRows.length; i++) {
     const row = allRows[i];
@@ -1241,7 +1250,9 @@ async function khParseTemplateFile(file) {
     const rawName = cells[nameIdx] || '';
     const unit = unitIdx !== -1 ? (cells[unitIdx] || '') : '';
     const qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
-    const unitPrice = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
+    const sum = sumIdx !== -1 ? toNum(cells[sumIdx]) : 0;
+    let unitPrice = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
+    if (unitPrice <= 0 && sum > 0 && qty > 0) unitPrice = sum / qty;
 
     const name = cleanN(rawName);
     if (!name || name.length < 2) continue;
@@ -1252,7 +1263,7 @@ async function khParseTemplateFile(file) {
     // Section-header heuristic: line trails with ":" or has no numeric data at all
     // (the "both zero" check only fires when we actually located a numeric column).
     if (/[:：]\s*$/.test(name)) continue;
-    if (knowsPrice && (!qty || qty <= 0) && (!unitPrice || unitPrice <= 0)) continue;
+    if (knowsPrice && (!qty || qty <= 0) && (!unitPrice || unitPrice <= 0) && (!sum || sum <= 0)) continue;
 
     out.push({ name, unit, qty, unitPrice });
   }
