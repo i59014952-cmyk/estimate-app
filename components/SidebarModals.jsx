@@ -1518,20 +1518,14 @@ function KHTemplatesView({ est, onClose }) {
     }, 800);
   };
 
-  const cleanTplJunk = (tplId) => {
+  const clearTplItems = (tplId) => {
     const t = list.find(x => x.id === tplId);
     if (!t) return;
     const before = (t.items || []).length;
-    const cleaned = (t.items || []).filter(it => !khIsJunkTplItem(it));
-    const removed = before - cleaned.length;
-    if (removed === 0) {
-      setUploadStatus({ kind: 'ok', text: 'Заголовков не найдено — шаблон уже чистый' });
-      setTimeout(() => setUploadStatus(null), 4000);
-      return;
-    }
-    if (!confirm(`Удалить ${removed} строк-заголовков из шаблона «${t.name}»?`)) return;
-    persist(list.map(x => x.id === tplId ? { ...x, items: cleaned } : x));
-    setUploadStatus({ kind: 'ok', text: `Удалено заголовков: ${removed}` });
+    if (before === 0) return;
+    if (!confirm(`Удалить все ${before} позиций из шаблона «${t.name}»? Действие отменить нельзя.`)) return;
+    persist(list.map(x => x.id === tplId ? { ...x, items: [] } : x));
+    setUploadStatus({ kind: 'ok', text: `Удалено позиций: ${before}` });
     setTimeout(() => setUploadStatus(null), 4000);
   };
 
@@ -1694,7 +1688,7 @@ function KHTemplatesView({ est, onClose }) {
                   <button className="btn btn-sm" onClick={() => onUploadClick(t.id)}>↑ Загрузить XLSX/CSV</button>
                 )}
                 {isOpen && (t.items || []).length > 0 && (
-                  <button className="btn btn-sm" onClick={() => cleanTplJunk(t.id)} title="Удалить строки-заголовки и пустые позиции">⌫ Очистить заголовки</button>
+                  <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => clearTplItems(t.id)} title="Удалить все позиции из шаблона">⌫ Очистить все позиции</button>
                 )}
                 {(t.items || []).length > 0 && est && est.actions && (
                   <button
