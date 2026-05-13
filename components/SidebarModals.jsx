@@ -1266,6 +1266,7 @@ function KHTemplatesView({ est, onClose }) {
   const [tplDraft, setTplDraft] = React.useState({ name: '', area: '', note: '', file: null, cover: '' });
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
+  const [dbPicker, setDbPicker] = React.useState({ tplId: null, query: '', filter: 'all' });
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);
   const tplFormFileRef = React.useRef(null);
@@ -1339,6 +1340,42 @@ function KHTemplatesView({ est, onClose }) {
   const removeItem = (tplId, itemId) => {
     persist(list.map(t => t.id === tplId ? { ...t, items: t.items.filter(it => it.id !== itemId) } : t));
   };
+
+  const addItemFromCatalog = (tplId, catItem) => {
+    const item = {
+      id: 'tpli-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      name: catItem.name,
+      unit: catItem.unit || '',
+      qty: 1,
+      unitPrice: Number(catItem.unitPrice) || 0,
+    };
+    persist(list.map(t => t.id === tplId ? { ...t, items: [...(t.items || []), item] } : t));
+    setUploadStatus({ kind: 'ok', text: `Добавлено: ${catItem.name}` });
+    setTimeout(() => setUploadStatus(null), 1500);
+  };
+
+  const dbCatalog = React.useMemo(() => {
+    if (!est || !est.state) return [];
+    const userC = est.state.userCatalog || [];
+    const localC = est.state.catalog || [];
+    const ddcC = est.state.ddcCatalog || [];
+    const hidden = est.state.hiddenCatalog || new Set();
+    const keyOf = (it) => `${String(it.name || '').trim().toLowerCase()}|${String(it.unit || '').trim().toLowerCase()}`;
+    return [
+      ...userC.map(it => ({ ...it, _kind: 'user' })),
+      ...localC.map(it => ({ ...it, _kind: 'local' })),
+      ...ddcC.map(it => ({ ...it, _kind: 'ddc' })),
+    ].filter(it => !hidden.has(keyOf(it)));
+  }, [est && est.state && est.state.userCatalog, est && est.state && est.state.catalog, est && est.state && est.state.ddcCatalog, est && est.state && est.state.hiddenCatalog]);
+
+  const dbVisible = React.useMemo(() => {
+    if (!dbPicker.tplId) return [];
+    const q = dbPicker.query.trim().toLowerCase();
+    let out = dbCatalog;
+    if (dbPicker.filter !== 'all') out = out.filter(it => it._kind === dbPicker.filter);
+    if (q) out = out.filter(it => (it.name || '').toLowerCase().includes(q));
+    return out.slice(0, 200);
+  }, [dbCatalog, dbPicker]);
 
   const onUploadClick = (tplId) => {
     uploadTplIdRef.current = tplId;
@@ -1627,6 +1664,13 @@ function KHTemplatesView({ est, onClose }) {
                 {isOpen && !isAddingItem && (
                   <button className="btn btn-sm" onClick={() => setItemDraft({ tplId: t.id, name: '', unit: '', qty: '', unitPrice: '' })}>+ Позиция</button>
                 )}
+                {isOpen && est && est.state && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setDbPicker(dbPicker.tplId === t.id ? { tplId: null, query: '', filter: 'all' } : { tplId: t.id, query: '', filter: 'all' })}
+                    title="Добавить позицию из базы данных"
+                  >🗂 Из базы</button>
+                )}
                 {isOpen && (
                   <button className="btn btn-sm" onClick={() => onUploadClick(t.id)}>↑ Загрузить XLSX/CSV</button>
                 )}
@@ -1642,6 +1686,72 @@ function KHTemplatesView({ est, onClose }) {
                   >→ Импортировать в смету</button>
                 )}
               </div>
+              {isOpen && dbPicker.tplId === t.id && (
+                <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 8, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      autoFocus
+                      placeholder={`Поиск среди ${dbCatalog.length} позиций базы`}
+                      value={dbPicker.query}
+                      onChange={e => setDbPicker({ ...dbPicker, query: e.target.value })}
+                      style={{ ...khInputStyle(), flex: 1, minWidth: 200 }}
+                    />
+                    <button type="button" className="btn btn-sm" onClick={() => setDbPicker({ tplId: null, query: '', filter: 'all' })}>Закрыть</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'all', label: 'Все' },
+                      { id: 'user', label: 'Моё' },
+                      { id: 'local', label: 'JSON' },
+                      { id: 'ddc', label: 'DDC' },
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        className="kh-pill"
+                        onClick={() => setDbPicker({ ...dbPicker, filter: f.id })}
+                        style={{
+                          cursor: 'pointer', border: '1px solid var(--rule)',
+                          background: dbPicker.filter === f.id ? 'var(--ink)' : 'var(--paper-card)',
+                          color: dbPicker.filter === f.id ? 'var(--paper)' : 'var(--ink-2)',
+                          fontWeight: dbPicker.filter === f.id ? 600 : 400,
+                        }}
+                      >{f.label}</button>
+                    ))}
+                  </div>
+                  {dbVisible.length === 0 ? (
+                    <div className="kh-empty" style={{ padding: 12 }}>
+                      {dbCatalog.length === 0 ? 'База пуста — добавьте позиции через раздел «База данных».' : 'Ничего не найдено'}
+                    </div>
+                  ) : (
+                    <table className="kh-table">
+                      <thead><tr>
+                        <th>Наименование</th>
+                        <th style={{ width: 70 }}>Ед.</th>
+                        <th className="num" style={{ width: 110 }}>Цена</th>
+                        <th style={{ width: 70 }}></th>
+                      </tr></thead>
+                      <tbody>
+                        {dbVisible.map((it, i) => (
+                          <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
+                            <td>{it.name}</td>
+                            <td>{it.unit || '—'}</td>
+                            <td className="num">{it.unitPrice ? num(it.unitPrice) + ' ₽' : '—'}</td>
+                            <td className="num">
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                title="Добавить в шаблон"
+                                onClick={() => addItemFromCatalog(t.id, it)}
+                              >+</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
               {isOpen && (t.items || []).length > 0 && (
                 <table className="kh-table" style={{ marginTop: 4 }}>
                   <thead><tr>
