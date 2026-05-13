@@ -1341,6 +1341,14 @@ function KHTemplatesView({ est, onClose }) {
     persist(list.map(t => t.id === tplId ? { ...t, items: t.items.filter(it => it.id !== itemId) } : t));
   };
 
+  const updateItemQty = (tplId, itemId, raw) => {
+    const qty = Number(String(raw).replace(/\s+/g, '').replace(',', '.'));
+    const safe = isFinite(qty) && qty >= 0 ? qty : 0;
+    persist(list.map(t => t.id === tplId
+      ? { ...t, items: (t.items || []).map(it => it.id === itemId ? { ...it, qty: safe } : it) }
+      : t));
+  };
+
   const addItemFromCatalog = (tplId, catItem) => {
     const item = {
       id: 'tpli-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -1767,7 +1775,13 @@ function KHTemplatesView({ est, onClose }) {
                       <tr key={it.id}>
                         <td>{it.name}</td>
                         <td>{it.unit || '—'}</td>
-                        <td className="num">{Number(it.qty || 0).toLocaleString('ru-RU')}</td>
+                        <td className="num">
+                          <Editable
+                            value={Number(it.qty || 0).toLocaleString('ru-RU')}
+                            onChange={(v) => updateItemQty(t.id, it.id, v)}
+                            placeholder="0"
+                          />
+                        </td>
                         <td className="num">{num(it.unitPrice)} ₽</td>
                         <td className="num">{num((Number(it.qty) || 0) * (Number(it.unitPrice) || 0))} ₽</td>
                         <td className="num"><button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeItem(t.id, it.id)}>×</button></td>
