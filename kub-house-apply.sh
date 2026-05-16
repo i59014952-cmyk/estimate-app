@@ -180,7 +180,7 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
   padding:11px 18px;border-radius:99px;border:1px solid var(--rule);
   background:transparent;color:var(--ink);
   font-size:13px;font-weight:500;letter-spacing:.005em;
-  cursor:default;transition:transform .12s ease, background .15s ease, border-color .15s ease;
+  cursor:pointer;transition:transform .12s ease, background .15s ease, border-color .15s ease;
   font-family:var(--sans);
 }
 .btn:hover{background:rgba(0,0,0,.04);border-color:var(--ink-3)}
@@ -913,7 +913,7 @@ function Sidebar({ active, onPick }) {
         width: "100%", padding: "9px 12px", borderRadius: 8,
         background: active === it.id ? "var(--ink)" : "transparent",
         color: active === it.id ? "var(--paper)" : "var(--ink-2)",
-        border: 0, cursor: "default", textAlign: "left",
+        border: 0, cursor: "pointer", textAlign: "left",
         fontSize: 13, fontFamily: "var(--sans)"
       }}
     >

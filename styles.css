@@ -177,6 +177,12 @@ button:disabled,
   cursor:not-allowed;
 }
 
+/* Сайдбар-навигация и мобильные чипы — перебиваем возможные инлайн-стили */
+.kh-sidebar button,
+.kh-mobile-nav__chip{
+  cursor:pointer !important;
+}
+
 /* Inline editable fields */
 .kh-editable{transition:background .15s ease, box-shadow .15s ease}
 .kh-editable:hover:not(.kh-editable--editing){background:rgba(110,123,79,.10);box-shadow:0 0 0 1px rgba(110,123,79,.25)}
