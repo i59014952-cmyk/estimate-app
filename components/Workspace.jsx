@@ -34,7 +34,7 @@ function TopBar({ onTheme, theme, onMenu }) {
         >
           <Icon name="menu" size={16} />
         </button>
-        <KubLogo size={32} />
+        <KubLogo size={48} />
         <div className="row center gap-3 mono kh-topbar__crumbs" style={{ fontSize: 11, color: "var(--ink-3)", letterSpacing: ".04em", marginLeft: 8 }}>
           <span>Workspace</span>
           <span style={{ opacity: .5 }}>›</span>
