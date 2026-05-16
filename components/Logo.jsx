@@ -1,27 +1,37 @@
-// Logo.jsx — мини-знак Kub-House (квадратик с двумя строками)
+// Logo.jsx — знак «смета»: контур крыши + рыжая труба, под ней серифная подпись.
 function KubLogo({ size = 36, light = false }) {
   const stroke = light ? "currentColor" : "var(--ink)";
+  const chimney = "var(--rust)";
+  const textSize = size * 0.62;
+  const houseW = size * 0.95;
+  const houseH = size * 0.42;
   return (
-    <div className="row center gap-2" style={{ lineHeight: 1 }}>
-      <div style={{
-        width: size, height: size, border: `1px solid ${stroke}`,
-        display: "grid", placeItems: "center",
-        fontFamily: "var(--mono)", fontSize: size * 0.22,
-        letterSpacing: ".06em", textAlign: "center", color: stroke,
-        flexShrink: 0
+    <div className="col center" style={{ lineHeight: 1, gap: Math.max(2, size * 0.04) }}>
+      <svg
+        width={houseW}
+        height={houseH}
+        viewBox="0 0 100 44"
+        fill="none"
+        style={{ display: "block" }}
+        aria-hidden="true"
+      >
+        <path
+          d="M12 42 L12 30 L50 6 L88 30 L88 42"
+          stroke={stroke}
+          strokeWidth="4.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <rect x="68" y="11" width="7" height="13" fill={chimney} />
+      </svg>
+      <div className="serif" style={{
+        fontSize: textSize,
+        lineHeight: .9,
+        color: stroke,
+        fontWeight: 500,
+        letterSpacing: "-0.02em"
       }}>
-        <div style={{ display:"flex", flexDirection:"column", lineHeight:1.05 }}>
-          <span style={{fontWeight:600}}>KUB</span>
-          <span style={{borderTop:`1px solid ${stroke}`, paddingTop:1, marginTop:1, fontWeight:600}}>HOUSE</span>
-        </div>
-      </div>
-      <div className="col" style={{ gap: 2 }}>
-        <div className="serif" style={{ fontSize: size * 0.62, lineHeight: .95, color: stroke }}>
-          Kub<span style={{opacity:.7}}>·</span>House
-        </div>
-        <div className="mono" style={{ fontSize: size * 0.24, letterSpacing: ".18em", color: "var(--ink-3)" }}>
-          WOOD ARCHITECTURE
-        </div>
+        смета
       </div>
     </div>
   );
