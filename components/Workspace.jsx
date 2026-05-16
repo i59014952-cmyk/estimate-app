@@ -502,7 +502,7 @@ function EmptyState({ onUpload, onAddRow, catalogReady }) {
         Начните <span className="serif-it" style={{ fontStyle: "italic" }}>с чистого листа</span>
       </div>
       <p style={{ maxWidth: 380, fontSize: 13.5, color: "var(--ink-2)", marginBottom: 20 }}>
-        Загрузите коммерческое предложение — распознаем позиции, сопоставим с каталогом KUB·HOUSE и рассчитаем смету. Или добавьте материалы из правой панели.
+        Загрузите коммерческое предложение — распознаем позиции, сопоставим с каталогом и рассчитаем смету. Или добавьте материалы из правой панели.
       </p>
       <div className="row center gap-3" style={{ marginBottom: 16, flexWrap: "wrap", justifyContent: "center" }}>
         <button className="btn btn-primary" onClick={onUpload} disabled={!catalogReady}>
