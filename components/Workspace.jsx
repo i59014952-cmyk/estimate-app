@@ -103,7 +103,7 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
           width: "100%", padding: "9px 12px", borderRadius: 8,
           background: active === it.id ? "var(--ink)" : "transparent",
           color: active === it.id ? "var(--paper)" : "var(--ink-2)",
-          border: 0, cursor: "default", textAlign: "left",
+          border: 0, cursor: "pointer", textAlign: "left",
           fontSize: 13, fontFamily: "var(--sans)"
         }}
       >
