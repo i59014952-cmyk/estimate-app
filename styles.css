@@ -127,7 +127,7 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
   padding:11px 18px;border-radius:99px;border:1px solid var(--rule);
   background:transparent;color:var(--ink);
   font-size:13px;font-weight:500;letter-spacing:.005em;
-  cursor:default;transition:transform .12s ease, background .15s ease, border-color .15s ease;
+  cursor:pointer;transition:transform .12s ease, background .15s ease, border-color .15s ease;
   font-family:var(--sans);
 }
 .btn:hover{background:rgba(0,0,0,.04);border-color:var(--ink-3)}
@@ -141,6 +141,41 @@ p{margin:0;line-height:1.55;color:var(--ink-2)}
 .btn-sm{padding:7px 12px;font-size:12px}
 .btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:99px}
 .btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+/* Понятный клик: курсор-указатель (значок руки) на интерактивных элементах */
+a[href],
+button:not(:disabled),
+summary,
+label[for],
+select,
+[role="button"],
+[role="link"],
+[role="tab"],
+[role="menuitem"],
+[role="option"],
+[onclick],
+input[type="checkbox"],
+input[type="radio"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+input[type="file"]::-webkit-file-upload-button,
+.kh-mobile-nav__chip,
+.kh-tab,
+.product-link,
+.btn-link,
+.del-btn,
+.r-add,
+.picker__item{
+  cursor:pointer;
+}
+
+a[aria-disabled="true"],
+button[disabled],
+button:disabled,
+[aria-disabled="true"]{
+  cursor:not-allowed;
+}
 
 /* Inline editable fields */
 .kh-editable{transition:background .15s ease, box-shadow .15s ease}
