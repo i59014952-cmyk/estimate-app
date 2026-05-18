@@ -1005,7 +1005,9 @@ function Workspace({ embedded = false, onTheme, theme }) {
 // Inline-лоадер «Подбираем лучшие цены». Раньше Loader.jsx висел в отдельном
 // React root и управлялся через window-функции — это иногда расходилось с
 // pricesBusy и лоадер пропадал на полпути. Теперь видимость напрямую завязана
-// на state хука через проп, никаких таймеров и сторонних флагов.
+// на state хука через проп, и сам узел рендерится через портал прямо в
+// document.body — никакие CSS-родители (transform/filter/backdrop-filter) не
+// могут превратить наш fixed-оверлей в локально-позиционированный.
 function PriceFetchOverlay({ visible, progress }) {
   React.useEffect(() => {
     if (!visible) return;
@@ -1022,12 +1024,12 @@ function PriceFetchOverlay({ visible, progress }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const C = { paper: '#F4ECE0', ink: '#1F1B16', ink3: '#8A7F73', rust: '#C25842' };
 
-  return (
+  const overlay = (
     <div
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
       style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
+        position: 'fixed', inset: 0, zIndex: 2147483647,
         background: 'rgba(20,16,12,.18)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
@@ -1106,6 +1108,8 @@ function PriceFetchOverlay({ visible, progress }) {
       </div>
     </div>
   );
+
+  return ReactDOM.createPortal(overlay, document.body);
 }
 
 Object.assign(window, { Workspace });
