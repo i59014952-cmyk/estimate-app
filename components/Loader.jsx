@@ -26,6 +26,8 @@
     return (
       <div
         aria-hidden={!visible}
+        onClick={(e) => { if (visible) e.stopPropagation(); }}
+        onKeyDown={(e) => { if (visible) e.stopPropagation(); }}
         style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: 'rgba(20,16,12,.18)',
@@ -34,6 +36,7 @@
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           opacity: visible ? 1 : 0,
           pointerEvents: visible ? 'auto' : 'none',
+          cursor: visible ? 'wait' : 'default',
           transition: 'opacity .35s ease, backdrop-filter .35s ease',
         }}
       >

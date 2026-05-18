@@ -909,6 +909,20 @@ function Workspace({ embedded = false, onTheme, theme }) {
   }, [est.state.pricesBusy]);
 
   React.useEffect(() => {
+    if (!est.state.pricesBusy) return;
+    // Защита от случайного ухода со страницы во время длинного фетча:
+    // браузер покажет нативный confirm. Закрытие/перезагрузка/F5/⌘W —
+    // всё через него.
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [est.state.pricesBusy]);
+
+  React.useEffect(() => {
     if (est.state.pricesBusy && window.khSetProgress) {
       window.khSetProgress(est.state.pricesProgress);
     }
