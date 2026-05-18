@@ -170,12 +170,6 @@
     };
 
     render();
-
-    // Авто-показ при первом заходе
-    if (!sessionStorage.getItem('kh-loader-shown')) {
-      sessionStorage.setItem('kh-loader-shown', '1');
-      window.khShowLoader(1800);
-    }
   }
 
   if (document.readyState === 'loading') {

@@ -900,13 +900,15 @@ function Workspace({ embedded = false, onTheme, theme }) {
   React.useEffect(() => {
     if (est.state.pricesBusy) {
       // 0 = без авто-таймаута: для больших смет фетч может идти несколько минут,
-      // лоадер должен висеть до явного khHideLoader, иначе у пользователя
-      // создаётся впечатление, что обновление цен «зависло».
+      // лоадер должен висеть до явного khHideLoader. Реассертим показ на каждом
+      // апдейте прогресса, чтобы исключить ситуации, когда сторонний колбэк или
+      // welcome-таймер успели спрятать лоадер посередине фетча.
       if (window.khShowLoader) window.khShowLoader(0);
+      if (window.khSetProgress) window.khSetProgress(est.state.pricesProgress);
     } else {
       if (window.khHideLoader) window.khHideLoader();
     }
-  }, [est.state.pricesBusy]);
+  }, [est.state.pricesBusy, est.state.pricesProgress]);
 
   React.useEffect(() => {
     if (!est.state.pricesBusy) return;
@@ -921,12 +923,6 @@ function Workspace({ embedded = false, onTheme, theme }) {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [est.state.pricesBusy]);
-
-  React.useEffect(() => {
-    if (est.state.pricesBusy && window.khSetProgress) {
-      window.khSetProgress(est.state.pricesProgress);
-    }
-  }, [est.state.pricesProgress, est.state.pricesBusy]);
 
   const onUploadClick = () => fileInputRef.current && fileInputRef.current.click();
   const onFileChange = (e) => {
