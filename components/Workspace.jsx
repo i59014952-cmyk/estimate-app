@@ -1022,6 +1022,7 @@ function PriceFetchOverlay({ visible, progress }) {
 
   const total = (progress && progress.total) || 0;
   const done = (progress && progress.done) || 0;
+  const filled = (progress && progress.filled) || 0;
   const left = Math.max(total - done, 0);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const C = { paper: '#F4ECE0', ink: '#1F1B16', ink3: '#8A7F73', rust: '#C25842' };
@@ -1105,8 +1106,16 @@ function PriceFetchOverlay({ visible, progress }) {
               color: C.ink3, marginTop: 10,
               display: 'flex', justifyContent: 'space-between', width: '100%',
             }}>
-              <span>загружено <b style={{ color: C.ink }}>{done}</b> из {total}</span>
+              <span>проверено <b style={{ color: C.ink }}>{done}</b> из {total}</span>
               <span>осталось <b style={{ color: C.ink }}>{left}</b></span>
+            </div>
+            <div style={{
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
+              color: C.ink3, marginTop: 4,
+              display: 'flex', justifyContent: 'space-between', width: '100%',
+            }}>
+              <span>найдено <b style={{ color: C.ink }}>{filled}</b></span>
+              <span>без цены <b style={{ color: C.ink }}>{Math.max(done - filled, 0)}</b></span>
             </div>
           </>
         )}
