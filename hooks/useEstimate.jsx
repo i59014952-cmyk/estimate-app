@@ -521,7 +521,12 @@ function useEstimate() {
           setPricesProgress({ done, total: progressTotal, filled: totalFilled + filled, failed });
         }
       }
-      const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker());
+      const workers = Array.from({ length: PRICES_CONCURRENCY }, () =>
+        // .catch на каждом воркере, чтобы один сбой не отклонял Promise.all
+        // раньше времени — иначе finally{} убирал бы лоадер, а уцелевшие
+        // воркеры продолжали бы дописывать цены уже без видимого индикатора.
+        worker().catch(err => { console.error('[prices worker]', err); })
+      );
       await Promise.all(workers);
       return { filled, failed };
     };
