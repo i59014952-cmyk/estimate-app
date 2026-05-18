@@ -995,7 +995,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
       <ErrorToast status={est.state.status} />
       <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} est={est} />
       <PriceFetchOverlay
-        visible={est.state.pricesBusy}
+        visible={est.state.pricesBusy || est.state.busyTickets > 0}
         progress={est.state.pricesProgress}
       />
     </div>
@@ -1016,7 +1016,9 @@ function PriceFetchOverlay({ visible, progress }) {
     return () => { document.body.style.overflow = prev; };
   }, [visible]);
 
-  if (!visible) return null;
+  // Узел не размонтируем — управляем видимостью через opacity/pointer-events.
+  // Так гарантированно нет «дырки» между renders, когда узел уже снят из DOM,
+  // а pricesBusy ещё true.
 
   const total = (progress && progress.total) || 0;
   const done = (progress && progress.done) || 0;
@@ -1026,15 +1028,18 @@ function PriceFetchOverlay({ visible, progress }) {
 
   const overlay = (
     <div
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
+      onClick={(e) => { if (visible) e.stopPropagation(); }}
+      onKeyDown={(e) => { if (visible) e.stopPropagation(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 2147483647,
         background: 'rgba(20,16,12,.18)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        backdropFilter: visible ? 'blur(6px)' : 'none',
+        WebkitBackdropFilter: visible ? 'blur(6px)' : 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'wait',
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? 'auto' : 'none',
+        transition: 'opacity .2s ease',
       }}
     >
       <div style={{

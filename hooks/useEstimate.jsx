@@ -186,6 +186,17 @@ function useEstimate() {
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
   const [pricesBusy, setPricesBusy] = React.useState(false);
   const [pricesProgress, setPricesProgress] = React.useState({ done: 0, total: 0, filled: 0, failed: 0 });
+  // Счётчик активных «жизненных циклов» фетча. Инкрементим в самом начале
+  // (синхронно, до любого await), декрементим в самом конце (тоже синхронно,
+  // после всех await). Это страховка от React-батчинга / unmount + remount:
+  // если pricesBusy по какой-то причине промигнул в false, busyTicketsRef
+  // всё равно покажет >0, и лоадер останется на месте.
+  const busyTicketsRef = React.useRef(0);
+  const [busyTickets, setBusyTickets] = React.useState(0);
+  const bumpBusy = (delta) => {
+    busyTicketsRef.current = Math.max(0, busyTicketsRef.current + delta);
+    setBusyTickets(busyTicketsRef.current);
+  };
   const nextIdRef = React.useRef(1);
   const estimateRef = React.useRef([]);
   React.useEffect(() => { estimateRef.current = estimate; }, [estimate]);
@@ -469,6 +480,7 @@ function useEstimate() {
       .filter(r => r.notFound)
       .map(r => ({ id: r.id, name: r.name }));
     if (initialTargets.length === 0) return;
+    bumpBusy(+1);
     setPricesBusy(true);
     let totalFilled = 0, totalFailed = 0;
 
@@ -561,6 +573,7 @@ function useEstimate() {
       setStatus({ kind: "error", text: `Сервис цен недоступен: ${err.message}` });
     } finally {
       setPricesBusy(false);
+      bumpBusy(-1);
       if (totalFailed > 0) {
         setStatus({
           kind: totalFailed === initialTargets.length ? "error" : "done",
@@ -910,7 +923,7 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
