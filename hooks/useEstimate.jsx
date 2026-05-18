@@ -465,68 +465,101 @@ function useEstimate() {
   }, [importRows]);
 
   const fetchPricesForNotFound = React.useCallback(async () => {
-    const targets = estimateRef.current
+    const initialTargets = estimateRef.current
       .filter(r => r.notFound)
       .map(r => ({ id: r.id, name: r.name }));
-    if (targets.length === 0) return;
+    if (initialTargets.length === 0) return;
     setPricesBusy(true);
-    setPricesProgress({ done: 0, total: targets.length, filled: 0, failed: 0 });
-    let done = 0, filled = 0, failed = 0;
-    const queue = targets.slice();
+    let totalFilled = 0, totalFailed = 0;
 
-    async function worker() {
-      while (queue.length > 0) {
-        const target = queue.shift();
-        if (!target) continue;
-        const { id, name: rowName } = target;
-        let candidates = [];
-        let fetchOk = false;
-        try {
-          const raw = await searchPriceCandidates(rowName);
-          candidates = raw.filter(c => c.price).filter(c => isRelevantCandidate(rowName, c));
-          fetchOk = true;
-        } catch (err) {
-          failed++;
+    // Один проход воркеров. progressBase позволяет ретраю продолжать счётчик
+    // прогресса с того места, где остановился первый проход, чтобы прогресс
+    // в лоадере не «откатывался» к нулю.
+    const runPass = async (targets, progressBase, progressTotal) => {
+      let done = progressBase, filled = 0, failed = 0;
+      const queue = targets.slice();
+      setPricesProgress({ done, total: progressTotal, filled: totalFilled, failed: 0 });
+
+      async function worker() {
+        while (queue.length > 0) {
+          const target = queue.shift();
+          if (!target) continue;
+          const { id, name: rowName } = target;
+          let candidates = [];
+          let fetchOk = false;
+          try {
+            const raw = await searchPriceCandidates(rowName);
+            candidates = raw.filter(c => c.price).filter(c => isRelevantCandidate(rowName, c));
+            fetchOk = true;
+          } catch (err) {
+            failed++;
+          }
+          done++;
+          if (candidates.length > 0) {
+            const c = candidates[0];
+            let applied = false;
+            setEstimate(prev => prev.map(r => {
+              if (r.id !== id) return r;
+              if (!r.notFound) return { ...r, candidates };
+              applied = true;
+              return {
+                ...r,
+                candidates,
+                name: c.name || r.name,
+                unitPrice: c.price,
+                unit: c.unit || r.unit || 'шт.',
+                source: KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit',
+                url: c.url || '',
+                notFound: false,
+                expanded: false,
+              };
+            }));
+            if (applied) filled++;
+          } else if (fetchOk) {
+            setEstimate(prev => prev.map(r => r.id === id ? { ...r, candidates: [], expanded: false } : r));
+          }
+          setPricesProgress({ done, total: progressTotal, filled: totalFilled + filled, failed });
         }
-        done++;
-        if (candidates.length > 0) {
-          const c = candidates[0];
-          let applied = false;
-          setEstimate(prev => prev.map(r => {
-            if (r.id !== id) return r;
-            // Don't override manually-set prices: only apply if still notFound.
-            if (!r.notFound) return { ...r, candidates };
-            applied = true;
-            return {
-              ...r,
-              candidates,
-              name: c.name || r.name,
-              unitPrice: c.price,
-              unit: c.unit || r.unit || 'шт.',
-              source: KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit',
-              url: c.url || '',
-              notFound: false,
-              expanded: false,
-            };
-          }));
-          if (applied) filled++;
-        } else if (fetchOk) {
-          setEstimate(prev => prev.map(r => r.id === id ? { ...r, candidates: [], expanded: false } : r));
-        }
-        setPricesProgress({ done, total: targets.length, filled, failed });
       }
-    }
-    const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker());
-    try {
+      const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker());
       await Promise.all(workers);
+      return { filled, failed };
+    };
+
+    try {
+      // Первый проход.
+      const pass1 = await runPass(initialTargets, 0, initialTargets.length);
+      totalFilled += pass1.filled;
+      totalFailed = pass1.failed;
+
+      // Авто-ретрай: проходим ещё раз по строкам, где фетч провалился
+      // (notFound остался true, candidates === null). Помогает когда первая
+      // волна частично таймаутит из-за холодного старта прокси, но повторный
+      // запрос уже на прогретом сервисе успевает уложиться в таймаут.
+      // Строки с candidates === [] (фетч успешен, но ничего не нашлось)
+      // не ретраим — это легитимно «нет соответствия в каталогах».
+      const retryTargets = estimateRef.current
+        .filter(r => {
+          if (!r.notFound) return false;
+          if (r.candidates !== null) return false;
+          return initialTargets.some(t => t.id === r.id);
+        })
+        .map(r => ({ id: r.id, name: r.name }));
+
+      if (retryTargets.length > 0) {
+        const totalWithRetry = initialTargets.length + retryTargets.length;
+        const pass2 = await runPass(retryTargets, initialTargets.length, totalWithRetry);
+        totalFilled += pass2.filled;
+        totalFailed = pass2.failed;
+      }
     } catch (err) {
       setStatus({ kind: "error", text: `Сервис цен недоступен: ${err.message}` });
     } finally {
       setPricesBusy(false);
-      if (failed > 0) {
+      if (totalFailed > 0) {
         setStatus({
-          kind: failed === targets.length ? "error" : "done",
-          text: `Цены: загружено ${filled}, не удалось ${failed} из ${targets.length}${failed === targets.length ? ' — нажмите «Обновить цены» ещё раз' : ''}`,
+          kind: totalFailed === initialTargets.length ? "error" : "done",
+          text: `Цены: загружено ${totalFilled}, не удалось ${totalFailed} из ${initialTargets.length}${totalFailed === initialTargets.length ? ' — нажмите «Обновить цены» ещё раз' : ''}`,
         });
       }
     }
