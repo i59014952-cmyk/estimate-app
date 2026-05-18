@@ -203,6 +203,20 @@ function useEstimate() {
   }, [estimate]);
 
   React.useEffect(() => {
+    // Warm up the price proxy backend (Render free tier sleeps after 15 min of
+    // inactivity and the first request after wake-up exceeds the 15s fetch
+    // timeout used by searchPriceCandidates). Fire-and-forget; we don't care
+    // about the response, just want the container ready by the time the user
+    // clicks "Обновить цены".
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 30000);
+      fetch(`${PRICES_BACKEND}/prices/search?query=warmup&limit=1`, { signal: ctrl.signal })
+        .catch(() => {});
+    } catch (_) {}
+  }, []);
+
+  React.useEffect(() => {
     setStatus({ kind: "busy", text: "Загрузка каталогов…" });
     Promise.all([loadLocalCatalog(), loadDdcCatalog()])
       .then(([local, ddc]) => {
@@ -451,34 +465,38 @@ function useEstimate() {
   }, [importRows]);
 
   const fetchPricesForNotFound = React.useCallback(async () => {
-    const targetIds = estimateRef.current.filter(r => r.notFound).map(r => r.id);
-    if (targetIds.length === 0) return;
+    const targets = estimateRef.current
+      .filter(r => r.notFound)
+      .map(r => ({ id: r.id, name: r.name }));
+    if (targets.length === 0) return;
     setPricesBusy(true);
-    setPricesProgress({ done: 0, total: targetIds.length, filled: 0, failed: 0 });
-    let done = 0, filled = 0, failed = 0, ambiguous = 0;
-    const queue = targetIds.slice();
+    setPricesProgress({ done: 0, total: targets.length, filled: 0, failed: 0 });
+    let done = 0, filled = 0, failed = 0;
+    const queue = targets.slice();
 
     async function worker() {
       while (queue.length > 0) {
-        const id = queue.shift();
-        const row = estimateRef.current.find(r => r.id === id);
-        if (!row) continue;
-        const rowName = row.name;
+        const target = queue.shift();
+        if (!target) continue;
+        const { id, name: rowName } = target;
         let candidates = [];
+        let fetchOk = false;
         try {
           const raw = await searchPriceCandidates(rowName);
           candidates = raw.filter(c => c.price).filter(c => isRelevantCandidate(rowName, c));
+          fetchOk = true;
         } catch (err) {
           failed++;
         }
         done++;
         if (candidates.length > 0) {
-          if (candidates.length > 1) ambiguous++;
           const c = candidates[0];
+          let applied = false;
           setEstimate(prev => prev.map(r => {
             if (r.id !== id) return r;
+            // Don't override manually-set prices: only apply if still notFound.
             if (!r.notFound) return { ...r, candidates };
-            filled++;
+            applied = true;
             return {
               ...r,
               candidates,
@@ -491,10 +509,11 @@ function useEstimate() {
               expanded: false,
             };
           }));
-        } else {
+          if (applied) filled++;
+        } else if (fetchOk) {
           setEstimate(prev => prev.map(r => r.id === id ? { ...r, candidates: [], expanded: false } : r));
         }
-        setPricesProgress({ done, total: targetIds.length, filled, failed });
+        setPricesProgress({ done, total: targets.length, filled, failed });
       }
     }
     const workers = Array.from({ length: PRICES_CONCURRENCY }, () => worker());
@@ -504,6 +523,12 @@ function useEstimate() {
       setStatus({ kind: "error", text: `Сервис цен недоступен: ${err.message}` });
     } finally {
       setPricesBusy(false);
+      if (failed > 0) {
+        setStatus({
+          kind: failed === targets.length ? "error" : "done",
+          text: `Цены: загружено ${filled}, не удалось ${failed} из ${targets.length}${failed === targets.length ? ' — нажмите «Обновить цены» ещё раз' : ''}`,
+        });
+      }
     }
   }, []);
 
