@@ -146,8 +146,14 @@
       visible = true;
       render();
       if (timer) clearTimeout(timer);
-      const d = typeof ms === 'number' ? ms : 1800;
-      timer = setTimeout(() => { visible = false; render(); }, d);
+      timer = null;
+      // ms === 0 (или отрицательное) → без авто-скрытия, ждём явный khHideLoader.
+      // Иначе используем ms как таймаут безопасности (по умолчанию 1.8с — для
+      // приветственного показа на первом заходе).
+      if (typeof ms !== 'number' || ms > 0) {
+        const d = typeof ms === 'number' ? ms : 1800;
+        timer = setTimeout(() => { visible = false; render(); }, d);
+      }
     };
     window.khHideLoader = function () {
       if (timer) clearTimeout(timer);

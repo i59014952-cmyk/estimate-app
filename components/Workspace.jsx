@@ -899,7 +899,10 @@ function Workspace({ embedded = false, onTheme, theme }) {
 
   React.useEffect(() => {
     if (est.state.pricesBusy) {
-      if (window.khShowLoader) window.khShowLoader(60000);
+      // 0 = без авто-таймаута: для больших смет фетч может идти несколько минут,
+      // лоадер должен висеть до явного khHideLoader, иначе у пользователя
+      // создаётся впечатление, что обновление цен «зависло».
+      if (window.khShowLoader) window.khShowLoader(0);
     } else {
       if (window.khHideLoader) window.khHideLoader();
     }
