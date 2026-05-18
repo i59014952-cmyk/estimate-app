@@ -898,19 +898,6 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const fileInputRef = React.useRef(null);
 
   React.useEffect(() => {
-    if (est.state.pricesBusy) {
-      // 0 = без авто-таймаута: для больших смет фетч может идти несколько минут,
-      // лоадер должен висеть до явного khHideLoader. Реассертим показ на каждом
-      // апдейте прогресса, чтобы исключить ситуации, когда сторонний колбэк или
-      // welcome-таймер успели спрятать лоадер посередине фетча.
-      if (window.khShowLoader) window.khShowLoader(0);
-      if (window.khSetProgress) window.khSetProgress(est.state.pricesProgress);
-    } else {
-      if (window.khHideLoader) window.khHideLoader();
-    }
-  }, [est.state.pricesBusy, est.state.pricesProgress]);
-
-  React.useEffect(() => {
     if (!est.state.pricesBusy) return;
     // Защита от случайного ухода со страницы во время длинного фетча:
     // браузер покажет нативный confirm. Закрытие/перезагрузка/F5/⌘W —
@@ -1007,6 +994,116 @@ function Workspace({ embedded = false, onTheme, theme }) {
       <ScrollToTop />
       <ErrorToast status={est.state.status} />
       <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} est={est} />
+      <PriceFetchOverlay
+        visible={est.state.pricesBusy}
+        progress={est.state.pricesProgress}
+      />
+    </div>
+  );
+}
+
+// Inline-лоадер «Подбираем лучшие цены». Раньше Loader.jsx висел в отдельном
+// React root и управлялся через window-функции — это иногда расходилось с
+// pricesBusy и лоадер пропадал на полпути. Теперь видимость напрямую завязана
+// на state хука через проп, никаких таймеров и сторонних флагов.
+function PriceFetchOverlay({ visible, progress }) {
+  React.useEffect(() => {
+    if (!visible) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const total = (progress && progress.total) || 0;
+  const done = (progress && progress.done) || 0;
+  const left = Math.max(total - done, 0);
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const C = { paper: '#F4ECE0', ink: '#1F1B16', ink3: '#8A7F73', rust: '#C25842' };
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(20,16,12,.18)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'wait',
+      }}
+    >
+      <div style={{
+        background: C.paper,
+        border: '1px solid rgba(80,60,30,.18)',
+        borderRadius: 16,
+        padding: '40px 48px 32px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        boxShadow: '0 30px 80px -20px rgba(20,16,12,.45), 0 4px 16px -4px rgba(20,16,12,.18)',
+        minWidth: 380,
+      }}>
+        <div style={{ position: 'relative', width: 280, height: 110 }}>
+          <div style={{
+            position: 'absolute', left: 0, top: 30, width: 70, height: 60, borderRadius: 10,
+            background: C.rust, border: `1.5px solid ${C.ink}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fff', border: `1.5px solid ${C.ink}` }}/>
+          </div>
+          <div style={{
+            position: 'absolute', left: 70, top: 50, height: 22, width: 200,
+            background: '#F5E29A', border: `1.5px solid ${C.ink}`, overflow: 'hidden',
+          }}>
+            <div className="kh-tape" style={{
+              display: 'flex', gap: 22, padding: '0 6px', whiteSpace: 'nowrap',
+              height: '100%', alignItems: 'center',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: C.ink,
+            }}>
+              <span>28 600 ₽</span><span>14 200 ₽</span><span>9 850 ₽</span>
+              <span>32 100 ₽</span><span>6 400 ₽</span><span>18 700 ₽</span>
+              <span>2 150 ₽</span><span>41 900 ₽</span><span>11 300 ₽</span>
+              <span>28 600 ₽</span><span>14 200 ₽</span><span>9 850 ₽</span>
+            </div>
+            <div style={{
+              position: 'absolute', inset: 0, pointerEvents: 'none',
+              backgroundImage: `repeating-linear-gradient(90deg, ${C.ink} 0 1px, transparent 1px 16px)`,
+              opacity: .35,
+            }}/>
+          </div>
+        </div>
+        <div style={{
+          fontFamily: '"Cormorant Garamond", serif', fontStyle: 'italic',
+          fontSize: 26, color: C.ink, marginTop: 22, letterSpacing: '-0.01em',
+          whiteSpace: 'nowrap',
+        }}>Подбираем лучшие цены</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '.18em',
+          textTransform: 'uppercase', color: C.ink3, marginTop: 10,
+        }}>замеряем рынок</div>
+        {total > 0 && (
+          <>
+            <div style={{
+              width: '100%', height: 2, background: 'rgba(80,60,30,.15)',
+              borderRadius: 99, overflow: 'hidden', marginTop: 22,
+            }}>
+              <div style={{
+                width: `${pct}%`, height: '100%', background: C.rust,
+                borderRadius: 99, transition: 'width .35s ease-out',
+              }} />
+            </div>
+            <div style={{
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
+              color: C.ink3, marginTop: 10,
+              display: 'flex', justifyContent: 'space-between', width: '100%',
+            }}>
+              <span>загружено <b style={{ color: C.ink }}>{done}</b> из {total}</span>
+              <span>осталось <b style={{ color: C.ink }}>{left}</b></span>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
