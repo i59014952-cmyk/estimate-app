@@ -1120,6 +1120,11 @@ function PriceFetchOverlay({ visible, progress }) {
           </>
         )}
       </div>
+      <style>{`
+        @keyframes kh-tape { 0%,100% { transform: translateX(0) } 50% { transform: translateX(-160px) } }
+        .kh-tape { animation: kh-tape 2.6s ease-in-out infinite; will-change: transform; }
+        @media (prefers-reduced-motion: reduce){ .kh-tape{ animation: none } }
+      `}</style>
     </div>
   );
 
