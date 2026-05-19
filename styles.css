@@ -286,6 +286,10 @@ input[type="number"]{-moz-appearance:textfield;appearance:textfield}
   .kh-prices-progress__bar::after{animation:none}
 }
 
+/* Анимация ленты-рулетки в лоадере «Обновить цены». */
+@keyframes kh-tape { 0%,100% { transform: translateX(0) } 50% { transform: translateX(-160px) } }
+.kh-tape { animation: kh-tape 2.6s ease-in-out infinite; }
+
 /* Тонкие линии-засечки в углах кадра — как на PDF */
 .frame{position:relative}
 .frame::before,
