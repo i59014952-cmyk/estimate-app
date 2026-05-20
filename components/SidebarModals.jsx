@@ -1174,6 +1174,25 @@ async function khParseTemplateFile(file) {
   }
   const startIdx = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
 
+  // Auto-detect missing name column ПЕРВЫМ — иначе колонка с названием
+  // (где в тексте есть числа) ошибочно попадёт в числовые как «Кол-во».
+  if (nameIdx === -1) {
+    let bestCol = 0, bestText = -1;
+    for (let col = 0; col < 8; col++) {
+      let textCount = 0;
+      for (let i = startIdx; i < allRows.length && i < startIdx + 30; i++) {
+        const row = allRows[i];
+        if (!row || row._colored || row._sectionLike) continue;
+        const c = String(row[col] == null ? '' : row[col]).trim();
+        if (!c || col === qtyIdx || col === priceIdx || col === unitIdx) continue;
+        // Колонка названия — много ячеек с длинными словами и не «число + ед.» (типа «1шт»).
+        if (/\p{L}{3,}/u.test(c) && !/^\s*[\d.,\s]+\s*[а-яёa-z²³./]{0,4}\s*$/iu.test(c)) textCount++;
+      }
+      if (textCount > bestText) { bestText = textCount; bestCol = col; }
+    }
+    nameIdx = bestCol;
+  }
+
   // Auto-detect missing numeric columns by scanning a sample of data rows.
   if (qtyIdx === -1 || priceIdx === -1) {
     const numericByCol = new Map();
@@ -1210,23 +1229,6 @@ async function khParseTemplateFile(file) {
       priceIdx = numericCols[numericCols.length - 1];
     }
   }
-
-  // Auto-detect missing name column if header detection didn't find it.
-  if (nameIdx === -1) {
-    let bestCol = 0, bestText = -1;
-    for (let col = 0; col < 8; col++) {
-      let textCount = 0;
-      for (let i = startIdx; i < allRows.length && i < startIdx + 30; i++) {
-        const row = allRows[i];
-        if (!row || row._colored || row._sectionLike) continue;
-        const c = String(row[col] == null ? '' : row[col]).trim();
-        if (!c || col === qtyIdx || col === priceIdx || col === unitIdx) continue;
-        if (/\p{L}{3,}/u.test(c) && !/^\s*[\d.,\s]+$/.test(c)) textCount++;
-      }
-      if (textCount > bestText) { bestText = textCount; bestCol = col; }
-    }
-    nameIdx = bestCol;
-  }
   const knowsPrice = qtyIdx !== -1 || priceIdx !== -1 || sumIdx !== -1;
   const out = [];
   for (let i = startIdx; i < allRows.length; i++) {
@@ -1236,8 +1238,13 @@ async function khParseTemplateFile(file) {
 
     const cells = row.map(c => c == null ? '' : String(c).trim());
     const rawName = cells[nameIdx] || '';
-    const unit = unitIdx !== -1 ? (cells[unitIdx] || '') : '';
+    let unit = unitIdx !== -1 ? (cells[unitIdx] || '') : '';
     const qty = qtyIdx !== -1 ? toNum(cells[qtyIdx]) : 0;
+    // Единица склеена с количеством («1шт», «5 м²») — вытащим суффикс-букву.
+    if (!unit && qtyIdx !== -1) {
+      const m = String(cells[qtyIdx] || '').match(/[\d.,\s]+([а-яёa-z²³.\/]+)\s*$/i);
+      if (m && m[1]) unit = m[1].trim();
+    }
     const sum = sumIdx !== -1 ? toNum(cells[sumIdx]) : 0;
     let unitPrice = priceIdx !== -1 ? toNum(cells[priceIdx]) : 0;
     if (unitPrice <= 0 && sum > 0 && qty > 0) unitPrice = sum / qty;
