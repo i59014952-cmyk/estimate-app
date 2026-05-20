@@ -1263,6 +1263,7 @@ function KHTemplatesView({ est, onClose }) {
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
   const [dbPicker, setDbPicker] = React.useState({ tplId: null, query: '', filter: 'all' });
+  const [catMenu, setCatMenu] = React.useState(null); // id позиции с открытым выбором категории
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);
   const tplFormFileRef = React.useRef(null);
@@ -1378,6 +1379,19 @@ function KHTemplatesView({ est, onClose }) {
     persist(list.map(t => t.id === tplId
       ? { ...t, items: (t.items || []).map(it => it.id === itemId ? { ...it, qty: safe } : it) }
       : t));
+  };
+
+  const updateItemUnit = (tplId, itemId, val) => {
+    persist(list.map(t => t.id === tplId
+      ? { ...t, items: (t.items || []).map(it => it.id === itemId ? { ...it, unit: String(val) } : it) }
+      : t));
+  };
+
+  const setItemCat = (tplId, itemId, cat) => {
+    persist(list.map(t => t.id === tplId
+      ? { ...t, items: (t.items || []).map(it => it.id === itemId ? { ...it, category: cat } : it) }
+      : t));
+    setCatMenu(null);
   };
 
   const addItemFromCatalog = (tplId, catItem) => {
@@ -1809,15 +1823,42 @@ function KHTemplatesView({ est, onClose }) {
                       return (
                       <tr key={it.id}>
                         <td>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
-                            border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
-                            background: c === 'work' ? 'var(--moss, #4f6f52)' : 'transparent',
-                            color: c === 'work' ? '#fff' : 'var(--ink-3)',
-                          }}>{c === 'work' ? 'Работа' : 'Материал'}</span>
+                          {catMenu === it.id ? (
+                            <span style={{ display: 'inline-flex', gap: 4 }} onMouseLeave={() => setCatMenu(null)}>
+                              {[['work', 'Работа'], ['material', 'Материал']].map(([id, label]) => (
+                                <button key={id} type="button" onClick={() => setItemCat(t.id, it.id, id)}
+                                  style={{
+                                    cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
+                                    border: '1px solid ' + (c === id ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                                    background: c === id ? 'var(--moss, #4f6f52)' : 'var(--paper)',
+                                    color: c === id ? '#fff' : 'var(--ink-2)',
+                                  }}>{label}</button>
+                              ))}
+                            </span>
+                          ) : (
+                            <span
+                              onClick={() => setCatMenu(it.id)}
+                              title="Нажмите, чтобы сменить категорию"
+                              style={{
+                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', cursor: 'pointer',
+                                border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                                background: c === 'work' ? 'var(--moss, #4f6f52)' : 'transparent',
+                                color: c === 'work' ? '#fff' : 'var(--ink-3)',
+                              }}>{c === 'work' ? 'Работа' : 'Материал'}</span>
+                          )}
                         </td>
                         <td>{it.name}</td>
-                        <td>{it.unit || '—'}</td>
+                        <td>
+                          <input
+                            value={it.unit || ''}
+                            placeholder="ед."
+                            onChange={(e) => updateItemUnit(t.id, it.id, e.target.value)}
+                            style={{
+                              width: 56, padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 4,
+                              background: 'var(--paper)', color: 'var(--ink)', fontSize: 13,
+                            }}
+                          />
+                        </td>
                         <td className="num">
                           <input
                             type="number"
