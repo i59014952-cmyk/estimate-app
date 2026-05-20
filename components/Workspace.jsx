@@ -279,13 +279,7 @@ function HeroBlock({ est, meta, updateMeta, onOpenDatabase }) {
   );
 }
 
-function Toolbar({ tab, onTab, query, onQuery }) {
-  const tabs = [
-    { id: "all", label: "Все", icon: "layers" },
-    { id: "works", label: "Работы" },
-    { id: "materials", label: "Материалы" },
-    { id: "tree", label: "Дерево" },
-  ];
+function Toolbar({ query, onQuery }) {
   return (
     <div className="row between center kh-toolbar-bar" style={{ padding: "16px 32px", gap: 12, flexWrap: "wrap" }}>
       <div className="row center gap-3 kh-toolbar-bar__search" style={{
@@ -299,19 +293,6 @@ function Toolbar({ tab, onTab, query, onQuery }) {
           style={{ flex: 1, border: 0, background: "transparent", outline: "none", color: "var(--ink)", fontSize: 13, fontFamily: "var(--sans)" }}
         />
         <span className="mono tiny kh-toolbar-bar__hint" style={{ color: "var(--ink-4)", border: "1px solid var(--rule)", borderRadius: 4, padding: "2px 6px" }}>⌘K</span>
-      </div>
-      <div className="row center kh-toolbar-bar__tabs" style={{ gap: 6 }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => onTab(t.id)} className="btn btn-sm"
-            style={{
-              background: tab === t.id ? "var(--ink)" : "transparent",
-              color: tab === t.id ? "var(--paper)" : "var(--ink-2)",
-              borderColor: tab === t.id ? "var(--ink)" : "var(--rule)"
-            }}>
-            {t.icon && <Icon name={t.icon} size={12} />}
-            {t.label}
-          </button>
-        ))}
       </div>
     </div>
   );
@@ -983,7 +964,6 @@ function StatusBar() {
 }
 
 function Workspace({ embedded = false, onTheme, theme }) {
-  const [tab, setTab] = useState("all");
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
@@ -1054,7 +1034,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
           <HeroBlock est={est} meta={meta} updateMeta={updateMeta} onOpenDatabase={() => { setNavActive("database"); setKhModalTab("database"); setDbAutoAdd(true); }} />
           <div style={{ position: "relative" }}>
-            <Toolbar tab={tab} onTab={setTab} query={est.state.query} onQuery={est.actions.setQuery} />
+            <Toolbar query={est.state.query} onQuery={est.actions.setQuery} />
             <SearchResults
               query={est.state.query}
               results={est.state.searchResults}
