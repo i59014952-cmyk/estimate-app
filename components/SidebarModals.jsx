@@ -724,9 +724,12 @@ function KHContractorsView() {
 
   const sendRequest = async (c) => {
     if (!c.email) { alert('У подрядчика не указан email'); return; }
+    const cur = c.slug ? c : khEnsureSlug(c);
+    if (!c.slug) persist(list.map(x => x.id === c.id ? cur : x));
+    const link = khVendorLink(cur.slug);
     const f = window.KH_CONTRACTOR_FILES.get(c.id);
     const fileLine = (f || c.fileName) ? `\n\nВо вложении: ${f ? f.name : c.fileName}.` : '';
-    const body = `Здравствуйте!\n\nПросим прислать коммерческое предложение по приложенной спецификации.${fileLine}\n\nОтвет, пожалуйста, на ${c.email}\n\nС уважением,`;
+    const body = `Здравствуйте!\n\nПросим прислать коммерческое предложение по приложенной спецификации.${fileLine}\n\nЗагрузить КП можно по индивидуальной ссылке:\n${link}\n\nС уважением,`;
 
     if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
       try {
