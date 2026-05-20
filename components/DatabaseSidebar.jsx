@@ -89,8 +89,9 @@ function KHDatabaseView({ est, autoAdd }) {
   const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
   const [adding, setAdding] = React.useState(!!autoAdd);
-  const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "" });
+  const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "", category: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
+  const [catMenu, setCatMenu] = React.useState(null); // ключ строки с открытым выбором категории
   const fileRef = React.useRef(null);
 
   if (!est) return <div className="kh-empty">База недоступна</div>;
@@ -147,14 +148,16 @@ function KHDatabaseView({ est, autoAdd }) {
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
 
-  const catOf = (it) => (it.category === 'work' || it.category === 'material')
-    ? it.category : classifyItem(it.name, it.unit);
+  const catOverride = est.state.catOverride || {};
+  // Ручной оверрайд категории (из localStorage) важнее авто-классификации.
+  const catOf = (it) => catOverride[hiddenKeyOf(it)]
+    || ((it.category === 'work' || it.category === 'material') ? it.category : classifyItem(it.name, it.unit));
   const merged = React.useMemo(() => [
     ...userCatalog.map(it => ({ ...it, _kind: "user", category: catOf(it) })),
     ...vendorRows.map(it => ({
       name: it.name, unit: it.unit || '',
       unitPrice: Number(it.unit_price) || 0,
-      category: classifyItem(it.name, it.unit),
+      category: catOf({ name: it.name, unit: it.unit || '' }),
       _kind: "vendor",
       _id: it.id,
       _vendorSlug: it.vendor_slug,
@@ -164,7 +167,7 @@ function KHDatabaseView({ est, autoAdd }) {
     })),
     ...localCatalog.map(it => ({ ...it, _kind: "local", category: catOf(it) })),
     ...ddcCatalog.map(it => ({ ...it, _kind: "ddc", category: catOf(it) })),
-  ], [userCatalog, vendorRows, vendorMap, localCatalog, ddcCatalog]);
+  ], [userCatalog, vendorRows, vendorMap, localCatalog, ddcCatalog, catOverride]);
 
   const activeMerged = React.useMemo(() => merged.filter(it => !isHidden(it)), [merged, hiddenCatalog]);
   const hiddenList = React.useMemo(() => merged.filter(isHidden), [merged, hiddenCatalog]);
@@ -189,7 +192,7 @@ function KHDatabaseView({ est, autoAdd }) {
     hidden: hiddenList.length,
   };
 
-  const startAdd = () => { setDraft({ name: "", unit: "", unitPrice: "" }); setAdding(true); };
+  const startAdd = () => { setDraft({ name: "", unit: "", unitPrice: "", category: "" }); setAdding(true); };
   const cancelAdd = () => setAdding(false);
   const submitAdd = (e) => {
     if (e) e.preventDefault();
@@ -197,14 +200,18 @@ function KHDatabaseView({ est, autoAdd }) {
     const unit = draft.unit.trim();
     const price = parseFloat(String(draft.unitPrice).replace(",", "."));
     if (!name || !isFinite(price) || price < 0) return;
-    est.actions.addCatalogItem({ name, unit, unitPrice: price });
+    const category = draft.category || classifyItem(name, unit);
+    est.actions.addCatalogItem({ name, unit, unitPrice: price, category });
     setAdding(false);
   };
 
-  const toggleItemCat = (it) => {
-    if (it._kind !== 'user') return;
-    const newCat = (it.category === 'work') ? 'material' : 'work';
-    est.actions.addCatalogItem({ name: it.name, unit: it.unit, unitPrice: it.unitPrice, category: newCat });
+  // Сменить категорию любой позиции (сохраняется в localStorage-оверрайде).
+  const pickItemCat = (it, cat) => {
+    est.actions.setItemCategory(it.name, it.unit, cat);
+    if (it._kind === 'user') {
+      est.actions.addCatalogItem({ name: it.name, unit: it.unit, unitPrice: it.unitPrice, category: cat });
+    }
+    setCatMenu(null);
   };
 
   const onUploadClick = () => fileRef.current && fileRef.current.click();
@@ -373,6 +380,31 @@ function KHDatabaseView({ est, autoAdd }) {
               style={{ ...inputStyle(), flex: 1 }}
             />
           </div>
+          {(() => {
+            const eff = draft.category || classifyItem(draft.name, draft.unit);
+            const opt = (id, label) => (
+              <button
+                type="button"
+                onClick={() => setDraft({ ...draft, category: id })}
+                style={{
+                  cursor: "pointer", padding: "6px 14px", borderRadius: 8, fontSize: 13,
+                  border: "1px solid " + (eff === id ? "var(--moss, #4f6f52)" : "var(--rule)"),
+                  background: eff === id ? "var(--moss, #4f6f52)" : "transparent",
+                  color: eff === id ? "#fff" : "var(--ink-2)", fontWeight: eff === id ? 600 : 400,
+                }}
+              >{label}</button>
+            );
+            return (
+              <div className="row center" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className="eyebrow" style={{ marginRight: 2 }}>Категория</span>
+                {opt('work', 'Работа')}
+                {opt('material', 'Материал')}
+                {!draft.category && draft.name.trim() && (
+                  <span className="tiny muted">авто — можно изменить</span>
+                )}
+              </div>
+            );
+          })()}
           <div className="row" style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" className="btn btn-sm" onClick={cancelAdd}>Отмена</button>
             <button type="submit" className="kh-btn-primary"
@@ -404,17 +436,38 @@ function KHDatabaseView({ est, autoAdd }) {
                 <td>
                   {(() => {
                     const c = (it.category === 'work') ? 'work' : 'material';
-                    const editable = it._kind === 'user' && !showHidden;
+                    const rowKey = `${it._kind}-${it.name}-${it.unit}-${i}`;
+                    const open = catMenu === rowKey;
+                    if (open) {
+                      const opt = (id, label) => (
+                        <button
+                          key={id}
+                          onClick={() => pickItemCat(it, id)}
+                          style={{
+                            cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
+                            border: "1px solid " + (c === id ? "var(--moss, #4f6f52)" : "var(--rule)"),
+                            background: c === id ? "var(--moss, #4f6f52)" : "var(--paper)",
+                            color: c === id ? "#fff" : "var(--ink-2)", whiteSpace: "nowrap",
+                          }}
+                        >{label}</button>
+                      );
+                      return (
+                        <span className="row" style={{ display: "inline-flex", gap: 4 }} onMouseLeave={() => setCatMenu(null)}>
+                          {opt('work', 'Работа')}
+                          {opt('material', 'Материал')}
+                        </span>
+                      );
+                    }
                     return (
                       <span
-                        onClick={editable ? () => toggleItemCat(it) : undefined}
-                        title={editable ? 'Нажмите, чтобы сменить категорию' : (c === 'work' ? 'Работа' : 'Материал')}
+                        onClick={() => setCatMenu(rowKey)}
+                        title="Нажмите, чтобы сменить категорию"
                         style={{
                           fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
                           border: "1px solid " + (c === 'work' ? "var(--moss, #4f6f52)" : "var(--rule)"),
                           background: c === 'work' ? "var(--moss, #4f6f52)" : "transparent",
                           color: c === 'work' ? "#fff" : "var(--ink-3)",
-                          cursor: editable ? "pointer" : "default", whiteSpace: "nowrap",
+                          cursor: "pointer", whiteSpace: "nowrap",
                         }}
                       >{c === 'work' ? 'Работа' : 'Материал'}</span>
                     );

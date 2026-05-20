@@ -3,8 +3,23 @@
 const USER_CATALOG_KEY = "kh-user-catalog-v1";
 const HIDDEN_CATALOG_KEY = "kh-hidden-catalog-v1";
 const ESTIMATE_KEY = "kh-estimate-v1";
+const CAT_OVERRIDE_KEY = "kh-cat-override-v1";
 
 const hiddenKey = (name, unit) => `${String(name || "").trim().toLowerCase()}|${String(unit || "").trim().toLowerCase()}`;
+
+function loadCatOverride() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAT_OVERRIDE_KEY) || "{}");
+    if (!saved || typeof saved !== "object") return {};
+    const out = {};
+    for (const [k, v] of Object.entries(saved)) if (v === "work" || v === "material") out[k] = v;
+    return out;
+  } catch (_) { return {}; }
+}
+
+function saveCatOverride(map) {
+  try { localStorage.setItem(CAT_OVERRIDE_KEY, JSON.stringify(map)); } catch (_) {}
+}
 
 function loadEstimate() {
   try {
@@ -149,7 +164,17 @@ function useEstimate() {
   const [userCatalog, setUserCatalog] = React.useState(loadUserCatalog);
   const [vendorCatalog, setVendorCatalog] = React.useState([]);
   const [hiddenCatalog, setHiddenCatalog] = React.useState(loadHiddenCatalog);
+  const [catOverride, setCatOverride] = React.useState(loadCatOverride);
   const [catalogReady, setCatalogReady] = React.useState(false);
+
+  const setItemCategory = React.useCallback((name, unit, category) => {
+    if (category !== 'work' && category !== 'material') return;
+    setCatOverride(prev => {
+      const next = { ...prev, [hiddenKey(name, unit)]: category };
+      saveCatOverride(next);
+      return next;
+    });
+  }, []);
 
   React.useEffect(() => {
     if (!window.SB) return;
@@ -965,11 +990,11 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
-      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile,
+      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile, setItemCategory,
     },
   };
 }
