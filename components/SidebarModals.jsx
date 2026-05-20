@@ -651,7 +651,6 @@ function KHContractorsView() {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
   const [draft, setDraft] = React.useState({ name: '', email: '', phone: '', type: 'Производитель', org: '', website: '' });
-  const [, force] = React.useReducer(x => x + 1, 0);
 
   const persist = (next) => { setList(next); khSaveContractors(next); };
 
@@ -717,19 +716,6 @@ function KHContractorsView() {
     }).catch(e => console.warn('cloud load contractors:', e));
     return () => { cancelled = true; };
   }, []);
-
-  const attachFile = (id) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = (e) => {
-      const f = e.target.files && e.target.files[0];
-      if (!f) return;
-      window.KH_CONTRACTOR_FILES.set(id, f);
-      persist(list.map(c => c.id === id ? { ...c, fileName: f.name, fileSize: f.size, fileTime: Date.now() } : c));
-      force();
-    };
-    input.click();
-  };
 
   const detachFile = (id) => {
     window.KH_CONTRACTOR_FILES.delete(id);
@@ -870,7 +856,6 @@ function KHContractorsView() {
                     : 'Файл не прикреплён'}
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                <button className="btn btn-sm" onClick={() => attachFile(c.id)}>{hasFile ? 'Заменить файл' : 'Прикрепить файл'}</button>
                 {hasFile && <button className="btn btn-sm" onClick={() => detachFile(c.id)}>Убрать файл</button>}
                 <button className="btn btn-sm" onClick={() => {
                   const cur = c.slug ? c : khEnsureSlug(c);
