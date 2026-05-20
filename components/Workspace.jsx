@@ -196,7 +196,32 @@ function MobileNav({ active, onPick }) {
   );
 }
 
-function HeroBlock({ est, meta, updateMeta }) {
+function HeroBlock({ est, meta, updateMeta, onOpenDatabase }) {
+  const dbFileRef = React.useRef(null);
+  const [dbUpload, setDbUpload] = React.useState(null);
+
+  const onDbFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    let added = 0, skipped = 0;
+    const errors = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setDbUpload({ kind: "busy", text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
+      try {
+        const r = await est.actions.uploadCatalogFile(f);
+        added += r.added; skipped += r.skipped;
+      } catch (err) {
+        errors.push(`${f.name}: ${err.message || err}`);
+      }
+    }
+    setDbUpload(errors.length
+      ? { kind: "error", text: `Ошибки: ${errors.join('; ')}` }
+      : { kind: "ok", text: `Файлов: ${files.length}. Добавлено в базу ${added}, пропущено ${skipped}` });
+    setTimeout(() => setDbUpload(null), 6000);
+  };
+
   return (
     <div className="frame kh-hero" style={{ position: "relative", padding: "30px 40px 28px", borderTop: "1px solid var(--rule-2)", borderBottom: "1px solid var(--rule-2)" }}>
       <div className="frame-bl" /><div className="frame-br" />
@@ -219,6 +244,35 @@ function HeroBlock({ est, meta, updateMeta }) {
           <div>РЕВИЗИЯ <b style={{ color: "var(--ink)" }}><Editable value={meta.revision} onChange={(v) => updateMeta("revision", v)} /></b></div>
           <div>ДАТА <b style={{ color: "var(--ink)" }}><Editable value={meta.date} onChange={(v) => updateMeta("date", v)} /></b></div>
           <div>СМЕТЧИК <b style={{ color: "var(--ink)" }}><Editable value={meta.estimator} onChange={(v) => updateMeta("estimator", v)} /></b></div>
+        </div>
+      </div>
+
+      <div className="row between center kh-hero__db" style={{
+        marginTop: 24, paddingTop: 20, borderTop: "1px dashed var(--rule)",
+        gap: 16, flexWrap: "wrap",
+      }}>
+        <div className="col gap-2" style={{ minWidth: 0 }}>
+          <div className="eyebrow">База данных</div>
+          <div className="mono tiny muted">Каталог позиций — загрузка и добавление</div>
+        </div>
+        <div className="row center kh-hero__db-actions" style={{ gap: 10, flexWrap: "wrap" }}>
+          {dbUpload && (
+            <span className="tiny" style={{ color: dbUpload.kind === "error" ? "var(--rust)" : "var(--ink-3)", maxWidth: 320 }}>
+              {dbUpload.text}
+            </span>
+          )}
+          <input
+            ref={dbFileRef} type="file" multiple
+            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            style={{ display: "none" }}
+            onChange={onDbFiles}
+          />
+          <button className="kh-btn-primary" onClick={() => dbFileRef.current && dbFileRef.current.click()}>
+            ↑ Загрузить XLSX/CSV (можно несколько)
+          </button>
+          <button className="btn btn-sm" onClick={onOpenDatabase}>
+            + Добавить позицию
+          </button>
         </div>
       </div>
     </div>
@@ -958,7 +1012,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
           onClose={() => setNavOpen(false)}
         />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
-          <HeroBlock est={est} meta={meta} updateMeta={updateMeta} />
+          <HeroBlock est={est} meta={meta} updateMeta={updateMeta} onOpenDatabase={() => { setNavActive("database"); setKhModalTab("database"); }} />
           <div style={{ position: "relative" }}>
             <Toolbar tab={tab} onTab={setTab} query={est.state.query} onQuery={est.actions.setQuery} />
             <SearchResults
