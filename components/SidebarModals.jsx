@@ -1030,7 +1030,32 @@ function KHNormsView() {
 // ---------- Шаблоны (редактируемые) ----------
 const KH_TPL_KEY = 'kh-templates-v1';
 const KH_TPL_SEEDED_KEY = 'kh-templates-seeded-v1';
-const khLoadTpls = () => { try { return JSON.parse(localStorage.getItem(KH_TPL_KEY) || '[]'); } catch { return []; } };
+let __khTpliSeq = 0;
+const khUniqueItemId = () => `tpli-${Date.now().toString(36)}-${(__khTpliSeq++).toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+// Гарантируем уникальность id позиций: при дублях смена категории/удаление
+// затрагивали бы не ту строку (или только первую).
+const khNormalizeTpls = (list) => {
+  const seen = new Set();
+  let changed = false;
+  const out = (Array.isArray(list) ? list : []).map(t => {
+    const items = (t.items || []).map(it => {
+      let id = it && it.id;
+      if (!id || seen.has(id)) { id = khUniqueItemId(); changed = true; }
+      seen.add(id);
+      return id === (it && it.id) ? it : { ...it, id };
+    });
+    return { ...t, items };
+  });
+  return { list: out, changed };
+};
+const khLoadTpls = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KH_TPL_KEY) || '[]');
+    const { list, changed } = khNormalizeTpls(raw);
+    if (changed) { try { localStorage.setItem(KH_TPL_KEY, JSON.stringify(list)); } catch {} }
+    return list;
+  } catch { return []; }
+};
 const khSaveTpls = (l) => { try { localStorage.setItem(KH_TPL_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
 
 const KH_TPL_SEED = [{
@@ -1326,7 +1351,7 @@ function KHTemplatesView({ est, onClose }) {
       try {
         const parsed = await khParseTemplateFile(tplDraft.file);
         extraItems = parsed.map((p, j) => ({
-          id: 'tpli-' + Date.now() + '-' + j, ...p,
+          id: khUniqueItemId(), ...p,
           category: p.category || (typeof window.classifyItem === 'function' ? window.classifyItem(p.name, p.unit) : 'material'),
           vendor: p.vendor || '',
         }));
@@ -1368,7 +1393,7 @@ function KHTemplatesView({ est, onClose }) {
     const unit = itemDraft.unit.trim();
     const unitPrice = Number(String(itemDraft.unitPrice).replace(',', '.')) || 0;
     const item = {
-      id: 'tpli-' + Date.now(),
+      id: khUniqueItemId(),
       name, unit,
       qty: Number(itemDraft.qty) || 0,
       unitPrice,
@@ -1406,7 +1431,7 @@ function KHTemplatesView({ est, onClose }) {
 
   const addItemFromCatalog = (tplId, catItem) => {
     const item = {
-      id: 'tpli-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      id: khUniqueItemId(),
       name: catItem.name,
       unit: catItem.unit || '',
       qty: 1,
@@ -1509,7 +1534,7 @@ function KHTemplatesView({ est, onClose }) {
       try {
         const parsed = await khParseTemplateFile(f);
         const newItems = parsed.map((p, j) => ({
-          id: 'tpli-' + Date.now() + '-' + i + '-' + j, ...p,
+          id: khUniqueItemId(), ...p,
           category: p.category || (typeof window.classifyItem === 'function' ? window.classifyItem(p.name, p.unit) : 'material'),
           vendor: p.vendor || '',
         }));
