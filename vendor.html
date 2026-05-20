@@ -94,6 +94,7 @@ async function loadPrices() {
 async function upsert(items, sourceFile) {
   const payload = items.map(it => ({
     vendor_slug: token,
+    vendor_name: (vendor && vendor.name) || null,
     name: it.name,
     unit: it.unit || '',
     qty: Number(it.qty) > 0 ? Number(it.qty) : 1,
@@ -106,13 +107,21 @@ async function upsert(items, sourceFile) {
     headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
     body: JSON.stringify(body),
   });
-  let res;
-  try {
-    res = await post(payload);
-  } catch (e) {
-    // Старая схема без колонки qty — повторяем без неё.
-    if (/\bqty\b/.test(String(e && e.message))) res = await post(payload.map(({ qty, ...rest }) => rest));
-    else throw e;
+  // Старая схема может не иметь колонок qty/vendor_name — отбрасываем те,
+  // на которые ругается PostgREST, и повторяем (до 3 раз).
+  let p = payload, res;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { res = await post(p); break; }
+    catch (e) {
+      const msg = String(e && e.message || '');
+      const m = msg.match(/'([a-z_]+)' column/i) || msg.match(/column "?([a-z_]+)"?/i) || (/\bqty\b/.test(msg) ? [null, 'qty'] : null);
+      const col = m && m[1];
+      if (col && p.length && Object.prototype.hasOwnProperty.call(p[0], col)) {
+        p = p.map(({ [col]: _drop, ...rest }) => rest);
+        continue;
+      }
+      throw e;
+    }
   }
   return Array.isArray(res) ? res.length : 0;
 }

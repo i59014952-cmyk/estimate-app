@@ -109,7 +109,7 @@ function KHDatabaseView({ est, autoAdd }) {
     if (!window.SB) return;
     let cancelled = false;
     Promise.all([
-      window.SB.selectAll('kh_vendor_prices', 'order=updated_at.desc&select=id,vendor_slug,name,unit,unit_price,source_file,updated_at'),
+      window.SB.selectAll('kh_vendor_prices', 'order=updated_at.desc&select=*'),
       window.SB.selectAll('kh_contractors', 'select=slug,name'),
     ]).then(([rows, vendors]) => {
       if (cancelled) return;
@@ -161,7 +161,7 @@ function KHDatabaseView({ est, autoAdd }) {
       _kind: "vendor",
       _id: it.id,
       _vendorSlug: it.vendor_slug,
-      _vendorName: vendorMap[it.vendor_slug] || '',
+      _vendorName: it.vendor_name || vendorMap[it.vendor_slug] || '',
       _sourceFile: it.source_file || '',
       _updated: it.updated_at,
     })),
@@ -175,11 +175,32 @@ function KHDatabaseView({ est, autoAdd }) {
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     let out = showHidden ? hiddenList : activeMerged;
-    if (!showHidden && filter !== "all") out = out.filter(it => it._kind === filter);
+    if (!showHidden && filter !== "all") {
+      if (filter.indexOf("vendor:") === 0) {
+        const slug = filter.slice(7);
+        out = out.filter(it => it._kind === "vendor" && (it._vendorSlug || "") === slug);
+      } else {
+        out = out.filter(it => it._kind === filter);
+      }
+    }
     if (!showHidden && catFilter !== "all") out = out.filter(it => (it.category || 'material') === catFilter);
     if (q) out = out.filter(it => (it.name || "").toLowerCase().includes(q));
     return out.slice(0, 500);
   }, [activeMerged, hiddenList, query, filter, catFilter, showHidden]);
+
+  // По вкладке на каждого подрядчика, загрузившего КП.
+  const vendorGroups = React.useMemo(() => {
+    const m = new Map();
+    for (const it of activeMerged) {
+      if (it._kind !== "vendor") continue;
+      const slug = it._vendorSlug || "";
+      const cur = m.get(slug) || { slug, name: it._vendorName || "", count: 0 };
+      cur.count++;
+      if (!cur.name && it._vendorName) cur.name = it._vendorName;
+      m.set(slug, cur);
+    }
+    return Array.from(m.values()).sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
+  }, [activeMerged]);
 
   const totals = {
     all: activeMerged.length,
@@ -298,7 +319,9 @@ function KHDatabaseView({ est, autoAdd }) {
         <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <FilterPill id="all" label="Все" count={totals.all} />
           <FilterPill id="user" label="Моё" count={totals.user} />
-          <FilterPill id="vendor" label="КП подрядчиков" count={totals.vendor} />
+          {vendorGroups.map(g => (
+            <FilterPill key={g.slug || g.name} id={`vendor:${g.slug}`} label={g.name || `Подрядчик ${(g.slug || "").slice(0, 4)}`} count={g.count} />
+          ))}
           <FilterPill id="local" label="JSON" count={totals.local} />
           <FilterPill id="ddc" label="DDC" count={totals.ddc} />
           {totals.hidden > 0 && (
