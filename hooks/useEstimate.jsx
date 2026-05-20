@@ -20,7 +20,7 @@ function loadEstimate() {
       qty: Number(x.qty) || 0,
       notFound: !!x.notFound,
       source: String(x.source || "local"),
-      category: x.category === 'work' ? 'work' : 'material',
+      category: x.category === 'work' ? 'work' : (x.category === 'material' ? 'material' : classifyItem(x.name, x.unit)),
       url: String(x.url || ""),
       expanded: false,
       candidates: null,
