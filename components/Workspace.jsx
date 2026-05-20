@@ -2,23 +2,6 @@
 
 const { useState, useMemo, useEffect } = React;
 
-function StatCell({ k, v, u, d, dir, live }) {
-  return (
-    <div className="col" style={{ gap: 6, minWidth: 0 }}>
-      <div className="eyebrow">{live && <span className="dot" />}{k}</div>
-      <div className="row" style={{ alignItems: "baseline", gap: 6 }}>
-        <span className="serif" style={{ fontSize: 38, lineHeight: .9, letterSpacing: "-0.02em", whiteSpace: "nowrap", fontVariantNumeric: "lining-nums tabular-nums", fontFeatureSettings: '"lnum" 1, "tnum" 1' }}>{v}</span>
-        <span className="muted tiny" style={{ paddingBottom: 3 }}>{u}</span>
-      </div>
-      <div className="row center" style={{ gap: 4 }}>
-        {dir === "up" && <span style={{ color: "var(--good)", fontSize: 11 }}>↗</span>}
-        {dir === "down" && <span style={{ color: "var(--rust)", fontSize: 11 }}>↘</span>}
-        <span className="tiny muted">{d}</span>
-      </div>
-    </div>
-  );
-}
-
 function TopBar({ onTheme, theme, onMenu }) {
   return (
     <div className="row center between kh-topbar" style={{
@@ -214,18 +197,6 @@ function MobileNav({ active, onPick }) {
 }
 
 function HeroBlock({ est, meta, updateMeta }) {
-  const stats = React.useMemo(() => {
-    const localCount = est.state.catalog.length;
-    const ddcCount = est.state.ddcCatalog.length;
-    const vendorCount = (est.state.vendorCatalog || []).length;
-    const total = localCount + ddcCount + vendorCount;
-    return [
-      { k: "Каталог", v: fmt(total), u: "позиций", d: est.state.catalogReady ? "Загружено" : "Загрузка…", live: !est.state.catalogReady, dir: "up" },
-      { k: "Своя база", v: fmt(localCount), u: "материалов", d: "JSON" },
-      { k: "DDC цены", v: fmt(ddcCount), u: "записей", d: "Синх. активна", live: true },
-    ];
-  }, [est.state.catalog.length, est.state.ddcCatalog.length, (est.state.vendorCatalog || []).length, est.state.catalogReady]);
-
   return (
     <div className="frame kh-hero" style={{ position: "relative", padding: "30px 40px 28px", borderTop: "1px solid var(--rule-2)", borderBottom: "1px solid var(--rule-2)" }}>
       <div className="frame-bl" /><div className="frame-br" />
@@ -249,14 +220,6 @@ function HeroBlock({ est, meta, updateMeta }) {
           <div>ДАТА <b style={{ color: "var(--ink)" }}><Editable value={meta.date} onChange={(v) => updateMeta("date", v)} /></b></div>
           <div>СМЕТЧИК <b style={{ color: "var(--ink)" }}><Editable value={meta.estimator} onChange={(v) => updateMeta("estimator", v)} /></b></div>
         </div>
-      </div>
-
-      <div className="row kh-hero__stats" style={{ marginTop: 28, gap: 0 }}>
-        {stats.map((s, i) => (
-          <div key={i} className="row kh-hero__stat" style={{ flex: 1, paddingRight: 24, borderRight: i < stats.length - 1 ? "1px dashed var(--rule)" : 0, paddingLeft: i ? 24 : 0 }}>
-            <StatCell {...s} />
-          </div>
-        ))}
       </div>
     </div>
   );
