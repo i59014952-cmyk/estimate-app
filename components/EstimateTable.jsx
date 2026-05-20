@@ -1,51 +1,35 @@
 // EstimateTable.jsx — list of estimate rows with qty edit, picker, delete.
 
-const EST_GROUPS = [
-  { key: 'work', label: 'Работы' },
-  { key: 'material', label: 'Материалы' },
-];
-
-function EstimateTable({ rows, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
-  const visibleRows = rows.filter(r => !isHiddenCategory(r.name));
-  let n = 0;
-  const present = EST_GROUPS.filter(g => visibleRows.some(r => (r.category || 'material') === g.key));
-  // Если категория одна — заголовки групп не показываем (плоский список).
-  const showHeaders = present.length > 1;
+function EstimateTable({ rows, catFilter = 'all', onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+  let visibleRows = rows.filter(r => !isHiddenCategory(r.name));
+  if (catFilter === 'work' || catFilter === 'material') {
+    visibleRows = visibleRows.filter(r => (r.category || 'material') === catFilter);
+  }
+  // Позиции без цены всегда сверху (стабильно, в т.ч. после «Обновить цены»).
+  const noPrice = (r) => r.notFound || !(r.unitPrice > 0);
+  const sorted = visibleRows
+    .map((r, i) => [r, i])
+    .sort((a, b) => {
+      const ap = noPrice(a[0]) ? 0 : 1;
+      const bp = noPrice(b[0]) ? 0 : 1;
+      return ap !== bp ? ap - bp : a[1] - b[1];
+    })
+    .map(p => p[0]);
   return (
     <div className="col">
-      {present.map(g => {
-        const gr = visibleRows.filter(r => (r.category || 'material') === g.key);
-        const sub = gr.reduce((s, r) => s + (r.notFound ? 0 : r.qty * r.unitPrice), 0);
-        return (
-          <div key={g.key}>
-            {showHeaders && (
-              <div className="row center between" style={{
-                padding: "8px 32px", background: "var(--paper-2)",
-                borderBottom: "1px solid var(--rule)", borderTop: "1px solid var(--rule)",
-              }}>
-                <span className="eyebrow">{g.label} · {gr.length}</span>
-                <span className="mono tiny serif" style={{ color: "var(--ink-2)" }}>{formatMoney(sub)} ₽</span>
-              </div>
-            )}
-            {gr.map(r => {
-              n += 1;
-              return (
-                <EstimateRow
-                  key={r.id}
-                  row={r}
-                  index={n}
-                  onUpdateQty={onUpdateQty}
-                  onUpdateRow={onUpdateRow}
-                  onRemove={onRemove}
-                  onTogglePicker={onTogglePicker}
-                  onApplyCandidate={onApplyCandidate}
-                  onApplyManual={onApplyManual}
-                />
-              );
-            })}
-          </div>
-        );
-      })}
+      {sorted.map((r, i) => (
+        <EstimateRow
+          key={r.id}
+          row={r}
+          index={i + 1}
+          onUpdateQty={onUpdateQty}
+          onUpdateRow={onUpdateRow}
+          onRemove={onRemove}
+          onTogglePicker={onTogglePicker}
+          onApplyCandidate={onApplyCandidate}
+          onApplyManual={onApplyManual}
+        />
+      ))}
     </div>
   );
 }
