@@ -1833,6 +1833,7 @@ function KHTemplatesView({ est, onClose }) {
 const KH_VIEWS = {
   estimates:   { title: 'Сметы',       sub: 'Список смет по объектам', comp: KHEstimatesView },
   objects:     { title: 'Объекты',     sub: 'Активные объекты',        comp: KHObjectsView },
+  stores:      { title: 'Магазины',    sub: 'Источники цен — добавьте сайт, парсер подключится автоматически', comp: (props) => window.KHStoresView ? React.createElement(window.KHStoresView, props) : null },
   materials:   { title: 'Материалы',   sub: 'Справочник материалов',   comp: KHMaterialsView },
   database:    { title: 'База данных', sub: 'Каталог позиций — поиск, добавление, загрузка', comp: (props) => window.KHDatabaseView ? React.createElement(window.KHDatabaseView, props) : null },
   contractors: { title: 'Подрядчики',  sub: 'Поставщики и бригады',    comp: KHContractorsView },

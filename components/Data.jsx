@@ -93,6 +93,7 @@ const OBJECTS = [
 
 const NAV = [
   { id: "objects", label: "Объекты", icon: "house", count: 18 },
+  { id: "stores", label: "Магазины", icon: "shop" },
   { id: "database", label: "База данных", icon: "layers" },
   { id: "contractors", label: "Подрядчики", icon: "users", count: 47 },
   { id: "calendar", label: "Календарь", icon: "cal" },

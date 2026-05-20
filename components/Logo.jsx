@@ -71,6 +71,9 @@ function Icon({ name, size=16 }) {
     case "bell": return <svg {...props}><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>;
     case "spark": return <svg {...props}><path d="M12 2l2.5 7L22 11l-7.5 2L12 20l-2.5-7L2 11l7.5-2z"/></svg>;
     case "menu": return <svg {...props}><path d="M3 6h18M3 12h18M3 18h18"/></svg>;
+    case "shop": return <svg {...props}><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M9 9v3a3 3 0 0 1-6 0M15 9v3a3 3 0 0 1-6 0M21 9v3a3 3 0 0 1-6 0"/></svg>;
+    case "link": return <svg {...props}><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>;
+    case "trash": return <svg {...props}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/></svg>;
     default: return null;
   }
 }

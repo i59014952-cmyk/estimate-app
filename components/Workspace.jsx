@@ -72,7 +72,8 @@ function khReadDynamicCounts() {
   const activeObjects = objects.filter(o => (o.status || 'active') === 'active').length;
   const contractors = tryParse('kh-contractors-v1').length;
   const database = Number(window.KH_DB_COUNT || 0);
-  return { objects: activeObjects, contractors, database };
+  const stores = tryParse('kh-stores-v1').length;
+  return { objects: activeObjects, contractors, database, stores };
 }
 
 function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {

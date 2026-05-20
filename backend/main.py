@@ -1081,3 +1081,261 @@ async def debug_home():
         return {"meta": meta, "inputs": inputs, "forms": forms, "main_search_html": main_search_html}
     finally:
         await ctx.close()
+
+
+# ===========================================================================
+# Generic heuristic store auto-parser.
+# Given an arbitrary store URL, try to detect product prices without a
+# site-specific scraper. Strategies are tried from most reliable (structured
+# data) to least (text regex). The frontend "Магазины" tab uses this to attach
+# a parser to a user-supplied site.
+# ===========================================================================
+
+import json as _json
+from urllib.parse import urlparse, urljoin
+
+
+class StoreDetectSample(BaseModel):
+    name: Optional[str] = None
+    price: Optional[float] = None
+
+
+class StoreDetectResponse(BaseModel):
+    url: str
+    store_name: str
+    favicon: Optional[str] = None
+    method: str          # jsonld | microdata | meta | text | none
+    currency: str = "RUB"
+    found: int = 0
+    confidence: str      # high | medium | low | none
+    samples: list[StoreDetectSample] = []
+    note: Optional[str] = None
+
+
+_GENERIC_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+_CURRENCY_HINTS = {"RUB": ("₽", "руб", "rub"), "USD": ("$", "usd"), "EUR": ("€", "eur")}
+
+
+async def _generic_fetch(url: str) -> str:
+    async with httpx.AsyncClient(
+        headers={
+            "User-Agent": _GENERIC_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+        },
+        follow_redirects=True,
+        timeout=25.0,
+    ) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+        return r.text
+
+
+def _iter_jsonld_objects(data):
+    """Walk a parsed JSON-LD blob yielding dict nodes (handles @graph and lists)."""
+    if isinstance(data, list):
+        for x in data:
+            yield from _iter_jsonld_objects(x)
+    elif isinstance(data, dict):
+        yield data
+        for key in ("@graph", "itemListElement"):
+            if key in data:
+                yield from _iter_jsonld_objects(data[key])
+
+
+def _offer_price(offer) -> Optional[float]:
+    if isinstance(offer, list):
+        for o in offer:
+            p = _offer_price(o)
+            if p is not None:
+                return p
+        return None
+    if isinstance(offer, dict):
+        for k in ("price", "lowPrice", "highPrice"):
+            if offer.get(k) is not None:
+                v = _parse_price(str(offer[k]))
+                if v and v > 0:
+                    return v
+    return None
+
+
+def _detect_jsonld(soup) -> tuple[list[StoreDetectSample], Optional[str]]:
+    samples: list[StoreDetectSample] = []
+    currency = None
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = tag.string or tag.get_text() or ""
+        if not raw.strip():
+            continue
+        try:
+            data = _json.loads(raw)
+        except Exception:
+            continue
+        for node in _iter_jsonld_objects(data):
+            t = node.get("@type")
+            types = t if isinstance(t, list) else [t]
+            if "Product" not in types and "Offer" not in types and "AggregateOffer" not in types:
+                continue
+            price = _offer_price(node.get("offers")) if node.get("offers") is not None else _offer_price(node)
+            if price is None:
+                continue
+            cur = None
+            offers = node.get("offers")
+            if isinstance(offers, dict):
+                cur = offers.get("priceCurrency")
+            currency = currency or cur or node.get("priceCurrency")
+            samples.append(StoreDetectSample(name=(node.get("name") or "")[:160] or None, price=price))
+    return samples, currency
+
+
+def _detect_microdata(soup) -> list[StoreDetectSample]:
+    samples: list[StoreDetectSample] = []
+    for el in soup.select('[itemprop="price"], [itemprop="lowPrice"]'):
+        raw = el.get("content") or el.get_text(" ", strip=True)
+        price = _parse_price(raw)
+        if price is None or price <= 0:
+            continue
+        name = None
+        scope = el.find_parent(attrs={"itemtype": re.compile("Product", re.I)})
+        if scope:
+            n = scope.select_one('[itemprop="name"]')
+            if n:
+                name = (n.get("content") or n.get_text(" ", strip=True))[:160]
+        samples.append(StoreDetectSample(name=name, price=price))
+    return samples
+
+
+def _detect_meta(soup) -> tuple[list[StoreDetectSample], Optional[str]]:
+    samples: list[StoreDetectSample] = []
+    currency = None
+    for prop in ("product:price:amount", "og:price:amount"):
+        el = soup.find("meta", attrs={"property": prop}) or soup.find("meta", attrs={"name": prop})
+        if el and el.get("content"):
+            price = _parse_price(el["content"])
+            if price and price > 0:
+                title = soup.find("meta", attrs={"property": "og:title"})
+                samples.append(StoreDetectSample(
+                    name=(title["content"][:160] if title and title.get("content") else None),
+                    price=price,
+                ))
+    for prop in ("product:price:currency", "og:price:currency"):
+        el = soup.find("meta", attrs={"property": prop}) or soup.find("meta", attrs={"name": prop})
+        if el and el.get("content"):
+            currency = el["content"].strip().upper()
+            break
+    return samples, currency
+
+
+def _detect_text(soup) -> list[StoreDetectSample]:
+    text = soup.get_text(" ", strip=True)
+    samples: list[StoreDetectSample] = []
+    for m in re.finditer(r"(\d[\d\s\u00a0\u2009]{1,9}(?:[.,]\d{1,2})?)\s*(?:₽|руб)", text):
+        price = _parse_price(m.group(1))
+        if price and price >= 1:
+            samples.append(StoreDetectSample(name=None, price=price))
+        if len(samples) >= 12:
+            break
+    return samples
+
+
+def _guess_currency(soup, default="RUB") -> str:
+    blob = soup.get_text(" ", strip=True)[:5000].lower()
+    for code, hints in _CURRENCY_HINTS.items():
+        if any(h in blob for h in hints):
+            return code
+    return default
+
+
+def _store_name(soup, host: str) -> str:
+    for getter in (
+        lambda: (soup.find("meta", attrs={"property": "og:site_name"}) or {}).get("content"),
+        lambda: (soup.find("meta", attrs={"name": "application-name"}) or {}).get("content"),
+        lambda: soup.title.get_text(strip=True) if soup.title else None,
+    ):
+        try:
+            v = getter()
+        except Exception:
+            v = None
+        if v and v.strip():
+            return v.strip()[:80]
+    return host
+
+
+def _favicon(soup, base_url: str, host: str) -> str:
+    for sel in ('link[rel="icon"]', 'link[rel="shortcut icon"]', 'link[rel="apple-touch-icon"]'):
+        el = soup.select_one(sel)
+        if el and el.get("href"):
+            return urljoin(base_url, el["href"])
+    return f"https://www.google.com/s2/favicons?domain={host}&sz=64"
+
+
+@app.get("/auto/detect", response_model=StoreDetectResponse)
+async def auto_detect(url: str = Query(..., min_length=4, max_length=2000)):
+    """Heuristically detect prices on an arbitrary store page."""
+    if not re.match(r"^https?://", url, re.I):
+        url = "https://" + url
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        raise HTTPException(400, "invalid url")
+    host = parsed.netloc
+    try:
+        html = await _generic_fetch(url)
+    except Exception as e:
+        raise HTTPException(502, f"fetch failed: {e!s}"[:200])
+
+    soup = BeautifulSoup(html, "lxml")
+    name = _store_name(soup, host)
+    favicon = _favicon(soup, url, host)
+
+    # Strategy ladder, most reliable first.
+    samples, cur = _detect_jsonld(soup)
+    method, confidence = "jsonld", "high"
+    if not samples:
+        samples = _detect_microdata(soup)
+        method, confidence, cur = "microdata", "high", cur
+    if not samples:
+        samples, cur = _detect_meta(soup)
+        method, confidence = "meta", "medium"
+    if not samples:
+        samples = _detect_text(soup)
+        method, confidence = "text", "low"
+    if not samples:
+        method, confidence = "none", "none"
+
+    currency = (cur or _guess_currency(soup)).upper() if (cur or True) else "RUB"
+    if currency not in ("RUB", "USD", "EUR"):
+        currency = "RUB"
+
+    note = {
+        "jsonld": "Цены распознаны из структурированных данных schema.org — надёжно.",
+        "microdata": "Цены распознаны из микроразметки itemprop — надёжно.",
+        "meta": "Цена взята из Open Graph мета-тегов страницы.",
+        "text": "Цены найдены эвристикой по тексту — возможны ложные срабатывания (старые цены, цена за упаковку).",
+        "none": "Не удалось распознать цены автоматически. Возможна защита от ботов или загрузка цен скриптом.",
+    }[method]
+
+    # De-dup samples, keep first 8.
+    seen: set = set()
+    uniq: list[StoreDetectSample] = []
+    for s in samples:
+        key = (s.name, s.price)
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(s)
+        if len(uniq) >= 8:
+            break
+
+    return StoreDetectResponse(
+        url=url,
+        store_name=name,
+        favicon=favicon,
+        method=method,
+        currency=currency,
+        found=len(uniq),
+        confidence=confidence,
+        samples=uniq,
+        note=note,
+    )
