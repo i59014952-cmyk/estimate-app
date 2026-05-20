@@ -61,6 +61,7 @@ function KHStoresView() {
         favicon: r.favicon || null, method: r.method || 'none', currency: r.currency || 'RUB',
         found: r.found || 0, confidence: r.confidence || 'none', note: r.note || '',
         samples: Array.isArray(r.samples) ? r.samples : [],
+        active: !!r.active, searchUrl: r.search_url || '',
         addedAt: r.added_at ? Date.parse(r.added_at) : Date.now(),
         lastCheck: r.last_check ? Date.parse(r.last_check) : null,
       }));
@@ -76,7 +77,8 @@ function KHStoresView() {
       id: store.id, url: store.url, name: store.name, host: store.host,
       favicon: store.favicon, method: store.method, currency: store.currency,
       found: store.found, confidence: store.confidence, note: store.note,
-      samples: store.samples, added_at: new Date(store.addedAt).toISOString(),
+      samples: store.samples, active: !!store.active, search_url: store.searchUrl || null,
+      added_at: new Date(store.addedAt).toISOString(),
       last_check: store.lastCheck ? new Date(store.lastCheck).toISOString() : null,
     }, 'id').catch(() => {});
   };
@@ -128,6 +130,8 @@ function KHStoresView() {
     try {
       const store = await detect(raw, null);
       store.addedAt = Date.now();
+      store.active = store.found > 0;
+      store.searchUrl = '';
       const next = [store, ...list];
       persist(next);
       cloudUpsert(store);
@@ -146,6 +150,8 @@ function KHStoresView() {
     try {
       const fresh = await detect(store.url, store.id);
       fresh.addedAt = store.addedAt;
+      fresh.active = store.active;
+      fresh.searchUrl = store.searchUrl || '';
       const next = list.map(s => s.id === store.id ? fresh : s);
       persist(next);
       cloudUpsert(fresh);
@@ -160,6 +166,22 @@ function KHStoresView() {
     if (!confirm(`Удалить магазин «${store.name}»?`)) return;
     persist(list.filter(s => s.id !== store.id));
     if (window.SB) window.SB.remove('kh_stores', `id=eq.${encodeURIComponent(store.id)}`).catch(() => {});
+  };
+
+  const setActive = (store, val) => {
+    const next = list.map(s => s.id === store.id ? { ...s, active: val } : s);
+    persist(next);
+    const u = next.find(s => s.id === store.id);
+    if (u) cloudUpsert(u);
+  };
+
+  const setSearchUrl = (store, val) => {
+    persist(list.map(s => s.id === store.id ? { ...s, searchUrl: val } : s));
+  };
+
+  const commitSearchUrl = (store) => {
+    const u = list.find(s => s.id === store.id);
+    if (u) cloudUpsert(u);
   };
 
   const money = (n, cur) => {
@@ -241,6 +263,20 @@ function KHStoresView() {
                     </span>
                   ))}
                 </div>
+              )}
+
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, cursor: 'pointer', color: 'var(--ink-2)' }}>
+                <input type="checkbox" checked={!!s.active} onChange={e => setActive(s, e.target.checked)}
+                  style={{ width: 15, height: 15, accentColor: 'var(--moss, #4f6f52)' }} />
+                Искать в этом магазине при обновлении цен в смете
+              </label>
+
+              {s.active && (
+                <input placeholder="URL поиска с {q} — если авто-поиск не находит, напр. https://сайт/search/?q={q}"
+                  value={s.searchUrl || ''}
+                  onChange={e => setSearchUrl(s, e.target.value)}
+                  onBlur={() => commitSearchUrl(s)}
+                  style={{ ...khStoreInputStyle(), fontSize: 12 }} />
               )}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>

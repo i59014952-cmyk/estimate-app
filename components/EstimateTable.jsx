@@ -24,7 +24,7 @@ function EstimateTable({ rows, onUpdateQty, onUpdateRow, onRemove, onTogglePicke
 function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
   const total = row.notFound ? null : row.qty * row.unitPrice;
   const hasAlternatives = row.candidates && row.candidates.length > 1;
-  const sourceLabel = SOURCE_LABELS[row.source] || '—';
+  const sourceLabel = row.sourceLabel || SOURCE_LABELS[row.source] || '—';
 
   const updateName = (v) => onUpdateRow && onUpdateRow(row.id, { name: v });
   const updateUnit = (v) => onUpdateRow && onUpdateRow(row.id, { unit: v });
@@ -143,7 +143,8 @@ function Picker({ row, onApplyCandidate, onApplyManual }) {
     list = (
       <div className="col gap-2" style={{ padding: 12 }}>
         {row.candidates.map((c, i) => {
-          const src = KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit';
+          const src = c.source === 'store' ? 'store' : (KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit');
+          const srcLabel = c.sourceLabel || SOURCE_LABELS[src];
           return (
             <button
               key={i}
@@ -158,7 +159,7 @@ function Picker({ row, onApplyCandidate, onApplyManual }) {
                 {c.name || ''}
               </span>
               <span className="mono tiny" style={{ padding: "2px 6px", border: "1px solid var(--rule)", borderRadius: 99 }}>
-                {SOURCE_LABELS[src]}
+                {srcLabel}
               </span>
               <span className="mono" style={{ width: 90, textAlign: "right", fontSize: 12 }}>
                 {c.price ? formatMoney(c.price) + " ₽" : "—"}
