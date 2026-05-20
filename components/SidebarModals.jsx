@@ -1422,9 +1422,9 @@ function KHTemplatesView({ est, onClose }) {
       : t));
   };
 
-  const setItemCat = (tplId, itemId, cat) => {
+  const setItemCatAt = (tplId, idx, cat) => {
     persist(list.map(t => t.id === tplId
-      ? { ...t, items: (t.items || []).map(it => it.id === itemId ? { ...it, category: cat } : it) }
+      ? { ...t, items: (t.items || []).map((it, k) => k === idx ? { ...it, category: cat } : it) }
       : t));
     setCatMenu(null);
   };
@@ -1853,15 +1853,16 @@ function KHTemplatesView({ est, onClose }) {
                     <th style={{ width: 40 }}></th>
                   </tr></thead>
                   <tbody>
-                    {t.items.map(it => {
+                    {t.items.map((it, ii) => {
                       const c = tplCat(it);
+                      const rowKey = t.id + ':' + ii;
                       return (
-                      <tr key={it.id}>
+                      <tr key={it.id || rowKey}>
                         <td>
-                          {catMenu === it.id ? (
-                            <span style={{ display: 'inline-flex', gap: 4 }} onMouseLeave={() => setCatMenu(null)}>
+                          {catMenu === rowKey ? (
+                            <span style={{ display: 'inline-flex', gap: 4 }}>
                               {[['work', 'Работа'], ['material', 'Материал']].map(([id, label]) => (
-                                <button key={id} type="button" onClick={() => setItemCat(t.id, it.id, id)}
+                                <button key={id} type="button" onClick={() => setItemCatAt(t.id, ii, id)}
                                   style={{
                                     cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
                                     border: '1px solid ' + (c === id ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
@@ -1872,7 +1873,7 @@ function KHTemplatesView({ est, onClose }) {
                             </span>
                           ) : (
                             <span
-                              onClick={() => setCatMenu(it.id)}
+                              onClick={() => setCatMenu(rowKey)}
                               title="Нажмите, чтобы сменить категорию"
                               style={{
                                 fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', cursor: 'pointer',
