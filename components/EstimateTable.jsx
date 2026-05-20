@@ -1,22 +1,51 @@
 // EstimateTable.jsx — list of estimate rows with qty edit, picker, delete.
 
+const EST_GROUPS = [
+  { key: 'work', label: 'Работы' },
+  { key: 'material', label: 'Материалы' },
+];
+
 function EstimateTable({ rows, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
   const visibleRows = rows.filter(r => !isHiddenCategory(r.name));
+  let n = 0;
+  const present = EST_GROUPS.filter(g => visibleRows.some(r => (r.category || 'material') === g.key));
+  // Если категория одна — заголовки групп не показываем (плоский список).
+  const showHeaders = present.length > 1;
   return (
     <div className="col">
-      {visibleRows.map((r, i) => (
-        <EstimateRow
-          key={r.id}
-          row={r}
-          index={i + 1}
-          onUpdateQty={onUpdateQty}
-          onUpdateRow={onUpdateRow}
-          onRemove={onRemove}
-          onTogglePicker={onTogglePicker}
-          onApplyCandidate={onApplyCandidate}
-          onApplyManual={onApplyManual}
-        />
-      ))}
+      {present.map(g => {
+        const gr = visibleRows.filter(r => (r.category || 'material') === g.key);
+        const sub = gr.reduce((s, r) => s + (r.notFound ? 0 : r.qty * r.unitPrice), 0);
+        return (
+          <div key={g.key}>
+            {showHeaders && (
+              <div className="row center between" style={{
+                padding: "8px 32px", background: "var(--paper-2)",
+                borderBottom: "1px solid var(--rule)", borderTop: "1px solid var(--rule)",
+              }}>
+                <span className="eyebrow">{g.label} · {gr.length}</span>
+                <span className="mono tiny serif" style={{ color: "var(--ink-2)" }}>{formatMoney(sub)} ₽</span>
+              </div>
+            )}
+            {gr.map(r => {
+              n += 1;
+              return (
+                <EstimateRow
+                  key={r.id}
+                  row={r}
+                  index={n}
+                  onUpdateQty={onUpdateQty}
+                  onUpdateRow={onUpdateRow}
+                  onRemove={onRemove}
+                  onTogglePicker={onTogglePicker}
+                  onApplyCandidate={onApplyCandidate}
+                  onApplyManual={onApplyManual}
+                />
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -25,6 +54,8 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
   const total = row.notFound ? null : row.qty * row.unitPrice;
   const hasAlternatives = row.candidates && row.candidates.length > 1;
   const sourceLabel = row.sourceLabel || SOURCE_LABELS[row.source] || '—';
+  const cat = row.category === 'work' ? 'work' : 'material';
+  const toggleCat = () => onUpdateRow && onUpdateRow(row.id, { category: cat === 'work' ? 'material' : 'work' });
 
   const updateName = (v) => onUpdateRow && onUpdateRow(row.id, { name: v });
   const updateUnit = (v) => onUpdateRow && onUpdateRow(row.id, { unit: v });
@@ -50,6 +81,19 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
         <div className="mono tiny" style={{ width: 56, color: "var(--ink-4)" }}>
           {String(index).padStart(2, "0")}
         </div>
+        <button
+          onClick={toggleCat}
+          title={cat === 'work' ? 'Работа — нажмите, чтобы сделать материалом' : 'Материал — нажмите, чтобы сделать работой'}
+          className="mono tiny"
+          style={{
+            width: 38, marginRight: 8, padding: "2px 0", borderRadius: 4, cursor: "pointer",
+            border: "1px solid var(--rule)", textAlign: "center", flexShrink: 0,
+            background: cat === 'work' ? "var(--moss, #4f6f52)" : "transparent",
+            color: cat === 'work' ? "#fff" : "var(--ink-3)",
+          }}
+        >
+          {cat === 'work' ? 'Раб' : 'Мат'}
+        </button>
         <div style={{ flex: 1, minWidth: 0, paddingRight: 12, color: "var(--ink)" }}>
           <Editable value={row.name} onChange={updateName} placeholder="Название позиции" />
           {row.url && (
