@@ -1288,6 +1288,32 @@ function KHTemplatesView({ est, onClose }) {
 
   const persist = (next) => { setList(next); khSaveTpls(next); };
   const totalOf = (t) => (t.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+  const tplCat = (it) => (it && (it.category === 'work' || it.category === 'material'))
+    ? it.category
+    : (typeof window.classifyItem === 'function' ? window.classifyItem(it && it.name, it && it.unit) : 'material');
+
+  // Позиция шаблона должна попасть в базу: если её нет — добавляем; если есть
+  // с другой ценой — пишем более новую (только что заданную). Без цены не пишем.
+  const dbKeyOf = (n, u) => `${String(n || '').trim().toLowerCase()}|${String(u || '').trim().toLowerCase()}`;
+  const syncItemToDb = (item) => {
+    if (!est || !est.actions || typeof est.actions.addCatalogItem !== 'function') return;
+    const name = String(item && item.name || '').trim();
+    const unit = String(item && item.unit || '').trim();
+    const price = Number(item && item.unitPrice) || 0;
+    if (!name || price <= 0) return;
+    const key = dbKeyOf(name, unit);
+    const all = [
+      ...(est.state.userCatalog || []),
+      ...(est.state.catalog || []),
+      ...(est.state.ddcCatalog || []),
+    ];
+    const found = all.find(it => dbKeyOf(it.name, it.unit) === key);
+    if (found && Math.abs((Number(found.unitPrice) || 0) - price) < 0.005) return; // уже есть с той же ценой
+    est.actions.addCatalogItem({
+      name, unit, unitPrice: price,
+      category: item.category || (typeof window.classifyItem === 'function' ? window.classifyItem(name, unit) : 'material'),
+    });
+  };
 
   const startAddTpl = () => { setTplDraft({ name: '', area: '', note: '', file: null, cover: '' }); setEditingTplId(null); setTplFormOpen(true); };
   const startEditTpl = (t) => { setTplDraft({ name: t.name || '', area: t.area ?? '', note: t.note || '', file: null, cover: t.cover || '' }); setEditingTplId(t.id); setTplFormOpen(true); };
@@ -1303,8 +1329,13 @@ function KHTemplatesView({ est, onClose }) {
       setUploadStatus({ kind: 'busy', text: `Парсинг ${tplDraft.file.name}…` });
       try {
         const parsed = await khParseTemplateFile(tplDraft.file);
-        extraItems = parsed.map((p, j) => ({ id: 'tpli-' + Date.now() + '-' + j, ...p }));
+        extraItems = parsed.map((p, j) => ({
+          id: 'tpli-' + Date.now() + '-' + j, ...p,
+          category: p.category || (typeof window.classifyItem === 'function' ? window.classifyItem(p.name, p.unit) : 'material'),
+          vendor: p.vendor || '',
+        }));
         if (extraItems.length) {
+          extraItems.forEach(syncItemToDb);
           setUploadStatus({ kind: 'ok', text: `Позиций добавлено: ${extraItems.length}` });
         } else {
           setUploadStatus({ kind: 'error', text: `В файле «${tplDraft.file.name}» не найдено ни одной позиции. Проверь, что есть колонки «Наименование», «Ед.», «Кол-во», «Цена».` });
@@ -1338,14 +1369,18 @@ function KHTemplatesView({ est, onClose }) {
   const addItem = (tplId) => {
     const name = itemDraft.name.trim();
     if (!name || itemDraft.tplId !== tplId) return;
+    const unit = itemDraft.unit.trim();
+    const unitPrice = Number(String(itemDraft.unitPrice).replace(',', '.')) || 0;
     const item = {
       id: 'tpli-' + Date.now(),
-      name,
-      unit: itemDraft.unit.trim(),
+      name, unit,
       qty: Number(itemDraft.qty) || 0,
-      unitPrice: Number(String(itemDraft.unitPrice).replace(',', '.')) || 0,
+      unitPrice,
+      category: typeof window.classifyItem === 'function' ? window.classifyItem(name, unit) : 'material',
+      vendor: '',
     };
     persist(list.map(t => t.id === tplId ? { ...t, items: [...(t.items || []), item] } : t));
+    syncItemToDb(item);
     setItemDraft({ tplId, name: '', unit: '', qty: '', unitPrice: '' });
   };
   const removeItem = (tplId, itemId) => {
@@ -1367,6 +1402,8 @@ function KHTemplatesView({ est, onClose }) {
       unit: catItem.unit || '',
       qty: 1,
       unitPrice: Number(catItem.unitPrice) || 0,
+      category: catItem.category || (typeof window.classifyItem === 'function' ? window.classifyItem(catItem.name, catItem.unit) : 'material'),
+      vendor: catItem._vendorName || '',
     };
     persist(list.map(t => t.id === tplId ? { ...t, items: [...(t.items || []), item] } : t));
     setUploadStatus({ kind: 'ok', text: `Добавлено: ${catItem.name}` });
@@ -1462,7 +1499,12 @@ function KHTemplatesView({ est, onClose }) {
       setUploadStatus({ kind: 'busy', text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
       try {
         const parsed = await khParseTemplateFile(f);
-        const newItems = parsed.map((p, j) => ({ id: 'tpli-' + Date.now() + '-' + i + '-' + j, ...p }));
+        const newItems = parsed.map((p, j) => ({
+          id: 'tpli-' + Date.now() + '-' + i + '-' + j, ...p,
+          category: p.category || (typeof window.classifyItem === 'function' ? window.classifyItem(p.name, p.unit) : 'material'),
+          vendor: p.vendor || '',
+        }));
+        newItems.forEach(syncItemToDb);
         nextList = nextList.map(t => t.id === tplId ? { ...t, items: [...(t.items || []), ...newItems] } : t);
         totalAdded += newItems.length;
       } catch (err) {
@@ -1768,16 +1810,27 @@ function KHTemplatesView({ est, onClose }) {
               {isOpen && (t.items || []).length > 0 && (
                 <table className="kh-table" style={{ marginTop: 4 }}>
                   <thead><tr>
+                    <th style={{ width: 92 }}>Категория</th>
                     <th>Наименование</th>
-                    <th>Ед.</th>
-                    <th className="num">Кол-во</th>
-                    <th className="num">Цена</th>
-                    <th className="num">Сумма</th>
-                    <th></th>
+                    <th style={{ width: 70 }}>Ед.</th>
+                    <th className="num" style={{ width: 90 }}>Кол-во</th>
+                    <th className="num" style={{ width: 110 }}>Цена</th>
+                    <th style={{ width: 130 }}>Подрядчик</th>
+                    <th style={{ width: 40 }}></th>
                   </tr></thead>
                   <tbody>
-                    {t.items.map(it => (
+                    {t.items.map(it => {
+                      const c = tplCat(it);
+                      return (
                       <tr key={it.id}>
+                        <td>
+                          <span style={{
+                            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
+                            border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                            background: c === 'work' ? 'var(--moss, #4f6f52)' : 'transparent',
+                            color: c === 'work' ? '#fff' : 'var(--ink-3)',
+                          }}>{c === 'work' ? 'Работа' : 'Материал'}</span>
+                        </td>
                         <td>{it.name}</td>
                         <td>{it.unit || '—'}</td>
                         <td className="num">
@@ -1796,10 +1849,11 @@ function KHTemplatesView({ est, onClose }) {
                           />
                         </td>
                         <td className="num">{num(it.unitPrice)} ₽</td>
-                        <td className="num">{num((Number(it.qty) || 0) * (Number(it.unitPrice) || 0))} ₽</td>
+                        <td style={{ color: it.vendor ? 'var(--ink-2)' : 'var(--ink-4)' }}>{it.vendor || '—'}</td>
                         <td className="num"><button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeItem(t.id, it.id)}>×</button></td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
