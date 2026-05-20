@@ -20,7 +20,12 @@ function loadEstimate() {
       qty: Number(x.qty) || 0,
       notFound: !!x.notFound,
       source: String(x.source || "local"),
-      category: x.category === 'work' ? 'work' : (x.category === 'material' ? 'material' : classifyItem(x.name, x.unit)),
+      // Авто-категория всегда пересчитывается актуальным классификатором;
+      // ручную (catManual) сохраняем как есть.
+      category: x.catManual === true
+        ? (x.category === 'work' ? 'work' : 'material')
+        : classifyItem(x.name, x.unit),
+      catManual: x.catManual === true,
       url: String(x.url || ""),
       expanded: false,
       candidates: null,
@@ -34,7 +39,8 @@ function saveEstimate(rows) {
   try {
     const slim = rows.map(r => ({
       id: r.id, name: r.name, unit: r.unit, unitPrice: r.unitPrice,
-      qty: r.qty, notFound: !!r.notFound, source: r.source, category: r.category || 'material', url: r.url || "",
+      qty: r.qty, notFound: !!r.notFound, source: r.source,
+      category: r.category || 'material', catManual: r.catManual === true, url: r.url || "",
     }));
     localStorage.setItem(ESTIMATE_KEY, JSON.stringify(slim));
   } catch (_) {}
@@ -132,7 +138,7 @@ function parseUserCatalogRows(rows) {
       continue;
     }
     if (!name || name.length < 2) continue;
-    out.push({ name, unit: unit.trim(), unitPrice: price, category: currentSection || classifyItem(name, unit) });
+    out.push({ name, unit: unit.trim(), unitPrice: price, category: classifyCategory(name, unit, currentSection) });
   }
   return out;
 }
@@ -411,7 +417,7 @@ function useEstimate() {
         skipped++; continue;
       }
       if (row && row._colored) { skipped++; continue; }
-      const { name, qty } = extractNameAndQty(row);
+      const { name, qty, unit: rowUnit } = extractNameAndQty(row);
       const reason = skipReason(name);
       if (reason) {
         // Текстовый заголовок-раздел («Работы», «Материалы») тоже обновляет контекст.
@@ -422,8 +428,8 @@ function useEstimate() {
       const q = isFinite(qty) && qty > 0 ? qty : 1;
       const match = fuzzyFind(name, [...visibleUserCatalog, ...visibleCatalog], visibleDdcCatalog);
       const itemName = match ? match.name : name;
-      const itemUnit = match ? match.unit : '';
-      const category = currentSection || classifyItem(itemName, itemUnit);
+      const itemUnit = match ? (match.unit || rowUnit || '') : (rowUnit || '');
+      const category = classifyCategory(itemName, itemUnit, currentSection);
       if (category === 'work') works++; else materials++;
       if (match) {
         additions.push({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source, category });
@@ -441,7 +447,7 @@ function useEstimate() {
           id: nextIdRef.current++,
           name: a.name, unit: a.unit || '', unitPrice: a.unitPrice || 0, qty: a.qty || 1,
           notFound: !!a.notFound, source: a.source || (a.notFound ? 'none' : 'local'),
-          category: a.category || 'material',
+          category: a.category || 'material', catManual: false,
           url: '', expanded: false, candidates: null, candidatesLoading: false, candidatesError: null,
         });
       }

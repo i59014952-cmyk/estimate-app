@@ -55,7 +55,7 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
   const hasAlternatives = row.candidates && row.candidates.length > 1;
   const sourceLabel = row.sourceLabel || SOURCE_LABELS[row.source] || '—';
   const cat = row.category === 'work' ? 'work' : 'material';
-  const toggleCat = () => onUpdateRow && onUpdateRow(row.id, { category: cat === 'work' ? 'material' : 'work' });
+  const toggleCat = () => onUpdateRow && onUpdateRow(row.id, { category: cat === 'work' ? 'material' : 'work', catManual: true });
 
   const updateName = (v) => onUpdateRow && onUpdateRow(row.id, { name: v });
   const updateUnit = (v) => onUpdateRow && onUpdateRow(row.id, { unit: v });
