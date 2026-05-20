@@ -75,6 +75,7 @@ const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU');
 
 let vendor = null;
 let prices = [];
+let selected = new Set();
 
 async function fetchJSON(url, opts) {
   const r = await fetch(url, { headers: HEADERS, ...opts });
@@ -352,12 +353,29 @@ async function onChangeQty(id, value) {
 async function onRemove(id) {
   if (!confirm('Удалить позицию?')) return;
   await remove(id);
+  selected.delete(id);
+  await loadPrices(); render();
+}
+async function removeMany(ids) {
+  if (!ids.length) return;
+  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?id=in.(${ids.map(encodeURIComponent).join(',')})`, {
+    method: 'DELETE', headers: { ...HEADERS, Prefer: 'return=minimal' },
+  });
+}
+async function onDeleteSelected() {
+  const ids = [...selected];
+  if (!ids.length) return;
+  if (!confirm(`Удалить выбранные позиции (${ids.length})?`)) return;
+  await removeMany(ids);
+  selected.clear();
   await loadPrices(); render();
 }
 
 function render() {
+  const allSelected = prices.length > 0 && prices.every(p => selected.has(String(p.id)));
   const rows = prices.map(p => `
     <tr data-id="${p.id}">
+      <td style="width:34px;text-align:center"><input type="checkbox" data-action="sel"${selected.has(String(p.id)) ? ' checked' : ''}></td>
       <td><input type="text" value="${esc(p.name)}" data-field="name"></td>
       <td>${esc(p.unit || '—')}</td>
       <td class="num"><input type="text" inputmode="decimal" value="${esc(p.qty != null ? p.qty : 1)}" data-field="qty"></td>
@@ -374,11 +392,12 @@ function render() {
     <div class="actions">
       <input type="file" id="file" multiple accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none">
       <button class="primary" id="upload-btn">↑ Загрузить XLSX/CSV (можно несколько)</button>
+      ${selected.size > 0 ? `<button class="danger" id="del-sel">🗑 Удалить выбранные (${selected.size})</button>` : ''}
       <span class="meta" style="align-self:center">Совпадающие по названию и единице — обновятся.</span>
     </div>
     ${prices.length === 0 ? '<div class="empty">Прайса ещё нет — загрузите файл, чтобы добавить позиции.</div>' :
     `<table>
-      <thead><tr><th>Название</th><th>Ед.</th><th class="num">Кол-во</th><th class="num">Цена, ₽</th><th class="num">Файл</th><th></th></tr></thead>
+      <thead><tr><th style="width:34px;text-align:center"><input type="checkbox" id="sel-all"${allSelected ? ' checked' : ''}></th><th>Название</th><th>Ед.</th><th class="num">Кол-во</th><th class="num">Цена, ₽</th><th class="num">Файл</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="small">Всего позиций: ${prices.length}. Обновлено: ${new Date(prices[0].updated_at).toLocaleString('ru-RU')}</div>`}
@@ -386,6 +405,14 @@ function render() {
 
   $('#upload-btn').onclick = () => $('#file').click();
   $('#file').onchange = onUpload;
+  const delBtn = $('#del-sel');
+  if (delBtn) delBtn.onclick = onDeleteSelected;
+  const selAll = $('#sel-all');
+  if (selAll) selAll.onchange = () => {
+    if (selAll.checked) prices.forEach(p => selected.add(String(p.id)));
+    else selected.clear();
+    render();
+  };
   document.querySelectorAll('tr[data-id]').forEach(tr => {
     const id = tr.dataset.id;
     tr.querySelectorAll('input').forEach(inp => {
@@ -396,6 +423,8 @@ function render() {
       });
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
     });
+    const sel = tr.querySelector('input[data-action="sel"]');
+    if (sel) sel.onchange = () => { if (sel.checked) selected.add(id); else selected.delete(id); render(); };
     const btn = tr.querySelector('button[data-action="remove"]');
     if (btn) btn.onclick = () => onRemove(id);
   });

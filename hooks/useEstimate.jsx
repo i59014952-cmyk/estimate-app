@@ -18,6 +18,13 @@ function saveMarkup(m) {
 }
 
 const hiddenKey = (name, unit) => `${String(name || "").trim().toLowerCase()}|${String(unit || "").trim().toLowerCase()}`;
+// Нормализованный ключ для дедупликации каталога: регистр, лишние пробелы, ё→е.
+// «Одинаковые один в один» позиции (с точностью до этого) считаются совпадающими.
+const catalogKey = (name, unit) => {
+  const norm = (s) => (typeof normalizeYo === "function" ? normalizeYo(String(s || "")) : String(s || "").toLowerCase())
+    .replace(/\s+/g, " ").trim();
+  return `${norm(name)}|${norm(unit)}`;
+};
 
 function loadCatOverride() {
   try {
@@ -885,8 +892,8 @@ function useEstimate() {
 
   const addCatalogItem = React.useCallback(({ name, unit, unitPrice, category }) => {
     setUserCatalog(prev => {
-      const key = (s) => `${s.name}|${s.unit}`;
-      const filtered = prev.filter(it => key(it) !== key({ name, unit }));
+      const k = catalogKey(name, unit);
+      const filtered = prev.filter(it => catalogKey(it.name, it.unit) !== k);
       const item = {
         name: String(name).trim(),
         unit: String(unit || "").trim(),
@@ -981,10 +988,12 @@ function useEstimate() {
         return { added: 0, skipped: rows.length };
       }
       setUserCatalog(prev => {
+        // Дедуп по нормализованному ключу: дубли «один в один» обновляют цену,
+        // а не добавляются заново.
         const map = new Map();
-        for (const it of prev) map.set(`${it.name}|${it.unit}`, it);
+        for (const it of prev) map.set(catalogKey(it.name, it.unit), it);
         for (const it of items) {
-          map.set(`${it.name}|${it.unit}`, {
+          map.set(catalogKey(it.name, it.unit), {
             name: it.name, unit: it.unit, unitPrice: it.unitPrice,
             category: it.category || classifyItem(it.name, it.unit),
             tokenSet: new Set(tokenize(it.name)),

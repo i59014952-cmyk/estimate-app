@@ -92,6 +92,7 @@ function KHDatabaseView({ est, autoAdd }) {
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "", category: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const [catMenu, setCatMenu] = React.useState(null); // ключ строки с открытым выбором категории
+  const [sel, setSel] = React.useState(() => new Set()); // выбранные строки для массового удаления
   const fileRef = React.useRef(null);
 
   if (!est) return <div className="kh-empty">База недоступна</div>;
@@ -147,6 +148,22 @@ function KHDatabaseView({ est, autoAdd }) {
 
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
+  const rowKeyOf = (it) => it._kind === "vendor" ? `v:${it._id}` : `${it._kind}:${hiddenKeyOf(it)}`;
+
+  const bulkDelete = () => {
+    const items = (showHidden ? hiddenList : activeMerged).filter(it => sel.has(rowKeyOf(it)));
+    if (!items.length) return;
+    if (!confirm(`Удалить выбранные позиции (${items.length})? Действие нельзя отменить.`)) return;
+    const vendorIds = [];
+    for (const it of items) {
+      if (it._kind === "vendor") { if (it._id) vendorIds.push(it._id); }
+      else est.actions.removeCatalogItem(it.name, it.unit, it._kind); // user — удалить, local/ddc — скрыть
+    }
+    if (vendorIds.length) {
+      Promise.all(vendorIds.map(id => est.actions.removeVendorPrice(id).catch(() => {}))).then(() => refreshVendors());
+    }
+    setSel(new Set());
+  };
 
   const catOverride = est.state.catOverride || {};
   // Ручной оверрайд категории (из localStorage) важнее авто-классификации.
@@ -312,6 +329,11 @@ function KHDatabaseView({ est, autoAdd }) {
         />
         <button className="kh-btn-primary" onClick={startAdd}>+ Добавить</button>
         <button className="kh-btn-primary" onClick={onUploadClick}>↑ Загрузить XLSX/CSV (можно несколько)</button>
+        {sel.size > 0 && (
+          <button className="btn btn-sm" style={{ color: "var(--rust)", borderColor: "var(--rust)" }} onClick={bulkDelete}>
+            🗑 Удалить выбранные ({sel.size})
+          </button>
+        )}
         <button className="btn btn-sm" onClick={refreshVendors} title="Перечитать КП подрядчиков из облака">⟳ Обновить</button>
       </div>
 
@@ -441,6 +463,18 @@ function KHDatabaseView({ est, autoAdd }) {
       <table className="kh-table">
         <thead>
           <tr>
+            <th style={{ width: 34, textAlign: "center" }}>
+              <input type="checkbox"
+                checked={visible.length > 0 && visible.every(it => sel.has(rowKeyOf(it)))}
+                onChange={(e) => {
+                  setSel(prev => {
+                    const n = new Set(prev);
+                    if (e.target.checked) visible.forEach(it => n.add(rowKeyOf(it)));
+                    else visible.forEach(it => n.delete(rowKeyOf(it)));
+                    return n;
+                  });
+                }} />
+            </th>
             <th style={{ width: 70 }}>Источник</th>
             <th style={{ width: 92 }}>Категория</th>
             <th>Наименование</th>
@@ -453,8 +487,13 @@ function KHDatabaseView({ est, autoAdd }) {
         <tbody>
           {visible.map((it, i) => {
             const badge = kindBadge(it._kind);
+            const rk = rowKeyOf(it);
             return (
               <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
+                <td style={{ textAlign: "center" }}>
+                  <input type="checkbox" checked={sel.has(rk)}
+                    onChange={() => setSel(prev => { const n = new Set(prev); if (n.has(rk)) n.delete(rk); else n.add(rk); return n; })} />
+                </td>
                 <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>
                 <td>
                   {(() => {

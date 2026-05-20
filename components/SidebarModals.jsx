@@ -1298,8 +1298,8 @@ function KHTemplatesView({ est, onClose }) {
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
   const [dbPicker, setDbPicker] = React.useState({ tplId: null, query: '', filter: 'all' });
-  const [catMenu, setCatMenu] = React.useState(null); // id позиции с открытым выбором категории
   const [uploadStatus, setUploadStatus] = React.useState(null);
+  const [selItems, setSelItems] = React.useState(() => new Set()); // id выбранных позиций для массового удаления
   const fileRef = React.useRef(null);
   const tplFormFileRef = React.useRef(null);
   const tplFormCoverRef = React.useRef(null);
@@ -1426,7 +1426,15 @@ function KHTemplatesView({ est, onClose }) {
     persist(list.map(t => t.id === tplId
       ? { ...t, items: (t.items || []).map((it, k) => k === idx ? { ...it, category: cat } : it) }
       : t));
-    setCatMenu(null);
+  };
+
+  const removeSelectedItems = (tplId) => {
+    if (!selItems.size) return;
+    if (!confirm(`Удалить выбранные позиции (${selItems.size})?`)) return;
+    persist(list.map(t => t.id === tplId
+      ? { ...t, items: (t.items || []).filter(it => !selItems.has(it.id)) }
+      : t));
+    setSelItems(new Set());
   };
 
   const addItemFromCatalog = (tplId, catItem) => {
@@ -1766,6 +1774,9 @@ function KHTemplatesView({ est, onClose }) {
                 {isOpen && (t.items || []).length > 0 && (
                   <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => clearTplItems(t.id)} title="Удалить все позиции из шаблона">⌫ Очистить все позиции</button>
                 )}
+                {isOpen && selItems.size > 0 && (
+                  <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeSelectedItems(t.id)} title="Удалить выбранные позиции">🗑 Удалить выбранные ({selItems.size})</button>
+                )}
                 {(t.items || []).length > 0 && est && est.actions && (
                   <button
                     className="kh-btn-primary"
@@ -1844,6 +1855,18 @@ function KHTemplatesView({ est, onClose }) {
               {isOpen && (t.items || []).length > 0 && (
                 <table className="kh-table" style={{ marginTop: 4 }}>
                   <thead><tr>
+                    <th style={{ width: 34, textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={(t.items || []).length > 0 && (t.items || []).every(it => selItems.has(it.id))}
+                        onChange={(e) => {
+                          setSelItems(prev => {
+                            const n = new Set(prev);
+                            if (e.target.checked) (t.items || []).forEach(it => n.add(it.id));
+                            else (t.items || []).forEach(it => n.delete(it.id));
+                            return n;
+                          });
+                        }} />
+                    </th>
                     <th style={{ width: 92 }}>Категория</th>
                     <th>Наименование</th>
                     <th style={{ width: 70 }}>Ед.</th>
@@ -1858,30 +1881,25 @@ function KHTemplatesView({ est, onClose }) {
                       const rowKey = t.id + ':' + ii;
                       return (
                       <tr key={it.id || rowKey}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input type="checkbox" checked={selItems.has(it.id)}
+                            onChange={() => setSelItems(prev => { const n = new Set(prev); if (n.has(it.id)) n.delete(it.id); else n.add(it.id); return n; })} />
+                        </td>
                         <td>
-                          {catMenu === rowKey ? (
-                            <span style={{ display: 'inline-flex', gap: 4 }}>
-                              {[['work', 'Работа'], ['material', 'Материал']].map(([id, label]) => (
-                                <button key={id} type="button" onClick={() => setItemCatAt(t.id, ii, id)}
-                                  style={{
-                                    cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
-                                    border: '1px solid ' + (c === id ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
-                                    background: c === id ? 'var(--moss, #4f6f52)' : 'var(--paper)',
-                                    color: c === id ? '#fff' : 'var(--ink-2)',
-                                  }}>{label}</button>
-                              ))}
-                            </span>
-                          ) : (
-                            <span
-                              onClick={() => setCatMenu(rowKey)}
-                              title="Нажмите, чтобы сменить категорию"
-                              style={{
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', cursor: 'pointer',
-                                border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
-                                background: c === 'work' ? 'var(--moss, #4f6f52)' : 'transparent',
-                                color: c === 'work' ? '#fff' : 'var(--ink-3)',
-                              }}>{c === 'work' ? 'Работа' : 'Материал'}</span>
-                          )}
+                          <select
+                            value={c}
+                            onChange={(e) => setItemCatAt(t.id, ii, e.target.value)}
+                            title="Категория позиции"
+                            style={{
+                              fontSize: 12, fontWeight: 600, padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
+                              border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                              background: c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--paper)',
+                              color: c === 'work' ? '#fff' : 'var(--ink-2)',
+                            }}
+                          >
+                            <option value="work">Работа</option>
+                            <option value="material">Материал</option>
+                          </select>
                         </td>
                         <td>{it.name}</td>
                         <td>
