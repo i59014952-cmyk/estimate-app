@@ -597,6 +597,42 @@ function PositionsHeader({ est, onAddRow }) {
   );
 }
 
+function EstCategoryFilter({ rows, value, onChange }) {
+  if (!rows.length) return null;
+  const visible = rows.filter(r => !isHiddenCategory(r.name));
+  const counts = {
+    all: visible.length,
+    work: visible.filter(r => (r.category || 'material') === 'work').length,
+    material: visible.filter(r => (r.category || 'material') === 'material').length,
+  };
+  const opts = [
+    { id: 'all', label: 'Все' },
+    { id: 'work', label: 'Работы' },
+    { id: 'material', label: 'Материалы' },
+  ];
+  return (
+    <div className="row gap-2 center" style={{ padding: "0 32px 12px", flexWrap: "wrap" }}>
+      {opts.map(o => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(o.id)}
+            className="mono tiny"
+            style={{
+              cursor: "pointer", padding: "5px 12px", borderRadius: 99,
+              border: "1px solid " + (active ? "var(--ink)" : "var(--rule)"),
+              background: active ? "var(--ink)" : "var(--paper-card)",
+              color: active ? "var(--paper)" : "var(--ink-2)",
+              fontWeight: active ? 600 : 400,
+            }}
+          >{o.label} · {counts[o.id]}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 function EstimateSearch({ rows }) {
   const [query, setQuery] = React.useState("");
   const matches = React.useMemo(() => {
@@ -895,6 +931,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [estCatFilter, setEstCatFilter] = useState("all"); // all | work | material
   const est = useEstimate();
   const [meta, updateMeta] = useEditableMeta();
   const fileInputRef = React.useRef(null);
@@ -971,6 +1008,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
           </div>
           <PositionsHeader est={est} onAddRow={addRowAndScroll} />
           <EstimateSearch rows={est.state.estimate} />
+          <EstCategoryFilter rows={est.state.estimate} value={estCatFilter} onChange={setEstCatFilter} />
           <ColumnsHeader />
           {est.state.estimate.length === 0 ? (
             <EmptyState
@@ -981,6 +1019,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
           ) : (
             <EstimateTable
               rows={est.state.estimate}
+              catFilter={estCatFilter}
               onUpdateQty={est.actions.updateQty}
               onUpdateRow={est.actions.updateRow}
               onRemove={est.actions.removeRow}
