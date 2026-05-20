@@ -754,17 +754,55 @@ function ColumnsHeader() {
       <div className="mono tiny" style={{ flex: 1, letterSpacing: ".08em" }}>НАИМЕНОВАНИЕ</div>
       <div className="mono tiny" style={{ width: 64, textAlign: "center", letterSpacing: ".08em" }}>ЕД. ИЗМ.</div>
       <div className="mono tiny" style={{ width: 80, textAlign: "right", letterSpacing: ".08em" }}>КОЛ-ВО</div>
-      <div className="mono tiny" style={{ width: 100, textAlign: "right", letterSpacing: ".08em" }}>ЦЕНА, ₽</div>
-      <div className="mono tiny" style={{ width: 130, textAlign: "right", letterSpacing: ".08em" }}>ИТОГО, ₽</div>
+      <div className="mono tiny" style={{ width: 100, textAlign: "right", letterSpacing: ".08em" }}>СЕБЕСТ., ₽</div>
+      <div className="mono tiny" style={{ width: 60, textAlign: "right", letterSpacing: ".08em" }}>НАЦ. %</div>
+      <div className="mono tiny" style={{ width: 130, textAlign: "right", letterSpacing: ".08em" }}>КЛИЕНТУ, ₽</div>
       <div className="mono tiny" style={{ width: 110, textAlign: "right", letterSpacing: ".08em" }}>ИСТОЧНИК</div>
     </div>
   );
 }
 
+function MarkupCard({ est }) {
+  const markup = est.state.markup || { work: 0, material: 0 };
+  const field = (cat, label) => (
+    <div className="row between center" style={{ gap: 10 }}>
+      <span style={{ fontSize: 13, color: "var(--ink-2)" }}>{label}</span>
+      <div className="row center" style={{ gap: 4 }}>
+        <input
+          type="number" min="0" step="1"
+          value={markup[cat] === 0 ? "" : markup[cat]}
+          placeholder="0"
+          onChange={(e) => est.actions.setMarkup(cat, e.target.value)}
+          className="mono"
+          style={{
+            width: 64, textAlign: "right", padding: "4px 6px", fontSize: 13,
+            border: "1px solid var(--rule)", borderRadius: 4, background: "var(--paper)", color: "var(--ink)",
+          }}
+        />
+        <span className="mono tiny muted">%</span>
+      </div>
+    </div>
+  );
+  return (
+    <div className="frame" style={{ padding: "16px 18px", border: "1px solid var(--rule)", background: "var(--paper-card)", position: "relative" }}>
+      <div className="eyebrow" style={{ marginBottom: 12 }}>Наценка к себестоимости</div>
+      <div className="col" style={{ gap: 10 }}>
+        {field("work", "Работы")}
+        {field("material", "Материалы")}
+      </div>
+      <div className="tiny muted" style={{ marginTop: 10 }}>
+        Клиент видит цены с наценкой. Себестоимость остаётся только у вас.
+      </div>
+    </div>
+  );
+}
+
 function BudgetCard({ est }) {
-  const { subtotal, vat, grand } = est.state.totals;
+  const { cost, margin, subtotal, vat, grand } = est.state.totals;
   const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
   const items = [
+    { label: "Себестоимость", value: cost },
+    { label: "Наценка (маржа)", value: margin },
     { label: "Сумма без НДС", value: subtotal },
     { label: "НДС 22%", value: vat },
   ];
@@ -864,6 +902,7 @@ function RightPanel({ est }) {
         <div className="eyebrow" style={{ marginBottom: 10 }}>Бюджет объекта</div>
         <BudgetCard est={est} />
       </div>
+      <MarkupCard est={est} />
       <PopularMaterials onAdd={est.actions.addRow} />
       <HistoryFeed />
     </aside>
@@ -1038,6 +1077,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
             <EstimateTable
               rows={est.state.estimate}
               catFilter={estCatFilter}
+              markup={est.state.markup}
               onUpdateQty={est.actions.updateQty}
               onUpdateRow={est.actions.updateRow}
               onRemove={est.actions.removeRow}

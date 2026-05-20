@@ -1,6 +1,6 @@
 // EstimateTable.jsx — list of estimate rows with qty edit, picker, delete.
 
-function EstimateTable({ rows, catFilter = 'all', onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+function EstimateTable({ rows, catFilter = 'all', markup, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
   let visibleRows = rows.filter(r => !isHiddenCategory(r.name));
   if (catFilter === 'work' || catFilter === 'material') {
     visibleRows = visibleRows.filter(r => (r.category || 'material') === catFilter);
@@ -22,6 +22,7 @@ function EstimateTable({ rows, catFilter = 'all', onUpdateQty, onUpdateRow, onRe
           key={r.id}
           row={r}
           index={i + 1}
+          markup={markup}
           onUpdateQty={onUpdateQty}
           onUpdateRow={onUpdateRow}
           onRemove={onRemove}
@@ -34,12 +35,22 @@ function EstimateTable({ rows, catFilter = 'all', onUpdateQty, onUpdateRow, onRe
   );
 }
 
-function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+function EstimateRow({ row, index, markup, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
   const total = row.notFound ? null : row.qty * row.unitPrice;
   const hasAlternatives = row.candidates && row.candidates.length > 1;
   const sourceLabel = row.sourceLabel || SOURCE_LABELS[row.source] || '—';
   const cat = row.category === 'work' ? 'work' : 'material';
   const toggleCat = () => onUpdateRow && onUpdateRow(row.id, { category: cat === 'work' ? 'material' : 'work', catManual: true });
+  const effPct = markupPctFor(row, markup);
+  const clientTotal = row.notFound ? null : row.qty * clientUnitPrice(row, markup);
+  const updateMarkup = (raw) => {
+    if (!onUpdateRow) return;
+    const s = String(raw).trim();
+    if (s === '') { onUpdateRow(row.id, { markup: null }); return; }
+    const n = parseFloat(s.replace(',', '.'));
+    if (!isFinite(n) || n < 0) return;
+    onUpdateRow(row.id, { markup: n });
+  };
 
   const updateName = (v) => onUpdateRow && onUpdateRow(row.id, { name: v });
   const updateUnit = (v) => onUpdateRow && onUpdateRow(row.id, { unit: v });
@@ -121,8 +132,29 @@ function EstimateRow({ row, index, onUpdateQty, onUpdateRow, onRemove, onToggleP
             </div>
           )}
         </div>
+        <div className="mono" style={{ width: 60, textAlign: "right" }}>
+          <input
+            type="number" min="0" step="1"
+            value={row.markup != null ? row.markup : ''}
+            placeholder={String(Math.round(effPct))}
+            onChange={(e) => updateMarkup(e.target.value)}
+            title="Наценка для этой строки, % (пусто — по категории)"
+            className="mono"
+            style={{
+              width: 48, textAlign: "right", padding: "4px 6px", fontSize: 12,
+              border: "1px solid " + (row.markup != null ? "var(--moss, #4f6f52)" : "var(--rule)"),
+              borderRadius: 4, background: "var(--paper)",
+              color: row.markup != null ? "var(--ink)" : "var(--ink-4)",
+            }}
+          />
+        </div>
         <div className="mono serif" style={{ width: 130, textAlign: "right", fontSize: 14 }}>
-          {total === null ? "—" : formatMoney(total)}
+          {clientTotal === null ? "—" : formatMoney(clientTotal)}
+          {clientTotal !== null && (
+            <div className="mono tiny" style={{ color: "var(--ink-4)", fontWeight: 400, marginTop: 2 }}>
+              себест. {formatMoney(total || 0)}
+            </div>
+          )}
         </div>
         <div style={{ width: 110, textAlign: "right" }}>
           {row.source && row.source !== 'none' && row.source !== 'manual' && (

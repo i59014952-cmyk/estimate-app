@@ -4,6 +4,18 @@ const USER_CATALOG_KEY = "kh-user-catalog-v1";
 const HIDDEN_CATALOG_KEY = "kh-hidden-catalog-v1";
 const ESTIMATE_KEY = "kh-estimate-v1";
 const CAT_OVERRIDE_KEY = "kh-cat-override-v1";
+const MARKUP_KEY = "kh-markup-v1";
+
+function loadMarkup() {
+  try {
+    const s = JSON.parse(localStorage.getItem(MARKUP_KEY) || "{}");
+    const num = (v) => (isFinite(Number(v)) ? Number(v) : 0);
+    return { work: num(s.work), material: num(s.material) };
+  } catch (_) { return { work: 0, material: 0 }; }
+}
+function saveMarkup(m) {
+  try { localStorage.setItem(MARKUP_KEY, JSON.stringify(m)); } catch (_) {}
+}
 
 const hiddenKey = (name, unit) => `${String(name || "").trim().toLowerCase()}|${String(unit || "").trim().toLowerCase()}`;
 
@@ -41,6 +53,7 @@ function loadEstimate() {
         ? (x.category === 'work' ? 'work' : 'material')
         : classifyItem(x.name, x.unit),
       catManual: x.catManual === true,
+      markup: (x.markup != null && isFinite(Number(x.markup))) ? Number(x.markup) : null,
       url: String(x.url || ""),
       expanded: false,
       candidates: null,
@@ -55,7 +68,8 @@ function saveEstimate(rows) {
     const slim = rows.map(r => ({
       id: r.id, name: r.name, unit: r.unit, unitPrice: r.unitPrice,
       qty: r.qty, notFound: !!r.notFound, source: r.source,
-      category: r.category || 'material', catManual: r.catManual === true, url: r.url || "",
+      category: r.category || 'material', catManual: r.catManual === true,
+      markup: (r.markup != null && isFinite(Number(r.markup))) ? Number(r.markup) : null, url: r.url || "",
     }));
     localStorage.setItem(ESTIMATE_KEY, JSON.stringify(slim));
   } catch (_) {}
@@ -165,7 +179,17 @@ function useEstimate() {
   const [vendorCatalog, setVendorCatalog] = React.useState([]);
   const [hiddenCatalog, setHiddenCatalog] = React.useState(loadHiddenCatalog);
   const [catOverride, setCatOverride] = React.useState(loadCatOverride);
+  const [markup, setMarkupState] = React.useState(loadMarkup);
   const [catalogReady, setCatalogReady] = React.useState(false);
+
+  const setMarkup = React.useCallback((category, pct) => {
+    const n = Math.max(0, isFinite(Number(pct)) ? Number(pct) : 0);
+    setMarkupState(prev => {
+      const next = { ...prev, [category === 'work' ? 'work' : 'material']: n };
+      saveMarkup(next);
+      return next;
+    });
+  }, []);
 
   const setItemCategory = React.useCallback((name, unit, category) => {
     if (category !== 'work' && category !== 'material') return;
@@ -311,10 +335,17 @@ function useEstimate() {
   }, [query, visibleCatalog, visibleUserCatalog]);
 
   const totals = React.useMemo(() => {
-    const subtotal = estimate.reduce((s, r) => r.notFound ? s : s + r.qty * r.unitPrice, 0);
+    let cost = 0, client = 0;
+    for (const r of estimate) {
+      if (r.notFound) continue;
+      cost += r.qty * r.unitPrice;
+      client += r.qty * clientUnitPrice(r, markup);
+    }
+    // subtotal — клиентская сумма (с наценкой); НДС и итог считаются от неё.
+    const subtotal = client;
     const vat = subtotal * VAT_RATE;
-    return { subtotal, vat, grand: subtotal + vat };
-  }, [estimate]);
+    return { cost, client, margin: client - cost, subtotal, vat, grand: subtotal + vat };
+  }, [estimate, markup]);
 
   const anyNotFound = React.useMemo(() => estimate.some(r => r.notFound), [estimate]);
 
@@ -354,9 +385,10 @@ function useEstimate() {
     const buf = new Uint8Array(16);
     (window.crypto || window.msCrypto).getRandomValues(buf);
     const token = Array.from(buf, b => b.toString(16).padStart(2, "0")).join("");
+    const mk = loadMarkup(); // клиенту уходят цены с наценкой
     const slim = rows.map(r => ({
       id: r.id, name: r.name, unit: r.unit || "",
-      unitPrice: Number(r.unitPrice) || 0, qty: Number(r.qty) || 0,
+      unitPrice: r.notFound ? 0 : clientUnitPrice(r, mk), qty: Number(r.qty) || 0,
       notFound: !!r.notFound, source: r.source || "local", url: r.url || "",
     }));
     const now = new Date().toISOString();
@@ -650,10 +682,11 @@ function useEstimate() {
     if (estimate.length === 0) return;
     const rows = [['Название', 'Ед. изм.', 'Кол-во', 'Цена за ед.', 'Итого', 'Источник']];
     for (const r of estimate) {
+      const cu = clientUnitPrice(r, markup);
       rows.push([
         r.name, r.unit, r.qty,
-        r.notFound ? 'цена не найдена' : r.unitPrice.toFixed(2),
-        r.notFound ? '' : (r.qty * r.unitPrice).toFixed(2),
+        r.notFound ? 'цена не найдена' : cu.toFixed(2),
+        r.notFound ? '' : (r.qty * cu).toFixed(2),
         SOURCE_LABELS[r.source] || '',
       ]);
     }
@@ -662,7 +695,7 @@ function useEstimate() {
     rows.push(['', '', '', 'НДС 22%', totals.vat.toFixed(2), '']);
     rows.push(['', '', '', 'Итого с НДС', totals.grand.toFixed(2), '']);
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
-  }, [estimate, totals]);
+  }, [estimate, totals, markup]);
 
   const exportDoc = React.useCallback(() => {
     if (estimate.length === 0) return;
@@ -702,8 +735,9 @@ function useEstimate() {
       .filter(Boolean).join(' <span class="dot">·</span> ');
 
     const rowsHtml = estimate.map((r, i) => {
-      const totalCell = r.notFound ? '&mdash;' : num(r.qty * r.unitPrice);
-      const priceCell = r.notFound ? '&mdash;' : num(r.unitPrice);
+      const cu = clientUnitPrice(r, markup);
+      const totalCell = r.notFound ? '&mdash;' : num(r.qty * cu);
+      const priceCell = r.notFound ? '&mdash;' : num(cu);
       const qtyCell   = `${qtyFmt(r.qty)}${r.unit ? '&nbsp;' + esc(r.unit) : ''}`;
       return `<tr>
         <td class="idx">${String(i + 1).padStart(2, '0')}</td>
@@ -829,7 +863,7 @@ function useEstimate() {
     a.download = `Смета-${fileTag}.doc`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 8000);
-  }, [estimate, totals]);
+  }, [estimate, totals, markup]);
 
   const addBlankRow = React.useCallback(() => {
     setEstimate(prev => [{
@@ -990,11 +1024,11 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
-      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile, setItemCategory,
+      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile, setItemCategory, setMarkup,
     },
   };
 }
