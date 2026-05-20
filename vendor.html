@@ -250,14 +250,21 @@ function parseSheet(rows) {
     if (NUMERIC_NAME_RE.test(name)) continue;
     if (SKIP_NAME_RE.test(name)) continue;
     if (NAME_RE.test(name.toLowerCase()) && name.length < 30) continue;
-    let unit = '';
+    let unit = '', qty = 1, qtyUnitCol = -1;
     for (let k = 0; k < c.length; k++) {
       if (k === nameCol || idxCols.has(k)) continue;
       const v = c[k]; if (!v) continue;
+      // Ячейка вида «1шт», «5 м²» — количество + единица. Ценовые суффиксы (руб/₽) не берём.
+      const m = String(v).match(/^([\d.,\s]+)\s*([а-яёa-z²³.\/]+)\.?$/i);
+      if (qtyUnitCol === -1 && m && !/^(руб|р|₽|rub|тыс)\.?$/i.test(m[2].trim())) {
+        const q = toNum(m[1]); if (q > 0) qty = q;
+        unit = m[2].trim(); qtyUnitCol = k; continue;
+      }
       if (!unit && /[а-яa-z]/i.test(v) && !/\d/.test(v) && v.length <= 12) unit = v;
     }
     const skip = new Set(idxCols); skip.add(nameCol);
-    out.push({ name, unit, qty: 1, unitPrice: pickPriceFromRow(c, skip) });
+    if (qtyUnitCol !== -1) skip.add(qtyUnitCol);
+    out.push({ name, unit, qty, unitPrice: pickPriceFromRow(c, skip) });
   }
   return out;
 }
