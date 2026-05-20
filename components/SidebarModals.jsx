@@ -1843,12 +1843,12 @@ const KH_VIEWS = {
   templates:   { title: 'Шаблоны',     sub: 'Типовые позиции',         comp: KHTemplatesView },
 };
 
-function KHModalRoot({ activeId, onClose, est }) {
+function KHModalRoot({ activeId, onClose, est, autoAdd }) {
   const view = activeId ? KH_VIEWS[activeId] : null;
   const C = view ? view.comp : null;
   return (
     <KHModal open={!!activeId} onClose={onClose} title={view?.title} subtitle={view?.sub}>
-      {C && <C est={est} onClose={onClose} />}
+      {C && <C est={est} onClose={onClose} autoAdd={autoAdd} />}
     </KHModal>
   );
 }

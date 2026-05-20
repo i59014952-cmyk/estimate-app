@@ -83,12 +83,12 @@ function PriceCell({ item, est, onSaved }) {
   );
 }
 
-function KHDatabaseView({ est }) {
+function KHDatabaseView({ est, autoAdd }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState("all");
   const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
-  const [adding, setAdding] = React.useState(false);
+  const [adding, setAdding] = React.useState(!!autoAdd);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);

@@ -949,6 +949,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const [khModalTab, setKhModalTab] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [estCatFilter, setEstCatFilter] = useState("all"); // all | work | material
+  const [dbAutoAdd, setDbAutoAdd] = useState(false); // открыть Базу сразу с формой добавления
   const est = useEstimate();
   const [meta, updateMeta] = useEditableMeta();
   const fileInputRef = React.useRef(null);
@@ -1000,19 +1001,19 @@ function Workspace({ embedded = false, onTheme, theme }) {
       <TopBar onTheme={onTheme} theme={theme} onMenu={() => setNavOpen(true)} />
       <MobileNav
         active={navActive}
-        onPick={(id) => { setNavActive(id); setKhModalTab(id); }}
+        onPick={(id) => { setNavActive(id); setKhModalTab(id); setDbAutoAdd(false); }}
       />
       <div className="row" style={{ flex: 1, minHeight: 0 }}>
         <Sidebar
           active={navActive}
-          onPick={(id) => { setNavActive(id); setKhModalTab(id); }}
+          onPick={(id) => { setNavActive(id); setKhModalTab(id); setDbAutoAdd(false); }}
           meta={meta}
           updateMeta={updateMeta}
           mobileOpen={navOpen}
           onClose={() => setNavOpen(false)}
         />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
-          <HeroBlock est={est} meta={meta} updateMeta={updateMeta} onOpenDatabase={() => { setNavActive("database"); setKhModalTab("database"); }} />
+          <HeroBlock est={est} meta={meta} updateMeta={updateMeta} onOpenDatabase={() => { setNavActive("database"); setKhModalTab("database"); setDbAutoAdd(true); }} />
           <div style={{ position: "relative" }}>
             <Toolbar tab={tab} onTab={setTab} query={est.state.query} onQuery={est.actions.setQuery} />
             <SearchResults
@@ -1051,7 +1052,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
       <StatusBar />
       <ScrollToTop />
       <ErrorToast status={est.state.status} />
-      <KHModalRoot activeId={khModalTab} onClose={() => setKhModalTab(null)} est={est} />
+      <KHModalRoot activeId={khModalTab} autoAdd={dbAutoAdd} onClose={() => { setKhModalTab(null); setDbAutoAdd(false); }} est={est} />
       <PriceFetchOverlay
         visible={est.state.pricesBusy || est.state.busyTickets > 0}
         progress={est.state.pricesProgress}
