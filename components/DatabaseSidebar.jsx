@@ -109,7 +109,7 @@ function KHDatabaseView({ est, autoAdd }) {
     if (!window.SB) return;
     let cancelled = false;
     Promise.all([
-      window.SB.selectAll('kh_vendor_prices', 'order=updated_at.desc&select=id,vendor_slug,name,unit,unit_price,source_file,updated_at'),
+      window.SB.selectAll('kh_vendor_prices', 'order=updated_at.desc&select=*'),
       window.SB.selectAll('kh_contractors', 'select=slug,name'),
     ]).then(([rows, vendors]) => {
       if (cancelled) return;
@@ -161,7 +161,7 @@ function KHDatabaseView({ est, autoAdd }) {
       _kind: "vendor",
       _id: it.id,
       _vendorSlug: it.vendor_slug,
-      _vendorName: vendorMap[it.vendor_slug] || '',
+      _vendorName: it.vendor_name || vendorMap[it.vendor_slug] || '',
       _sourceFile: it.source_file || '',
       _updated: it.updated_at,
     })),
