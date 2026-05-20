@@ -697,6 +697,7 @@ function ColumnsHeader() {
   return (
     <div className="row kh-cols" style={{ padding: "10px 32px", borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)", color: "var(--ink-4)", background: "var(--paper-2)" }}>
       <div className="mono tiny" style={{ width: 56, letterSpacing: ".08em" }}>#</div>
+      <div className="mono tiny" style={{ width: 38, marginRight: 8, letterSpacing: ".08em" }}>КАТ.</div>
       <div className="mono tiny" style={{ flex: 1, letterSpacing: ".08em" }}>НАИМЕНОВАНИЕ</div>
       <div className="mono tiny" style={{ width: 64, textAlign: "center", letterSpacing: ".08em" }}>ЕД. ИЗМ.</div>
       <div className="mono tiny" style={{ width: 80, textAlign: "right", letterSpacing: ".08em" }}>КОЛ-ВО</div>

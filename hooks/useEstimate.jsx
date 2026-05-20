@@ -20,6 +20,7 @@ function loadEstimate() {
       qty: Number(x.qty) || 0,
       notFound: !!x.notFound,
       source: String(x.source || "local"),
+      category: x.category === 'work' ? 'work' : (x.category === 'material' ? 'material' : classifyItem(x.name, x.unit)),
       url: String(x.url || ""),
       expanded: false,
       candidates: null,
@@ -33,7 +34,7 @@ function saveEstimate(rows) {
   try {
     const slim = rows.map(r => ({
       id: r.id, name: r.name, unit: r.unit, unitPrice: r.unitPrice,
-      qty: r.qty, notFound: !!r.notFound, source: r.source, url: r.url || "",
+      qty: r.qty, notFound: !!r.notFound, source: r.source, category: r.category || 'material', url: r.url || "",
     }));
     localStorage.setItem(ESTIMATE_KEY, JSON.stringify(slim));
   } catch (_) {}
@@ -69,6 +70,7 @@ function loadUserCatalog() {
       name: String(x.name),
       unit: String(x.unit || ""),
       unitPrice: Number(x.unitPrice) || 0,
+      category: x.category === 'work' ? 'work' : (x.category === 'material' ? 'material' : classifyItem(x.name, x.unit)),
       tokenSet: new Set(tokenize(x.name)),
     }));
   } catch (_) { return []; }
@@ -76,9 +78,11 @@ function loadUserCatalog() {
 
 function saveUserCatalog(items) {
   try {
-    const slim = items.map(({ name, unit, unitPrice }) => ({ name, unit, unitPrice }));
+    const slim = items.map(({ name, unit, unitPrice, category }) => ({ name, unit, unitPrice, category: category || 'material' }));
     localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(slim));
     if (window.SB) {
+      // category пока не отправляем в облако — в таблице kh_user_catalog может
+      // не быть такой колонки, и весь upsert упал бы. Локально категория есть.
       const cleaned = slim.map(it => ({ name: it.name, unit: it.unit || '', unit_price: Number(it.unitPrice) || 0 }));
       if (cleaned.length) window.SB.upsert('kh_user_catalog', cleaned, 'name,unit').catch(e => console.warn('cloud user_catalog:', e));
     }
@@ -101,6 +105,7 @@ function parseUserCatalogRows(rows) {
   const hasHeader = nameIdx !== -1 && priceIdx !== -1;
   const start = hasHeader ? 1 : 0;
   const out = [];
+  let currentSection = null; // 'work' | 'material', контекст раздела файла
   for (let i = start; i < rows.length; i++) {
     const row = rows[i];
     if (!row) continue;
@@ -120,9 +125,14 @@ function parseUserCatalogRows(rows) {
       }
     }
     name = (name || "").trim();
+    // Заголовок-раздел (нет цены либо помечен как section) → обновляем контекст.
+    if (row._sectionLike || isNaN(price) || price <= 0) {
+      const cat = detectSectionCategory(cells.join(' '));
+      if (cat) currentSection = cat;
+      continue;
+    }
     if (!name || name.length < 2) continue;
-    if (isNaN(price) || price <= 0) continue;
-    out.push({ name, unit: unit.trim(), unitPrice: price });
+    out.push({ name, unit: unit.trim(), unitPrice: price, category: currentSection || classifyItem(name, unit) });
   }
   return out;
 }
@@ -144,10 +154,11 @@ function useEstimate() {
         const mapped = remote.map(it => ({
           name: String(it.name), unit: String(it.unit || ''),
           unitPrice: Number(it.unit_price) || 0,
+          category: it.category === 'work' ? 'work' : (it.category === 'material' ? 'material' : classifyItem(it.name, it.unit)),
           tokenSet: new Set(tokenize(it.name)),
         }));
         setUserCatalog(mapped);
-        try { localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(mapped.map(({ name, unit, unitPrice }) => ({ name, unit, unitPrice })))); } catch (_) {}
+        try { localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(mapped.map(({ name, unit, unitPrice, category }) => ({ name, unit, unitPrice, category })))); } catch (_) {}
       }
     }).catch(e => console.warn('cloud load user_catalog:', e));
     window.SB.selectAll('kh_vendor_prices', 'select=id,name,unit,unit_price').then(remote => {
@@ -155,6 +166,7 @@ function useEstimate() {
       setVendorCatalog(remote.map(it => ({
         name: String(it.name || ''), unit: String(it.unit || ''),
         unitPrice: Number(it.unit_price) || 0,
+        category: classifyItem(it.name, it.unit),
       })));
     }).catch(e => console.warn('cloud load vendor_prices:', e));
     window.SB.selectAll('kh_hidden').then(remote => {
@@ -285,6 +297,7 @@ function useEstimate() {
       qty: row.qty || 1,
       notFound: !!row.notFound,
       source: row.source || (row.notFound ? 'none' : 'local'),
+      category: row.category || classifyItem(row.name, row.unit),
       url: row.url || '',
       expanded: false,
       candidates: null,
@@ -370,7 +383,8 @@ function useEstimate() {
         unit: c.unit || r.unit || 'шт.',
         unitPrice: c.price,
         url: c.url || '',
-        source: KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit',
+        source: c.source === 'store' ? 'store' : (KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit'),
+        sourceLabel: c.sourceLabel || null,
         notFound: false,
         expanded: false,
       };
@@ -386,19 +400,35 @@ function useEstimate() {
   }, []);
 
   const importRows = React.useCallback((rows) => {
-    let imported = 0, notFoundCount = 0, skipped = 0;
+    let imported = 0, notFoundCount = 0, skipped = 0, works = 0, materials = 0;
     const additions = [];
+    let currentSection = null; // контекст раздела файла: 'work' | 'material'
+    const rowText = (row) => (Array.isArray(row) ? row : []).map(c => String(c == null ? '' : c)).join(' ');
     for (const row of rows) {
-      if (row && (row._colored || row._sectionLike)) { skipped++; continue; }
+      if (row && row._sectionLike) {
+        const cat = detectSectionCategory(rowText(row));
+        if (cat) currentSection = cat;
+        skipped++; continue;
+      }
+      if (row && row._colored) { skipped++; continue; }
       const { name, qty } = extractNameAndQty(row);
       const reason = skipReason(name);
-      if (reason) { skipped++; continue; }
+      if (reason) {
+        // Текстовый заголовок-раздел («Работы», «Материалы») тоже обновляет контекст.
+        const cat = detectSectionCategory(rowText(row));
+        if (cat) currentSection = cat;
+        skipped++; continue;
+      }
       const q = isFinite(qty) && qty > 0 ? qty : 1;
       const match = fuzzyFind(name, [...visibleUserCatalog, ...visibleCatalog], visibleDdcCatalog);
+      const itemName = match ? match.name : name;
+      const itemUnit = match ? match.unit : '';
+      const category = currentSection || classifyItem(itemName, itemUnit);
+      if (category === 'work') works++; else materials++;
       if (match) {
-        additions.push({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source });
+        additions.push({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source, category });
       } else {
-        additions.push({ name, unit: '', unitPrice: 0, qty: q, notFound: true, source: 'none' });
+        additions.push({ name, unit: '', unitPrice: 0, qty: q, notFound: true, source: 'none', category });
         notFoundCount++;
       }
       imported++;
@@ -411,6 +441,7 @@ function useEstimate() {
           id: nextIdRef.current++,
           name: a.name, unit: a.unit || '', unitPrice: a.unitPrice || 0, qty: a.qty || 1,
           notFound: !!a.notFound, source: a.source || (a.notFound ? 'none' : 'local'),
+          category: a.category || 'material',
           url: '', expanded: false, candidates: null, candidatesLoading: false, candidatesError: null,
         });
       }
@@ -421,7 +452,7 @@ function useEstimate() {
         return an !== bn ? an - bn : a[1] - b[1];
       }).map(p => p[0]);
     });
-    return { imported, notFoundCount, skipped };
+    return { imported, notFoundCount, skipped, works, materials };
   }, [visibleCatalog, visibleDdcCatalog, visibleUserCatalog]);
 
   const handleFile = React.useCallback((file) => {
@@ -442,8 +473,8 @@ function useEstimate() {
     });
 
     const report = (prefix) => (rows) => {
-      const { imported, notFoundCount, skipped } = importRows(rows);
-      setStatus({ kind: "done", text: `${prefix}: загружено ${imported}, без цены ${notFoundCount}, пропущено ${skipped}` });
+      const { imported, notFoundCount, skipped, works, materials } = importRows(rows);
+      setStatus({ kind: "done", text: `${prefix}: загружено ${imported} (работ ${works}, материалов ${materials}), без цены ${notFoundCount}, пропущено ${skipped}` });
     };
 
     if (ext === 'csv' || mime === 'text/csv') {
@@ -520,7 +551,8 @@ function useEstimate() {
                 name: c.name || r.name,
                 unitPrice: c.price,
                 unit: c.unit || r.unit || 'шт.',
-                source: KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit',
+                source: c.source === 'store' ? 'store' : (KNOWN_SOURCES.has(c.city) ? c.city : 'kolorit'),
+                sourceLabel: c.sourceLabel || null,
                 url: c.url || '',
                 notFound: false,
                 expanded: false,
@@ -777,6 +809,7 @@ function useEstimate() {
       qty: 1,
       notFound: true,
       source: 'none',
+      category: 'material',
       url: '',
       expanded: false,
       candidates: null,
@@ -785,7 +818,7 @@ function useEstimate() {
     }, ...prev]);
   }, []);
 
-  const addCatalogItem = React.useCallback(({ name, unit, unitPrice }) => {
+  const addCatalogItem = React.useCallback(({ name, unit, unitPrice, category }) => {
     setUserCatalog(prev => {
       const key = (s) => `${s.name}|${s.unit}`;
       const filtered = prev.filter(it => key(it) !== key({ name, unit }));
@@ -793,6 +826,7 @@ function useEstimate() {
         name: String(name).trim(),
         unit: String(unit || "").trim(),
         unitPrice: Number(unitPrice) || 0,
+        category: category === 'work' ? 'work' : (category === 'material' ? 'material' : classifyItem(name, unit)),
         tokenSet: new Set(tokenize(name)),
       };
       const next = [item, ...filtered];
@@ -887,6 +921,7 @@ function useEstimate() {
         for (const it of items) {
           map.set(`${it.name}|${it.unit}`, {
             name: it.name, unit: it.unit, unitPrice: it.unitPrice,
+            category: it.category || classifyItem(it.name, it.unit),
             tokenSet: new Set(tokenize(it.name)),
           });
         }
@@ -894,7 +929,8 @@ function useEstimate() {
         saveUserCatalog(next);
         return next;
       });
-      return { added: items.length, skipped: Math.max(0, rows.length - items.length) };
+      const works = items.filter(it => it.category === 'work').length;
+      return { added: items.length, works, materials: items.length - works, skipped: Math.max(0, rows.length - items.length) };
     };
 
     const readBuffer = () => new Promise((resolve, reject) => {

@@ -86,6 +86,7 @@ function PriceCell({ item, est, onSaved }) {
 function KHDatabaseView({ est }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState("all");
+  const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "" });
@@ -146,11 +147,14 @@ function KHDatabaseView({ est }) {
   const hiddenKeyOf = (it) => `${String(it.name || "").trim().toLowerCase()}|${String(it.unit || "").trim().toLowerCase()}`;
   const isHidden = (it) => hiddenCatalog.has(hiddenKeyOf(it));
 
+  const catOf = (it) => (it.category === 'work' || it.category === 'material')
+    ? it.category : classifyItem(it.name, it.unit);
   const merged = React.useMemo(() => [
-    ...userCatalog.map(it => ({ ...it, _kind: "user" })),
+    ...userCatalog.map(it => ({ ...it, _kind: "user", category: catOf(it) })),
     ...vendorRows.map(it => ({
       name: it.name, unit: it.unit || '',
       unitPrice: Number(it.unit_price) || 0,
+      category: classifyItem(it.name, it.unit),
       _kind: "vendor",
       _id: it.id,
       _vendorSlug: it.vendor_slug,
@@ -158,8 +162,8 @@ function KHDatabaseView({ est }) {
       _sourceFile: it.source_file || '',
       _updated: it.updated_at,
     })),
-    ...localCatalog.map(it => ({ ...it, _kind: "local" })),
-    ...ddcCatalog.map(it => ({ ...it, _kind: "ddc" })),
+    ...localCatalog.map(it => ({ ...it, _kind: "local", category: catOf(it) })),
+    ...ddcCatalog.map(it => ({ ...it, _kind: "ddc", category: catOf(it) })),
   ], [userCatalog, vendorRows, vendorMap, localCatalog, ddcCatalog]);
 
   const activeMerged = React.useMemo(() => merged.filter(it => !isHidden(it)), [merged, hiddenCatalog]);
@@ -169,9 +173,10 @@ function KHDatabaseView({ est }) {
     const q = query.trim().toLowerCase();
     let out = showHidden ? hiddenList : activeMerged;
     if (!showHidden && filter !== "all") out = out.filter(it => it._kind === filter);
+    if (!showHidden && catFilter !== "all") out = out.filter(it => (it.category || 'material') === catFilter);
     if (q) out = out.filter(it => (it.name || "").toLowerCase().includes(q));
     return out.slice(0, 500);
-  }, [activeMerged, hiddenList, query, filter, showHidden]);
+  }, [activeMerged, hiddenList, query, filter, catFilter, showHidden]);
 
   const totals = {
     all: activeMerged.length,
@@ -179,6 +184,8 @@ function KHDatabaseView({ est }) {
     vendor: activeMerged.filter(it => it._kind === 'vendor').length,
     local: localCatalog.filter(it => !isHidden(it)).length,
     ddc: ddcCatalog.filter(it => !isHidden(it)).length,
+    work: activeMerged.filter(it => (it.category || 'material') === 'work').length,
+    material: activeMerged.filter(it => (it.category || 'material') === 'material').length,
     hidden: hiddenList.length,
   };
 
@@ -192,6 +199,12 @@ function KHDatabaseView({ est }) {
     if (!name || !isFinite(price) || price < 0) return;
     est.actions.addCatalogItem({ name, unit, unitPrice: price });
     setAdding(false);
+  };
+
+  const toggleItemCat = (it) => {
+    if (it._kind !== 'user') return;
+    const newCat = (it.category === 'work') ? 'material' : 'work';
+    est.actions.addCatalogItem({ name: it.name, unit: it.unit, unitPrice: it.unitPrice, category: newCat });
   };
 
   const onUploadClick = () => fileRef.current && fileRef.current.click();
@@ -241,6 +254,19 @@ function KHDatabaseView({ est }) {
     >{label} · {count}</button>
   );
 
+  const CatPill = ({ id, label, count }) => (
+    <button
+      onClick={() => setCatFilter(id)}
+      className="kh-pill"
+      style={{
+        cursor: "pointer", border: "1px solid var(--rule)",
+        background: catFilter === id ? "var(--moss, #4f6f52)" : "var(--paper-card)",
+        color: catFilter === id ? "#fff" : "var(--ink-2)",
+        fontWeight: catFilter === id ? 600 : 400,
+      }}
+    >{label} · {count}</button>
+  );
+
   return (
     <div className="col" style={{ gap: 14 }}>
       <input
@@ -279,6 +305,15 @@ function KHDatabaseView({ est }) {
               title="Показать скрытые позиции"
             >Скрыто · {totals.hidden}</button>
           )}
+        </div>
+      )}
+
+      {!showHidden && (
+        <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span className="eyebrow" style={{ marginRight: 2 }}>Категория</span>
+          <CatPill id="all" label="Все" count={totals.all} />
+          <CatPill id="work" label="Работы" count={totals.work} />
+          <CatPill id="material" label="Материалы" count={totals.material} />
         </div>
       )}
 
@@ -352,6 +387,7 @@ function KHDatabaseView({ est }) {
         <thead>
           <tr>
             <th style={{ width: 70 }}>Источник</th>
+            <th style={{ width: 92 }}>Категория</th>
             <th>Наименование</th>
             <th style={{ width: 80 }}>Ед.</th>
             <th className="num" style={{ width: 130 }}>Цена</th>
@@ -365,6 +401,25 @@ function KHDatabaseView({ est }) {
             return (
               <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
                 <td><span style={{ color: badge.color, fontSize: 11, fontWeight: 600, letterSpacing: ".04em" }}>{badge.label}</span></td>
+                <td>
+                  {(() => {
+                    const c = (it.category === 'work') ? 'work' : 'material';
+                    const editable = it._kind === 'user' && !showHidden;
+                    return (
+                      <span
+                        onClick={editable ? () => toggleItemCat(it) : undefined}
+                        title={editable ? 'Нажмите, чтобы сменить категорию' : (c === 'work' ? 'Работа' : 'Материал')}
+                        style={{
+                          fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
+                          border: "1px solid " + (c === 'work' ? "var(--moss, #4f6f52)" : "var(--rule)"),
+                          background: c === 'work' ? "var(--moss, #4f6f52)" : "transparent",
+                          color: c === 'work' ? "#fff" : "var(--ink-3)",
+                          cursor: editable ? "pointer" : "default", whiteSpace: "nowrap",
+                        }}
+                      >{c === 'work' ? 'Работа' : 'Материал'}</span>
+                    );
+                  })()}
+                </td>
                 <td>{it.name}</td>
                 <td>{it.unit || "—"}</td>
                 <td className="num">
@@ -397,6 +452,7 @@ function KHDatabaseView({ est }) {
                         onClick={() => est.actions.addRow({
                           name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: 1,
                           notFound: false, source: it._kind === "ddc" ? "ddc" : (it._kind === "user" ? "manual" : "local"),
+                          category: it.category,
                         })}
                       >+ В смету</button>
                     )}

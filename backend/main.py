@@ -1092,7 +1092,7 @@ async def debug_home():
 # ===========================================================================
 
 import json as _json
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, quote
 
 
 class StoreDetectSample(BaseModel):
@@ -1339,3 +1339,169 @@ async def auto_detect(url: str = Query(..., min_length=4, max_length=2000)):
         samples=uniq,
         note=note,
     )
+
+
+# ===========================================================================
+# Generic catalog search for user-added stores.
+# Given a store base URL and a query, find the store's search results page
+# (auto-discovered from its search form / common URL templates, or a
+# user-supplied template containing {q}) and extract product cards
+# generically. Used by the "Магазины" tab so active stores join the КП price
+# search.
+# ===========================================================================
+
+_SEARCH_INPUT_NAMES = re.compile(r"^(q|s|search|query|text|keyword|term|phrase)$", re.I)
+_COMMON_SEARCH_TEMPLATES = (
+    "/search/?q={q}",
+    "/catalog/?q={q}",
+    "/search?q={q}",
+    "/search/?text={q}",
+    "/search/?query={q}",
+    "/?s={q}",
+)
+_PRICE_RE = re.compile(r"\d[\d\s\u00a0\u2009]{0,9}(?:[.,]\d{1,2})?\s*(?:₽|руб)")
+
+
+class StoreSearchResponse(BaseModel):
+    store: str
+    query: str
+    search_url: Optional[str] = None
+    strategy_used: str         # microdata | heuristic | none
+    results: list[PriceItem] = []
+    trail: Optional[list[str]] = None
+
+
+def _discover_search_templates(soup, base: str) -> list[str]:
+    """Build candidate search-URL templates ({q} placeholder) from the page's
+    search form, then append common fallbacks. Order = most specific first."""
+    templates: list[str] = []
+    for form in soup.find_all("form"):
+        inp = form.find("input", attrs={"type": "search"})
+        if not inp:
+            inp = form.find("input", attrs={"name": _SEARCH_INPUT_NAMES})
+        if not inp or not inp.get("name"):
+            continue
+        action = urljoin(base, form.get("action") or base)
+        sep = "&" if "?" in action else "?"
+        templates.append(f"{action}{sep}{inp['name']}={{q}}")
+    for tmpl in _COMMON_SEARCH_TEMPLATES:
+        templates.append(urljoin(base, tmpl))
+    # de-dup preserving order
+    seen: set = set()
+    out: list[str] = []
+    for t in templates:
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
+def _extract_catalog_cards(soup, base_url: str, limit: int) -> tuple[list[PriceItem], str]:
+    """Pull product cards from a catalog/search page. Microdata first, then a
+    DOM heuristic (price text → nearest ancestor containing a titled link)."""
+    out: list[PriceItem] = []
+    seen: set = set()
+
+    # Microdata Product scopes — most reliable.
+    for scope in soup.select('[itemtype*="Product"]'):
+        pr = scope.select_one('[itemprop="price"], [itemprop="lowPrice"]')
+        nm = scope.select_one('[itemprop="name"]')
+        if not pr or not nm:
+            continue
+        price = _parse_price(pr.get("content") or pr.get_text(" ", strip=True))
+        if price is None or price <= 0:
+            continue
+        name = (nm.get("content") or nm.get_text(" ", strip=True)).strip()
+        if not name or name.lower() in seen:
+            continue
+        a = scope.find("a", href=True)
+        url_ = urljoin(base_url, a["href"]) if a else None
+        seen.add(name.lower())
+        out.append(PriceItem(name=name[:200], price=price, city="store", url=url_))
+        if len(out) >= limit:
+            return out, "microdata"
+    if out:
+        return out, "microdata"
+
+    # Heuristic: walk up from each visible price to a card-like container.
+    for text_node in soup.find_all(string=_PRICE_RE):
+        m = _PRICE_RE.search(text_node)
+        if not m:
+            continue
+        price = _parse_price(m.group(0))
+        if price is None or price < 1:
+            continue
+        node = text_node.parent
+        name = href = None
+        for _ in range(6):
+            if node is None:
+                break
+            a = node.find("a", href=True) if hasattr(node, "find") else None
+            if a:
+                txt = a.get_text(" ", strip=True)
+                if 5 <= len(txt) <= 160:
+                    name, href = txt, a.get("href")
+                    break
+            node = node.parent
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        out.append(PriceItem(
+            name=name[:200], price=price, city="store",
+            url=urljoin(base_url, href) if href else None,
+        ))
+        if len(out) >= limit:
+            break
+    return out, ("heuristic" if out else "none")
+
+
+@app.get("/auto/search", response_model=StoreSearchResponse)
+async def auto_search(
+    store: str = Query(..., min_length=4, max_length=2000, description="Базовый URL магазина"),
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(6, ge=1, le=20),
+    search_url: Optional[str] = Query(None, description="Шаблон поиска с {q} (необязательно)"),
+):
+    """Search an arbitrary store's catalog and return product cards."""
+    if not re.match(r"^https?://", store, re.I):
+        store = "https://" + store
+    parsed = urlparse(store)
+    if not parsed.netloc:
+        raise HTTPException(400, "invalid store url")
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    trail: list[str] = []
+
+    if search_url:
+        tmpl = search_url
+        if "{q}" not in tmpl:
+            sep = "&" if "?" in tmpl else "?"
+            tmpl = f"{tmpl}{sep}q={{q}}"
+        templates = [tmpl]
+    else:
+        try:
+            home = await _generic_fetch(base)
+        except Exception as e:
+            trail.append(f"home fetch failed: {e!s}"[:140])
+            home = ""
+        templates = _discover_search_templates(BeautifulSoup(home, "lxml"), base) if home else [
+            urljoin(base, t) for t in _COMMON_SEARCH_TEMPLATES
+        ]
+
+    for tmpl in templates[:6]:
+        url = tmpl.replace("{q}", quote(query))
+        try:
+            html = await _generic_fetch(url)
+        except Exception as e:
+            trail.append(f"{url} -> fetch error: {e!s}"[:120])
+            continue
+        cards, strat = _extract_catalog_cards(BeautifulSoup(html, "lxml"), url, limit)
+        trail.append(f"{url} -> {len(cards)} cards ({strat})")
+        if cards:
+            return StoreSearchResponse(
+                store=base, query=query, search_url=url,
+                strategy_used=strat, results=cards, trail=trail,
+            )
+
+    return StoreSearchResponse(store=base, query=query, search_url=None,
+                               strategy_used="none", results=[], trail=trail)
