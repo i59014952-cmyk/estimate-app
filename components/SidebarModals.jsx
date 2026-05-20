@@ -1298,7 +1298,6 @@ function KHTemplatesView({ est, onClose }) {
   const [editingTplId, setEditingTplId] = React.useState(null);
   const [itemDraft, setItemDraft] = React.useState({ tplId: null, name: '', unit: '', qty: '', unitPrice: '' });
   const [dbPicker, setDbPicker] = React.useState({ tplId: null, query: '', filter: 'all' });
-  const [catMenu, setCatMenu] = React.useState(null); // id позиции с открытым выбором категории
   const [uploadStatus, setUploadStatus] = React.useState(null);
   const fileRef = React.useRef(null);
   const tplFormFileRef = React.useRef(null);
@@ -1426,7 +1425,6 @@ function KHTemplatesView({ est, onClose }) {
     persist(list.map(t => t.id === tplId
       ? { ...t, items: (t.items || []).map((it, k) => k === idx ? { ...it, category: cat } : it) }
       : t));
-    setCatMenu(null);
   };
 
   const addItemFromCatalog = (tplId, catItem) => {
@@ -1859,29 +1857,20 @@ function KHTemplatesView({ est, onClose }) {
                       return (
                       <tr key={it.id || rowKey}>
                         <td>
-                          {catMenu === rowKey ? (
-                            <span style={{ display: 'inline-flex', gap: 4 }}>
-                              {[['work', 'Работа'], ['material', 'Материал']].map(([id, label]) => (
-                                <button key={id} type="button" onClick={() => setItemCatAt(t.id, ii, id)}
-                                  style={{
-                                    cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
-                                    border: '1px solid ' + (c === id ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
-                                    background: c === id ? 'var(--moss, #4f6f52)' : 'var(--paper)',
-                                    color: c === id ? '#fff' : 'var(--ink-2)',
-                                  }}>{label}</button>
-                              ))}
-                            </span>
-                          ) : (
-                            <span
-                              onClick={() => setCatMenu(rowKey)}
-                              title="Нажмите, чтобы сменить категорию"
-                              style={{
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', cursor: 'pointer',
-                                border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
-                                background: c === 'work' ? 'var(--moss, #4f6f52)' : 'transparent',
-                                color: c === 'work' ? '#fff' : 'var(--ink-3)',
-                              }}>{c === 'work' ? 'Работа' : 'Материал'}</span>
-                          )}
+                          <select
+                            value={c}
+                            onChange={(e) => setItemCatAt(t.id, ii, e.target.value)}
+                            title="Категория позиции"
+                            style={{
+                              fontSize: 12, fontWeight: 600, padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
+                              border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                              background: c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--paper)',
+                              color: c === 'work' ? '#fff' : 'var(--ink-2)',
+                            }}
+                          >
+                            <option value="work">Работа</option>
+                            <option value="material">Материал</option>
+                          </select>
                         </td>
                         <td>{it.name}</td>
                         <td>
