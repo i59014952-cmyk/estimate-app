@@ -252,8 +252,8 @@ function HeroBlock({ est, meta, updateMeta, onOpenDatabase }) {
         gap: 16, flexWrap: "wrap",
       }}>
         <div className="col gap-2" style={{ minWidth: 0 }}>
-          <div className="eyebrow">База данных</div>
-          <div className="mono tiny muted">Каталог позиций — загрузка и добавление</div>
+          <div className="serif" style={{ fontSize: 26, lineHeight: 1, letterSpacing: "-0.01em", fontWeight: 600, color: "var(--ink)" }}>База данных</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--ink-2)" }}>Каталог позиций — загрузка и добавление</div>
         </div>
         <div className="row center kh-hero__db-actions" style={{ gap: 10, flexWrap: "wrap" }}>
           {dbUpload && (
