@@ -11,3 +11,5 @@ services:
         value: "*"
       - key: LEMANA_HEADLESS
         value: "0"
+      - key: LEMANA_CHROME_MAIN
+        value: "148"
