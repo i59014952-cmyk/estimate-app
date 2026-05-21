@@ -22,8 +22,9 @@ services:
       retries: 3
       start_period: 40s
 
-  # Reverse proxy with automatic HTTPS (Let's Encrypt). Needs DOMAIN set to a
-  # domain whose A record points at this server, plus ports 80/443 reachable.
+  # Reverse proxy with automatic HTTPS (Let's Encrypt). Domains are listed in
+  # the Caddyfile; their A records must point at this server and ports 80/443
+  # must be reachable for the ACME challenge.
   caddy:
     image: caddy:2-alpine
     container_name: caddy
@@ -33,8 +34,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      DOMAIN: "${DOMAIN:?set DOMAIN in .env, e.g. DOMAIN=petrovich-proxy.ru}"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
