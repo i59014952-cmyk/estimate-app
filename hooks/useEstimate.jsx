@@ -118,17 +118,32 @@ function loadUserCatalog() {
   } catch (_) { return []; }
 }
 
-function saveUserCatalog(items) {
+function persistUserCatalogLocal(items) {
   try {
     const slim = items.map(({ name, unit, unitPrice, category }) => ({ name, unit, unitPrice, category: category || 'material' }));
     localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(slim));
-    if (window.SB) {
-      // category пока не отправляем в облако — в таблице kh_user_catalog может
-      // не быть такой колонки, и весь upsert упал бы. Локально категория есть.
-      const cleaned = slim.map(it => ({ name: it.name, unit: it.unit || '', unit_price: Number(it.unitPrice) || 0 }));
-      if (cleaned.length) window.SB.upsert('kh_user_catalog', cleaned, 'name,unit').catch(e => console.warn('cloud user_catalog:', e));
-    }
   } catch (_) {}
+}
+
+// category пока не отправляем в облако — в таблице kh_user_catalog может не быть
+// такой колонки, и весь upsert упал бы. Локально категория есть.
+function userCatalogCloudRows(items) {
+  return items.map(it => ({ name: it.name, unit: it.unit || '', unit_price: Number(it.unitPrice) || 0 }));
+}
+
+// Push the given catalog rows to the cloud. Returns the upsert promise so
+// callers that need to know whether the DB write succeeded (e.g. file upload)
+// can await it; fire-and-forget callers ignore the return value.
+function pushUserCatalogCloud(items) {
+  if (!window.SB) return Promise.resolve();
+  const cleaned = userCatalogCloudRows(items);
+  if (!cleaned.length) return Promise.resolve();
+  return window.SB.upsert('kh_user_catalog', cleaned, 'name,unit');
+}
+
+function saveUserCatalog(items) {
+  persistUserCatalogLocal(items);
+  pushUserCatalogCloud(items).catch(e => console.warn('cloud user_catalog:', e));
 }
 
 function parseUserCatalogRows(rows) {
@@ -982,10 +997,12 @@ function useEstimate() {
     const ext = (file.name.toLowerCase().split('.').pop() || '').trim();
     const mime = (file.type || '').toLowerCase();
 
-    const ingest = (rows) => {
+    // Merge parsed rows into the catalog locally and return the new items so the
+    // caller can push them to the cloud and await the result.
+    const ingestLocal = (rows) => {
       const items = parseUserCatalogRows(rows);
       if (items.length === 0) {
-        return { added: 0, skipped: rows.length };
+        return { items: [], added: 0, works: 0, materials: 0, skipped: rows.length };
       }
       setUserCatalog(prev => {
         // Дедуп по нормализованному ключу: дубли «один в один» обновляют цену,
@@ -1000,11 +1017,25 @@ function useEstimate() {
           });
         }
         const next = Array.from(map.values());
-        saveUserCatalog(next);
+        persistUserCatalogLocal(next);
         return next;
       });
       const works = items.filter(it => it.category === 'work').length;
-      return { added: items.length, works, materials: items.length - works, skipped: Math.max(0, rows.length - items.length) };
+      return { items, added: items.length, works, materials: items.length - works, skipped: Math.max(0, rows.length - items.length) };
+    };
+
+    // Save locally, then await the cloud write so a failed DB save (expired
+    // token, backend down, …) surfaces to the user instead of being swallowed.
+    const ingest = async (rows) => {
+      const res = ingestLocal(rows);
+      if (res.items.length) {
+        try {
+          await pushUserCatalogCloud(res.items);
+        } catch (err) {
+          throw new Error(`позиции добавлены локально, но не сохранены в базе: ${err.message || err}`);
+        }
+      }
+      return { added: res.added, works: res.works, materials: res.materials, skipped: res.skipped };
     };
 
     const readBuffer = () => new Promise((resolve, reject) => {
@@ -1017,10 +1048,7 @@ function useEstimate() {
     if (ext === 'csv' || mime === 'text/csv') {
       return new Promise((resolve, reject) => {
         const r = new FileReader();
-        r.onload = () => {
-          try { resolve(ingest(parseCsv(r.result))); }
-          catch (err) { reject(err); }
-        };
+        r.onload = () => { ingest(parseCsv(r.result)).then(resolve, reject); };
         r.onerror = () => reject(new Error('не удалось прочитать файл'));
         r.readAsText(file, 'utf-8');
       });
