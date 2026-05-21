@@ -257,14 +257,15 @@ function KHDatabaseView({ est, autoAdd }) {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length) return;
-    let totalAdded = 0, totalSkipped = 0;
+    let totalAdded = 0, totalUpdated = 0, totalSkipped = 0;
     const errors = [];
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       setUploadStatus({ kind: "busy", text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
       try {
-        const { added, skipped } = await est.actions.uploadCatalogFile(f);
+        const { added, updated, skipped } = await est.actions.uploadCatalogFile(f);
         totalAdded += added;
+        totalUpdated += updated || 0;
         totalSkipped += skipped;
       } catch (err) {
         errors.push(`${f.name}: ${err.message || err}`);
@@ -274,8 +275,9 @@ function KHDatabaseView({ est, autoAdd }) {
       setUploadStatus({ kind: "error", text: `Ошибки: ${errors.join('; ')}` });
       setTimeout(() => setUploadStatus(null), 8000);
     } else {
-      setUploadStatus({ kind: "ok", text: `Файлов: ${files.length}. Добавлено ${totalAdded}, пропущено ${totalSkipped}` });
-      setTimeout(() => setUploadStatus(null), 5000);
+      const upd = totalUpdated ? `, обновлено ${totalUpdated}` : '';
+      setUploadStatus({ kind: "ok", text: `Файлов: ${files.length}. Новых ${totalAdded}${upd}, пропущено ${totalSkipped}` });
+      setTimeout(() => setUploadStatus(null), 6000);
     }
   };
 

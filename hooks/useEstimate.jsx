@@ -998,19 +998,25 @@ function useEstimate() {
     const mime = (file.type || '').toLowerCase();
 
     // Merge parsed rows into the catalog locally and return the new items so the
-    // caller can push them to the cloud and await the result.
+    // caller can push them to the cloud and await the result. Also reports how
+    // many rows are genuinely new vs. updates of existing entries (deduped by
+    // name+unit), so the UI can tell the user the truth instead of just "added N".
     const ingestLocal = (rows) => {
       const items = parseUserCatalogRows(rows);
       if (items.length === 0) {
-        return { items: [], added: 0, works: 0, materials: 0, skipped: rows.length };
+        return { items: [], parsed: 0, fresh: 0, updated: 0, skipped: rows.length };
       }
+      let fresh = 0, updated = 0;
       setUserCatalog(prev => {
         // Дедуп по нормализованному ключу: дубли «один в один» обновляют цену,
         // а не добавляются заново.
         const map = new Map();
         for (const it of prev) map.set(catalogKey(it.name, it.unit), it);
+        fresh = 0; updated = 0;
         for (const it of items) {
-          map.set(catalogKey(it.name, it.unit), {
+          const k = catalogKey(it.name, it.unit);
+          if (map.has(k)) updated++; else fresh++;
+          map.set(k, {
             name: it.name, unit: it.unit, unitPrice: it.unitPrice,
             category: it.category || classifyItem(it.name, it.unit),
             tokenSet: new Set(tokenize(it.name)),
@@ -1020,8 +1026,7 @@ function useEstimate() {
         persistUserCatalogLocal(next);
         return next;
       });
-      const works = items.filter(it => it.category === 'work').length;
-      return { items, added: items.length, works, materials: items.length - works, skipped: Math.max(0, rows.length - items.length) };
+      return { items, parsed: items.length, fresh, updated, skipped: Math.max(0, rows.length - items.length) };
     };
 
     // Save locally, then await the cloud write so a failed DB save (expired
@@ -1035,7 +1040,8 @@ function useEstimate() {
           throw new Error(`позиции добавлены локально, но не сохранены в базе: ${err.message || err}`);
         }
       }
-      return { added: res.added, works: res.works, materials: res.materials, skipped: res.skipped };
+      // `added` keeps its name for callers but now means genuinely-new rows.
+      return { added: res.fresh, updated: res.updated, parsed: res.parsed, skipped: res.skipped };
     };
 
     const readBuffer = () => new Promise((resolve, reject) => {

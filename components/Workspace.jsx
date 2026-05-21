@@ -204,21 +204,22 @@ function HeroBlock({ est, meta, updateMeta, onOpenDatabase }) {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length) return;
-    let added = 0, skipped = 0;
+    let added = 0, updated = 0, skipped = 0;
     const errors = [];
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       setDbUpload({ kind: "busy", text: `Загрузка ${i + 1}/${files.length}: ${f.name}…` });
       try {
         const r = await est.actions.uploadCatalogFile(f);
-        added += r.added; skipped += r.skipped;
+        added += r.added; updated += r.updated || 0; skipped += r.skipped;
       } catch (err) {
         errors.push(`${f.name}: ${err.message || err}`);
       }
     }
+    const upd = updated ? `, обновлено ${updated}` : '';
     setDbUpload(errors.length
       ? { kind: "error", text: `Ошибки: ${errors.join('; ')}` }
-      : { kind: "ok", text: `Файлов: ${files.length}. Добавлено в базу ${added}, пропущено ${skipped}` });
+      : { kind: "ok", text: `Файлов: ${files.length}. Новых ${added}${upd}, пропущено ${skipped}` });
     setTimeout(() => setDbUpload(null), 6000);
   };
 
