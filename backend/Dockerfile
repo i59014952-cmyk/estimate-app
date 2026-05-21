@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 COPY lemana_source.py .
+COPY db.py .
+COPY auth.py .
+COPY create_user.py .
 
 ENV PORT=8000
 # Run Chrome "headed" under a virtual display: headless trips Qrator on Lemana.

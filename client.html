@@ -54,11 +54,8 @@
 <div id="saved" class="saved">Сохранено</div>
 
 <script>
-const SB_URL = 'https://jvqogyyjlrwbjjotxvue.supabase.co';
-const SB_KEY = 'sb_publishable_Yud_fsFEOxUAiPboEqVO1g_17BKYlDh';
+const API_BASE = 'https://api.sme-ta.ru';
 const HEADERS = {
-  apikey: SB_KEY,
-  Authorization: 'Bearer ' + SB_KEY,
   'Content-Type': 'application/json',
 };
 
@@ -79,20 +76,19 @@ async function fetchJSON(url, opts) {
 }
 
 async function loadEstimate() {
-  // RPC keyed by the secret token; the table itself is closed to anon.
-  const r = await fetchJSON(`${SB_URL}/rest/v1/rpc/kh_client_estimate_get`, {
+  // Public endpoint keyed by the secret token; the table stays private.
+  const r = await fetchJSON(`${API_BASE}/public/client/get`, {
     method: 'POST',
-    body: JSON.stringify({ p_token: token }),
+    body: JSON.stringify({ token }),
   });
   if (r === null || r === undefined) return null; // link not found
   return Array.isArray(r) ? r : [];
 }
 
 async function saveEstimate() {
-  await fetchJSON(`${SB_URL}/rest/v1/rpc/kh_client_estimate_save`, {
+  await fetchJSON(`${API_BASE}/public/client/save`, {
     method: 'POST',
-    headers: { ...HEADERS, Prefer: 'return=minimal' },
-    body: JSON.stringify({ p_token: token, p_rows: rows }),
+    body: JSON.stringify({ token, rows }),
   });
   flashSaved();
 }
