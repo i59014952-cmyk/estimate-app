@@ -12,6 +12,7 @@ services:
       PORT: "8000"
       ALLOWED_ORIGINS: "*"
       LEMANA_HEADLESS: "0"
+      LEMANA_TIMEOUT_S: "90"
       DEFAULT_CITY: "moscow"
     # Browsers (Chromium + Chrome) need extra shared memory or they crash.
     shm_size: "1gb"
