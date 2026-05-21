@@ -131,7 +131,7 @@ function KHDatabaseView({ est, autoAdd }) {
       }
     }).catch(e => {
       console.error('[KHDatabase] cloud vendor prices error:', e);
-      alert('Не удалось загрузить КП подрядчиков:\n' + (e.message || e) + '\n\nПроверьте, что SQL-скрипт прогнан в Supabase.');
+      alert('Не удалось загрузить КП подрядчиков:\n' + (e.message || e) + '\n\nЕсли ошибка про токен — выйдите и войдите заново.');
     });
     return () => { cancelled = true; };
   }, [refreshTick]);
