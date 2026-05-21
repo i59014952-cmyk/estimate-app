@@ -33,7 +33,9 @@ services:
   # created (docker-entrypoint-initdb.d). To re-apply later, run it by hand:
   #   docker compose exec -T db psql -U kh -d kubhouse < db/schema.sql
   db:
-    image: postgres:16-alpine
+    # AWS ECR Public mirror of the official image — avoids Docker Hub's
+    # unauthenticated pull rate limit (postgres:16-alpine is the same image).
+    image: public.ecr.aws/docker/library/postgres:16-alpine
     container_name: kh-postgres
     restart: unless-stopped
     environment:
