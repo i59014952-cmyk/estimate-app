@@ -75,7 +75,8 @@ def dismiss_overlays(driver, wait_seconds: int = 10) -> None:
     ]
 
     end_time = time.time() + wait_seconds
-    idle_rounds = 0                                 # счётчик пустых итераций подряд
+    clicked_ever = False                            # был ли хоть один успешный клик
+    idle_after_click = 0                            # пустых итераций ПОСЛЕ первого клика (для раннего выхода)
 
     while time.time() < end_time:
         clicked_now = False
@@ -93,18 +94,21 @@ def dismiss_overlays(driver, wait_seconds: int = 10) -> None:
                         el.click()
                     print(f"Закрыли оверлей: {name}")
                     clicked_now = True
-                    time.sleep(0.5)                 # даём DOM перерисоваться и появиться следующему
+                    clicked_ever = True
+                    time.sleep(0.5)                 # даём DOM перерисоваться и появиться следующему оверлею
                     break
                 except Exception:
                     continue
 
         if clicked_now:
-            idle_rounds = 0                         # сброс: после клика ждём ещё, вдруг придёт куки
-        else:
-            idle_rounds += 1
-            if idle_rounds >= 3:                    # ~0.75 сек тишины -- выходим, больше ничего не появится
+            idle_after_click = 0                    # сброс после клика
+        elif clicked_ever:
+            idle_after_click += 1
+            if idle_after_click >= 3:               # 3 пустые итерации после клика = больше ничего не придёт
                 break
             time.sleep(0.25)
+        else:
+            time.sleep(0.25)                        # ничего ещё не кликнули -- ждём появления первого оверлея до wait_seconds
 
 
 def perform_search(driver, query: str = SEARCH_QUERY) -> None:
@@ -325,8 +329,14 @@ def write_csv(rows: list[dict], path: str) -> None:
 
 
 def main():
-    driver = uc.Chrome(version_main=148)            # пиним под установленный Chrome 148
+    # pageLoadStrategy="eager" -- driver.get возвращается на DOMContentLoaded,
+    # не ждёт всю аналитику/рекламу. На тяжёлом Next.js даёт 2-3x ускорение,
+    # а JSON-LD и DOM на этот момент уже есть.
+    opts = uc.ChromeOptions()
+    opts.page_load_strategy = "eager"
+    driver = uc.Chrome(options=opts, version_main=148)
     driver.set_window_size(1280, 900)
+    driver.set_page_load_timeout(45)                # жёсткий потолок на одну навигацию
 
     try:
         driver.get(BASE_DOMAIN + "/?fromRegion=506")  # главная (без __NEXT_DATA__)
@@ -335,11 +345,19 @@ def main():
 
         starting_url = driver.current_url
         perform_search(driver, SEARCH_QUERY)
-        WebDriverWait(driver, 20).until(            # ждём редирект на /search/
+        WebDriverWait(driver, 15).until(            # ждём редирект на /search/
             lambda d: d.current_url != starting_url
         )
         search_url = driver.current_url
         print(f"Search URL: {search_url}")
+
+        # ждём, пока SPA отрендерит хотя бы одну карточку (замена удалённого time.sleep(3))
+        try:
+            WebDriverWait(driver, 10).until(
+                lambda d: d.find_elements(By.CSS_SELECTOR, '[data-qa="product"]')
+            )
+        except Exception:
+            pass                                    # тайм-аут -- parse_search всё равно отработает, может вернёт []
 
         product_urls = parse_search(driver.page_source)
         print(f"Найдено товаров в выдаче: {len(product_urls)}")
@@ -352,6 +370,13 @@ def main():
             print(f"[{i}/{len(product_urls)}] {url}")
             try:
                 driver.get(url)
+                # ждём JSON-LD (он SSR'ом, должен быть сразу, но подстрахуемся)
+                try:
+                    WebDriverWait(driver, 8).until(
+                        lambda d: d.find_elements(By.CSS_SELECTOR, 'script[type="application/ld+json"]')
+                    )
+                except Exception:
+                    pass
                 row = parse_product(driver.page_source)
                 rows.append(row)
             except Exception as exc:
