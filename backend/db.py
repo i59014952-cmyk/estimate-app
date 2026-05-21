@@ -243,6 +243,15 @@ async def db_upsert(table: str, request: Request, _user: str = Depends(auth.requ
     for c in conflict:
         _check_col(cols, c)
 
+    # Lock rows in a deterministic order across concurrent requests. Two imports
+    # touching the same keys in different orders is the classic cause of
+    # "deadlock detected" (40P01); sorting by the conflict key makes every
+    # transaction take row locks in the same sequence.
+    if conflict and len(rows) > 1:
+        def _key(r):
+            return tuple(str(r.get(c, "")) for c in conflict)
+        rows = sorted(rows, key=_key)
+
     out: list[dict] = []
     async with pool().acquire() as conn:
         async with conn.transaction():

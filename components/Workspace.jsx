@@ -2,7 +2,7 @@
 
 const { useState, useMemo, useEffect } = React;
 
-function TopBar({ onTheme, theme, onMenu }) {
+function TopBar({ onTheme, theme, onMenu, onNew }) {
   return (
     <div className="row center between kh-topbar" style={{
       padding: "14px 28px", borderBottom: "1px solid var(--rule)",
@@ -27,7 +27,7 @@ function TopBar({ onTheme, theme, onMenu }) {
         </div>
       </div>
       <div className="row center gap-3 kh-topbar__actions">
-        <button className="btn btn-sm kh-topbar__new"><Icon name="plus" size={14} /> Новая смета</button>
+        <button className="btn btn-sm kh-topbar__new" onClick={onNew}><Icon name="plus" size={14} /> Новая смета</button>
         <div className="row center gap-2 mono tiny kh-topbar__autosave" style={{
           padding: "7px 12px", border: "1px solid var(--rule)", borderRadius: 99, color: "var(--ink-3)"
         }}>
@@ -1018,7 +1018,18 @@ function Workspace({ embedded = false, onTheme, theme }) {
         style={{ display: "none" }}
         onChange={onFileChange}
       />
-      <TopBar onTheme={onTheme} theme={theme} onMenu={() => setNavOpen(true)} />
+      <TopBar
+        onTheme={onTheme}
+        theme={theme}
+        onMenu={() => setNavOpen(true)}
+        onNew={() => {
+          if (est.state.estimate.length === 0 || window.confirm('Создать новую смету? Текущие позиции будут очищены.')) {
+            est.actions.resetEstimate();
+            setEstCatFilter('all');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }}
+      />
       <MobileNav
         active={navActive}
         onPick={(id) => { setNavActive(id); setKhModalTab(id); setDbAutoAdd(false); }}

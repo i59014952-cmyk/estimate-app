@@ -1342,6 +1342,14 @@ async def auto_detect(url: str = Query(..., min_length=4, max_length=2000)):
     host = parsed.netloc
     try:
         html = await _generic_fetch(url)
+    except httpx.HTTPStatusError as e:
+        # The target site answered, but refused/!found. Surface its real status
+        # so the client can explain it ("site blocks parsing" vs "service down").
+        code = e.response.status_code
+        raise HTTPException(
+            502 if code >= 500 else 422,
+            f"upstream {code}: site refused the request"[:200],
+        )
     except Exception as e:
         raise HTTPException(502, f"fetch failed: {e!s}"[:200])
 

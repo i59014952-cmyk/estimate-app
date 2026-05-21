@@ -461,3 +461,20 @@ body{overscroll-behavior-y:none;overflow-x:hidden}
   /* Floating helpers */
   .kh-prices-card{padding:24px 20px 22px}
 }
+
+/* Промежуточная полоса (правый рельс ещё показан, но места уже мало):
+   заголовок и хлебные крошки переносятся, а не вылезают из блока. */
+@media (max-width:1140px){
+  .kh-hero__title{white-space:normal !important;word-break:break-word;overflow-wrap:anywhere}
+  .kh-topbar__crumbs{flex-wrap:wrap;min-width:0}
+  .kh-hero__meta{flex-wrap:wrap;white-space:normal !important}
+}
+
+/* Очень узкие экраны: гарантируем перенос длинных слов и отсутствие наложений. */
+@media (max-width:380px){
+  .kh-topbar{padding:8px 10px !important}
+  .kh-topbar__crumbs{font-size:9px !important}
+  .kh-hero__title{font-size:26px !important}
+  .kh-statusbar{font-size:9px !important}
+  .kh-hero, .kh-card, .kh-card__title, .kh-card__meta{overflow-wrap:anywhere;word-break:break-word}
+}
