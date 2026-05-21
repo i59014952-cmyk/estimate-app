@@ -59,11 +59,8 @@
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script>
-const SB_URL = 'https://jvqogyyjlrwbjjotxvue.supabase.co';
-const SB_KEY = 'sb_publishable_Yud_fsFEOxUAiPboEqVO1g_17BKYlDh';
+const API_BASE = 'https://api.sme-ta.ru';
 const HEADERS = {
-  apikey: SB_KEY,
-  Authorization: 'Bearer ' + SB_KEY,
   'Content-Type': 'application/json',
 };
 
@@ -85,60 +82,42 @@ async function fetchJSON(url, opts) {
 }
 
 async function loadVendor() {
-  // RPC by slug; kh_contractors stays fully private (no anon table access).
-  const r = await fetchJSON(`${SB_URL}/rest/v1/rpc/kh_vendor_get`, {
+  // Public endpoint by slug; kh_contractors stays fully private.
+  vendor = await fetchJSON(`${API_BASE}/public/vendor/get`, {
     method: 'POST',
-    body: JSON.stringify({ p_slug: token }),
-  });
-  vendor = r && r[0] || null;
+    body: JSON.stringify({ slug: token }),
+  }) || null;
 }
 async function loadPrices() {
-  prices = await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?vendor_slug=eq.${encodeURIComponent(token)}&order=updated_at.desc&select=*`) || [];
+  prices = await fetchJSON(`${API_BASE}/public/vendor/prices?slug=${encodeURIComponent(token)}`) || [];
 }
 
 async function upsert(items, sourceFile) {
   const payload = items.map(it => ({
-    vendor_slug: token,
-    vendor_name: (vendor && vendor.name) || null,
     name: it.name,
     unit: it.unit || '',
     qty: Number(it.qty) > 0 ? Number(it.qty) : 1,
     unit_price: Number(it.unitPrice) || 0,
+    vendor_name: (vendor && vendor.name) || null,
     source_file: sourceFile || null,
-    updated_at: new Date().toISOString(),
   }));
-  const post = body => fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?on_conflict=vendor_slug,name,unit`, {
+  const res = await fetchJSON(`${API_BASE}/public/vendor/prices`, {
     method: 'POST',
-    headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ slug: token, items: payload }),
   });
-  // Старая схема может не иметь колонок qty/vendor_name — отбрасываем те,
-  // на которые ругается PostgREST, и повторяем (до 3 раз).
-  let p = payload, res;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try { res = await post(p); break; }
-    catch (e) {
-      const msg = String(e && e.message || '');
-      const m = msg.match(/'([a-z_]+)' column/i) || msg.match(/column "?([a-z_]+)"?/i) || (/\bqty\b/.test(msg) ? [null, 'qty'] : null);
-      const col = m && m[1];
-      if (col && p.length && Object.prototype.hasOwnProperty.call(p[0], col)) {
-        p = p.map(({ [col]: _drop, ...rest }) => rest);
-        continue;
-      }
-      throw e;
-    }
-  }
-  return Array.isArray(res) ? res.length : 0;
+  return (res && res.saved) || 0;
 }
 async function update(id, patch) {
-  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?id=eq.${id}`, {
+  await fetchJSON(`${API_BASE}/public/vendor/prices/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: { ...HEADERS, Prefer: 'return=representation' },
-    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ slug: token, ...patch }),
   });
 }
 async function remove(id) {
-  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?id=eq.${id}`, { method: 'DELETE', headers: { ...HEADERS, Prefer: 'return=minimal' } });
+  await fetchJSON(`${API_BASE}/public/vendor/prices/delete`, {
+    method: 'POST',
+    body: JSON.stringify({ slug: token, ids: [id] }),
+  });
 }
 
 function setStatus(kind, text) {
@@ -362,8 +341,9 @@ async function onRemove(id) {
 }
 async function removeMany(ids) {
   if (!ids.length) return;
-  await fetchJSON(`${SB_URL}/rest/v1/kh_vendor_prices?id=in.(${ids.map(encodeURIComponent).join(',')})`, {
-    method: 'DELETE', headers: { ...HEADERS, Prefer: 'return=minimal' },
+  await fetchJSON(`${API_BASE}/public/vendor/prices/delete`, {
+    method: 'POST',
+    body: JSON.stringify({ slug: token, ids }),
   });
 }
 async function onDeleteSelected() {

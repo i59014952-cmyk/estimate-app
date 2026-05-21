@@ -12,6 +12,9 @@ from playwright.async_api import async_playwright, Browser, BrowserContext
 
 from lemana_source import LemanaSession
 
+import auth
+import db
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -159,9 +162,11 @@ async def lifespan(_: FastAPI):
     state["pw"] = pw
     state["browser"] = browser
     state["lemana"] = LemanaSession()
+    await db.connect()
     try:
         yield
     finally:
+        await db.close()
         await browser.close()
         await pw.stop()
         if state["lemana"]:
@@ -176,6 +181,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
+app.include_router(db.router)
 
 
 async def _new_context(city: str) -> BrowserContext:
