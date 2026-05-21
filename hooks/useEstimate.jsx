@@ -1009,20 +1009,23 @@ function useEstimate() {
       let fresh = 0, updated = 0;
       setUserCatalog(prev => {
         // Дедуп по нормализованному ключу: дубли «один в один» обновляют цену,
-        // а не добавляются заново.
-        const map = new Map();
-        for (const it of prev) map.set(catalogKey(it.name, it.unit), it);
-        fresh = 0; updated = 0;
+        // а не добавляются заново. Загруженные позиции ставим наверх (в порядке
+        // файла), чтобы свежее было сразу видно; остальные — ниже в прежнем порядке.
+        const incoming = new Map();
         for (const it of items) {
-          const k = catalogKey(it.name, it.unit);
-          if (map.has(k)) updated++; else fresh++;
-          map.set(k, {
+          incoming.set(catalogKey(it.name, it.unit), {
             name: it.name, unit: it.unit, unitPrice: it.unitPrice,
             category: it.category || classifyItem(it.name, it.unit),
             tokenSet: new Set(tokenize(it.name)),
           });
         }
-        const next = Array.from(map.values());
+        const prevKeys = new Set(prev.map(it => catalogKey(it.name, it.unit)));
+        fresh = 0; updated = 0;
+        for (const k of incoming.keys()) {
+          if (prevKeys.has(k)) updated++; else fresh++;
+        }
+        const rest = prev.filter(it => !incoming.has(catalogKey(it.name, it.unit)));
+        const next = [...incoming.values(), ...rest];
         persistUserCatalogLocal(next);
         return next;
       });
