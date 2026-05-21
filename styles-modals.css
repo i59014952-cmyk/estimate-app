@@ -65,7 +65,12 @@
 .kh-table th {
   color: var(--ink-3, #8a7f73); font-weight: 500; font-size: 11px;
   text-transform: uppercase; letter-spacing: .1em;
-  position: sticky; top: 0; background: var(--paper, #f7f0e2);
+  position: sticky; top: 0; z-index: 2;
+  /* Solid fill + inset bottom rule: with border-collapse a sticky cell's own
+     border drops out, so rows would otherwise show through the header. */
+  background: var(--paper-card, #fffaf0);
+  padding-top: 14px; padding-bottom: 11px;
+  box-shadow: inset 0 -1px 0 var(--rule, rgba(0,0,0,.08));
 }
 .kh-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .kh-table tr.section td { background: rgba(0,0,0,.04); font-weight: 600; }
@@ -152,3 +157,39 @@
 
 .kh-empty { padding: 24px; text-align: center; color: var(--ink-3, #8a7f73); }
 .kh-loading { padding: 40px; text-align: center; color: var(--ink-3, #8a7f73); }
+
+/* ===========================================================================
+   Адаптивность модалок на узких экранах. Внутри модалок много flex-рядов с
+   фиксированными ширинами, заданными инлайн-стилями, поэтому переносы
+   приходится включать здесь с !important.
+   =========================================================================== */
+
+/* Длинные строки (названия, ссылки, заголовки) не должны вылезать из блока. */
+.kh-modal, .kh-card, .kh-card__title, .kh-card__meta, .kh-section-title {
+  overflow-wrap: anywhere; word-break: break-word;
+}
+
+/* Узкая модалка — занимает почти весь экран, тоньше внутренние отступы. */
+@media (max-width: 560px) {
+  .kh-modal { width: calc(100vw - 20px); max-height: calc(100vh - 32px); }
+  .kh-modal__head { padding: 16px 16px 12px; }
+  .kh-modal__body { padding: 14px 16px 18px; }
+
+  /* Календарь: ввод события в один столбец. */
+  .kh-events__form { grid-template-columns: 1fr; }
+
+  /* Широкие таблицы каталога/смет прокручиваются по горизонтали, а не режутся. */
+  .kh-modal__body { -webkit-overflow-scrolling: touch; }
+  .kh-table { display: block; overflow-x: auto; white-space: nowrap; }
+}
+
+/* «Подключить парсер»: на узких экранах поле и кнопка в столбик во всю ширину. */
+@media (max-width: 520px) {
+  .kh-store-add-row { flex-direction: column !important; }
+  .kh-store-add-row__btn { width: 100%; }
+}
+
+/* Вкладка «Объекты»: кнопка «+ Добавить объект» переносится под табы. */
+@media (max-width: 440px) {
+  .kh-objtabs__add { margin-left: 0 !important; width: 100%; }
+}

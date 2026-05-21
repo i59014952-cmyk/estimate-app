@@ -1,7 +1,9 @@
 // SearchResults.jsx — dropdown shown under the toolbar search input.
 
 function SearchResults({ query, results, catalogReady, onAdd, onClose }) {
-  if (!query || query.length < 2) return null;
+  // Hooks must run on every render (Rules of Hooks): keep them above any early
+  // return, otherwise the hook count changes between renders and React throws
+  // "Internal React error: Expected static flag was missing".
   const containerRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -14,6 +16,8 @@ function SearchResults({ query, results, catalogReady, onAdd, onClose }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
+
+  if (!query || query.length < 2) return null;
 
   return (
     <div

@@ -19,6 +19,28 @@ const khStoreHost = (url) => {
   catch { return url; }
 };
 
+// Превращает сырой ответ бэкенда-парсера в понятное пользователю объяснение.
+// Бэкенд оборачивает любую ошибку загрузки страницы в HTTP 502 с текстом вида
+// "fetch failed: Client error '403 Forbidden' for url '...'", что само по себе
+// ни о чём не говорит обычному пользователю.
+const khFriendlyParserError = (status, detail) => {
+  const d = String(detail || '');
+  if (/40[13]|forbidden|unauthorized/i.test(d)) {
+    return 'Сайт закрыт от автоматического чтения цен (защита от ботов) или это не каталог магазина. Парсинг для него недоступен.';
+  }
+  if (/404|not\s*found/i.test(d)) {
+    return 'Страница не найдена — проверьте, что ссылка ведёт на работающий каталог магазина.';
+  }
+  // Холодный старт/недоступность самого сервиса парсинга.
+  if (status === 502 || status === 503 || status === 504 || /bad gateway|gateway timeout|service unavailable/i.test(d)) {
+    return 'Сервис парсинга сейчас недоступен (возможно, ещё запускается). Попробуйте повторить через 30–60 секунд.';
+  }
+  if (/timeout|timed out/i.test(d)) {
+    return 'Сайт слишком долго не отвечает. Попробуйте позже.';
+  }
+  return d || `Ошибка ${status}`;
+};
+
 const KH_METHOD_LABEL = {
   jsonld: 'schema.org',
   microdata: 'микроразметка',
@@ -92,9 +114,9 @@ function KHStoresView() {
     try {
       const r = await fetch(`${backend}/auto/detect?url=${encodeURIComponent(rawUrl)}`, { signal: ctrl.signal });
       if (!r.ok) {
-        let detail = `HTTP ${r.status}`;
+        let detail = '';
         try { const j = await r.json(); if (j && j.detail) detail = j.detail; } catch {}
-        throw new Error(detail);
+        throw new Error(khFriendlyParserError(r.status, detail));
       }
       const d = await r.json();
       return {
@@ -137,7 +159,7 @@ function KHStoresView() {
       cloudUpsert(store);
       setUrl('');
     } catch (err) {
-      setError(err.name === 'AbortError' ? 'Превышено время ожидания парсера.' : ('Не удалось подключиться: ' + err.message));
+      setError(err.name === 'AbortError' ? 'Превышено время ожидания парсера.' : err.message);
     } finally {
       setBusyId(null);
     }
@@ -195,11 +217,11 @@ function KHStoresView() {
       <form onSubmit={addStore} className="col"
         style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--moss, var(--rule))', background: 'var(--paper-card)' }}>
         <div style={{ fontWeight: 600 }}>Добавить магазин</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="kh-store-add-row" style={{ display: 'flex', gap: 8 }}>
           <input autoFocus placeholder="Ссылка на сайт или страницу товара, напр. https://example.ru/catalog"
             value={url} onChange={e => { setUrl(e.target.value); setError(''); }}
-            style={{ ...khStoreInputStyle(), flex: 1 }} />
-          <button type="submit" className="kh-btn-primary" disabled={!url.trim() || busyId === 'new'}
+            style={{ ...khStoreInputStyle(), flex: 1, minWidth: 0 }} />
+          <button type="submit" className="kh-btn-primary kh-store-add-row__btn" disabled={!url.trim() || busyId === 'new'}
             style={{ whiteSpace: 'nowrap' }}>
             {busyId === 'new' ? 'Подключаю…' : 'Подключить парсер'}
           </button>

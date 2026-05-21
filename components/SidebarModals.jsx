@@ -442,10 +442,10 @@ function KHObjectsView() {
 
   return (
     <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid var(--rule)' }}>
+      <div className="kh-objtabs" style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid var(--rule)' }}>
         <ObjTab id="active" label="Активные" />
         <ObjTab id="completed" label="Завершённые" />
-        {!formOpen && <button className="kh-btn-primary" onClick={startAdd} style={{ marginLeft: 'auto', marginBottom: 6 }}>+ Добавить объект</button>}
+        {!formOpen && <button className="kh-btn-primary kh-objtabs__add" onClick={startAdd} style={{ marginLeft: 'auto', marginBottom: 6 }}>+ Добавить объект</button>}
       </div>
 
       {formOpen && (
