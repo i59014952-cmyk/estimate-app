@@ -20,7 +20,7 @@ function ensureKHLoaded() {
   (async () => {
     const wrap = (t) => {
       t = t.trim();
-      if (t.startsWith('[') || t.startsWith('{')) return t;
+      if (t.startsWith('[')) return t;
       return '[' + t + ']';
     };
     try {
