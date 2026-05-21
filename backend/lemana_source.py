@@ -292,7 +292,13 @@ class LemanaSession:
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--headless=new")
-        self._driver = uc.Chrome(options=opts)  # Selenium Manager picks driver
+        kwargs: dict = {"options": opts}
+        # Pin the major Chrome version when the auto-detected driver mismatches
+        # the installed browser (LEMANA_CHROME_MAIN=148). Unset -> auto-detect.
+        vm = os.environ.get("LEMANA_CHROME_MAIN")
+        if vm:
+            kwargs["version_main"] = int(vm)
+        self._driver = uc.Chrome(**kwargs)
         self._driver.set_window_size(1280, 900)
         self._driver.set_page_load_timeout(45)
 
