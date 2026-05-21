@@ -17,6 +17,7 @@ import json
 import os
 import re
 import threading
+import time
 from typing import Optional
 
 from selectolax.parser import HTMLParser
@@ -156,6 +157,108 @@ def parse_search(html: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
+# UI helpers (live mode only; selenium imported lazily so the module stays
+# importable for parsing/mock tests without selenium installed).
+# --------------------------------------------------------------------------- #
+
+def dismiss_overlays(driver, wait_seconds: int = 10) -> None:
+    """Close region ("Всё верно") and cookie ("Хорошо") banners. The cookie
+    banner appears after the region one, so loop and re-check until idle."""
+    from selenium.webdriver.common.by import By
+    overlays = [
+        ("css", '[data-qa="apply-region-button"]', "регион (data-qa)"),
+        ("xpath", "//button[.//span[normalize-space()='Всё верно']]", "регион (текст)"),
+        ("xpath", "//button[.//span[normalize-space()='Хорошо']]", "куки"),
+    ]
+    end_time = time.time() + wait_seconds
+    clicked_ever = False
+    idle_after_click = 0
+    while time.time() < end_time:
+        clicked_now = False
+        for kind, sel, _name in overlays:
+            by = By.CSS_SELECTOR if kind == "css" else By.XPATH
+            for el in driver.find_elements(by, sel):
+                try:
+                    if not el.is_displayed():
+                        continue
+                    try:
+                        driver.execute_script("arguments[0].click();", el)
+                    except Exception:
+                        el.click()
+                    clicked_now = True
+                    clicked_ever = True
+                    time.sleep(0.5)
+                    break
+                except Exception:
+                    continue
+        if clicked_now:
+            idle_after_click = 0
+        elif clicked_ever:
+            idle_after_click += 1
+            if idle_after_click >= 3:
+                break
+            time.sleep(0.25)
+        else:
+            time.sleep(0.25)
+
+
+def perform_search(driver, query: str) -> None:
+    """Find the search trigger (input or button) and submit the query."""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((
+            By.XPATH,
+            "//*[contains(@placeholder, 'Поиск') or contains(@aria-label, 'Поиск')"
+            " or contains(normalize-space(.), 'Поиск')]",
+        )))
+    candidate_xpaths = [
+        "//input[contains(@placeholder, 'Поиск')]",
+        "//input[contains(@aria-label, 'Поиск') or contains(@aria-label, 'Искать')]",
+        "//header//button[.//span[contains(normalize-space(.), 'Поиск')]]",
+        "//*[@role='button'][.//span[contains(normalize-space(.), 'Поиск')]]",
+        "//span[contains(normalize-space(.), 'Поиск')]/ancestor::button[1]",
+        "//span[contains(normalize-space(.), 'Поиск')]/ancestor::*[@role='button'][1]",
+        "//header//span[contains(normalize-space(.), 'Поиск')]",
+    ]
+    trigger = None
+    for xp in candidate_xpaths:
+        for el in driver.find_elements(By.XPATH, xp):
+            try:
+                if el.is_displayed():
+                    trigger = el
+                    break
+            except Exception:
+                continue
+        if trigger is not None:
+            break
+    if trigger is None:
+        raise RuntimeError("Lemana: search trigger not found")
+
+    if trigger.tag_name.lower() == "input":
+        try:
+            trigger.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", trigger)
+        trigger.send_keys(query)
+        trigger.send_keys(Keys.RETURN)
+        return
+
+    try:
+        trigger.click()
+    except Exception:
+        driver.execute_script("arguments[0].click();", trigger)
+    WebDriverWait(driver, 10).until(
+        lambda d: d.switch_to.active_element.tag_name.lower() == "input")
+    box = driver.switch_to.active_element
+    box.send_keys(query)
+    box.send_keys(Keys.RETURN)
+
+
+# --------------------------------------------------------------------------- #
 # Session: reusable warm browser, serialized behind a lock. Optional mock mode.
 # --------------------------------------------------------------------------- #
 
@@ -194,34 +297,22 @@ class LemanaSession:
         self._driver.set_page_load_timeout(45)
 
     def _warmup(self):
-        from selenium.webdriver.common.by import By  # noqa: F401 (kept for parity)
         self._ensure_driver()
         if self._warm:
             return
         self._driver.get(BASE_DOMAIN + "/?fromRegion=506")
-        try:
-            from lemana_overlays import dismiss_overlays  # optional helper
-            dismiss_overlays(self._driver)
-        except Exception:
-            pass
+        dismiss_overlays(self._driver)
         self._warm = True
 
     def _search_blocking(self, query: str, limit: int) -> list[dict]:
         from selenium.webdriver.common.by import By
-        from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.support.ui import WebDriverWait
         with self._lock:
             try:
                 self._warmup()
                 d = self._driver
                 start = d.current_url
-                box = WebDriverWait(d, 20).until(
-                    lambda x: next(
-                        (e for e in x.find_elements(By.XPATH, "//input[contains(@placeholder,'Поиск')]")
-                         if e.is_displayed()), None))
-                box.click()
-                box.send_keys(query)
-                box.send_keys(Keys.RETURN)
+                perform_search(d, query)
                 WebDriverWait(d, self.search_timeout).until(lambda x: x.current_url != start)
                 try:
                     WebDriverWait(d, 10).until(
