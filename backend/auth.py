@@ -10,11 +10,13 @@ import time
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-import db
+# NOTE: `db` is imported lazily inside the handlers below. db.py imports this
+# module at load time for require_user, so a top-level `import db` here would
+# create a circular import.
 
 ALGO = "HS256"
 ACCESS_TTL_S = 3600          # 1 hour
@@ -74,6 +76,7 @@ class RefreshIn(BaseModel):
 
 @router.post("/auth/login")
 async def login(body: LoginIn):
+    import db
     email = body.email.strip().lower()
     async with db.pool().acquire() as conn:
         row = await conn.fetchrow(
