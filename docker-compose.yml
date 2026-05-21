@@ -6,8 +6,8 @@ services:
     image: petrovich-proxy:latest
     container_name: petrovich-proxy
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       PORT: "8000"
       ALLOWED_ORIGINS: "*"
@@ -21,3 +21,25 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Reverse proxy with automatic HTTPS (Let's Encrypt). Needs DOMAIN set to a
+  # domain whose A record points at this server, plus ports 80/443 reachable.
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: "${DOMAIN:?set DOMAIN in .env, e.g. DOMAIN=petrovich-proxy.ru}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

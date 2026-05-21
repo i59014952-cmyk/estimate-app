@@ -25,17 +25,37 @@ docker compose up -d --build
 curl localhost:8000/health   # {"playwright_available": true}
 ```
 
-## Шаг 3. Переключить фронтенд на новый бэкенд
+## Шаг 3. HTTPS через домен (обязательно для GitHub Pages)
+
+Фронтенд на GitHub Pages работает по HTTPS, поэтому бэкенд тоже должен быть на
+HTTPS — иначе браузер заблокирует запросы (mixed content). Решается доменом +
+Caddy (авто-сертификат Let's Encrypt).
+
+1. Купите домен и создайте **A-запись** на IP сервера.
+2. Откройте порты 80/443 (для выпуска сертификата):
+   ```bash
+   ufw allow 80/tcp && ufw allow 443/tcp || true
+   ```
+3. Задайте домен и перезапустите стек:
+   ```bash
+   cd /opt/estimate-app
+   echo "DOMAIN=ваш-домен.ru" > .env
+   docker compose up -d
+   ```
+4. Проверьте HTTPS (через минуту, пока выпускается сертификат):
+   ```bash
+   curl https://ваш-домен.ru/health
+   ```
+
+## Шаг 4. Переключить фронтенд на новый бэкенд
 
 В `app.js` константа `PRICES_BACKEND` указывает на старый Render-URL.
-Замените на адрес нового сервера, затем пересоберите фронтенд (`npm run build`):
+Замените на домен нового сервера (по HTTPS), затем закоммитьте — GitHub Pages
+пересоберётся автоматически:
 
 ```js
-const PRICES_BACKEND = 'http://<ip-сервера>:8000';
+const PRICES_BACKEND = 'https://ваш-домен.ru';
 ```
-
-Для HTTPS поставьте reverse-proxy (Caddy/nginx) с доменом и Let's Encrypt —
-иначе браузер заблокирует mixed content, если фронтенд открыт по https.
 
 ## Обновление кода
 
