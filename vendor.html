@@ -85,7 +85,11 @@ async function fetchJSON(url, opts) {
 }
 
 async function loadVendor() {
-  const r = await fetchJSON(`${SB_URL}/rest/v1/kh_contractors?slug=eq.${encodeURIComponent(token)}&select=name,email,org`);
+  // RPC by slug; kh_contractors stays fully private (no anon table access).
+  const r = await fetchJSON(`${SB_URL}/rest/v1/rpc/kh_vendor_get`, {
+    method: 'POST',
+    body: JSON.stringify({ p_slug: token }),
+  });
   vendor = r && r[0] || null;
 }
 async function loadPrices() {

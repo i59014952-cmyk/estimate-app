@@ -22,9 +22,11 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 
 <script src="lib/estimateCore.js?v=106"></script>
-<script src="lib/supabase.js?v=100"></script>
+<script src="lib/auth.js?v=100"></script>
+<script src="lib/supabase.js?v=101"></script>
 
 <script type="text/babel" src="tweaks-panel.jsx?v=100"></script>
+<script type="text/babel" src="components/Login.jsx?v=100"></script>
 <script type="text/babel" src="components/Logo.jsx?v=101"></script>
 <script type="text/babel" src="components/Data.jsx?v=101"></script>
 <script type="text/babel" src="components/Editable.jsx?v=100"></script>
@@ -56,7 +58,12 @@ function App() {
     </>
   );
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+function Root() {
+  const [authed, setAuthed] = React.useState(() => window.KHAuth.isAuthed());
+  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
+  return <App />;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
 </script>
 </body>
 </html>
