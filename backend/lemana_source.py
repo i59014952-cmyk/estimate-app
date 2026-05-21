@@ -258,6 +258,25 @@ def perform_search(driver, query: str) -> None:
     box.send_keys(Keys.RETURN)
 
 
+def _detect_chrome_major() -> Optional[str]:
+    """Major version of the installed Chrome/Chromium, or None. Lets uc fetch a
+    matching chromedriver instead of always grabbing the latest."""
+    import shutil
+    import subprocess
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        path = shutil.which(name)
+        if not path:
+            continue
+        try:
+            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10).stdout
+        except Exception:
+            continue
+        m = re.search(r"(\d+)\.\d+", out)
+        if m:
+            return m.group(1)
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Session: reusable warm browser, serialized behind a lock. Optional mock mode.
 # --------------------------------------------------------------------------- #
@@ -296,9 +315,11 @@ class LemanaSession:
         if os.environ.get("LEMANA_HEADLESS", "1") != "0":
             opts.add_argument("--headless=new")
         kwargs: dict = {"options": opts}
-        # Pin the major Chrome version when the auto-detected driver mismatches
-        # the installed browser (LEMANA_CHROME_MAIN=148). Unset -> auto-detect.
-        vm = os.environ.get("LEMANA_CHROME_MAIN")
+        # undetected_chromedriver otherwise downloads the *latest* chromedriver,
+        # which mismatches an older installed Chrome (session-not-created). Pin
+        # the major version: explicit LEMANA_CHROME_MAIN wins, else auto-detect
+        # the installed browser so this survives Chrome upgrades without config.
+        vm = os.environ.get("LEMANA_CHROME_MAIN") or _detect_chrome_major()
         if vm:
             kwargs["version_main"] = int(vm)
         self._driver = uc.Chrome(**kwargs)
