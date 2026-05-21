@@ -36,10 +36,11 @@ const SOURCE_LABELS = {
     krepmast: 'Крепмаст',
     voltkin: 'Вольткин',
     moi: 'Мои Инструменты',
+    lemana: 'Лемана ПРО',
     manual: 'Вручную',
     none: '—',
 };
-const KNOWN_SOURCES = new Set(['kolorit', 'krepmast', 'voltkin', 'moi']);
+const KNOWN_SOURCES = new Set(['kolorit', 'krepmast', 'voltkin', 'moi', 'lemana']);
 
 const searchInput = document.getElementById('search');
 const resultsEl = document.getElementById('results');

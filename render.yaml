@@ -9,3 +9,5 @@ services:
     envVars:
       - key: ALLOWED_ORIGINS
         value: "*"
+      - key: LEMANA_HEADLESS
+        value: "0"
