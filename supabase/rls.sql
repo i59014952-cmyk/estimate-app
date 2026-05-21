@@ -20,7 +20,6 @@
 -- 1) Enable RLS on every table (default-deny once enabled) -------------------
 alter table public.kh_objects          enable row level security;
 alter table public.kh_user_catalog     enable row level security;
-alter table public.kh_stores           enable row level security;
 alter table public.kh_events           enable row level security;
 alter table public.kh_hidden           enable row level security;
 alter table public.kh_contractors      enable row level security;
@@ -32,7 +31,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'kh_objects','kh_user_catalog','kh_stores','kh_events','kh_hidden',
+    'kh_objects','kh_user_catalog','kh_events','kh_hidden',
     'kh_contractors','kh_vendor_prices','kh_client_estimates'
   ]
   loop
