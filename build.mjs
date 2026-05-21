@@ -27,6 +27,7 @@ const STATIC_FILES = [
   'client.html',
   'vendor.html',
   '.nojekyll',
+  'CNAME',
 ];
 
 const stripQuery = (s) => s.split('?')[0];
