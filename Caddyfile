@@ -1,0 +1,3 @@
+api.sme-ta.ru, sme-ta.ru {
+	reverse_proxy backend:8000
+}

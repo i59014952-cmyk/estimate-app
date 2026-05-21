@@ -1,0 +1,72 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: petrovich-proxy:latest
+    container_name: petrovich-proxy
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      PORT: "8000"
+      ALLOWED_ORIGINS: "*"
+      LEMANA_HEADLESS: "0"
+      LEMANA_TIMEOUT_S: "90"
+      DEFAULT_CITY: "moscow"
+      DATABASE_URL: "postgresql://kh:${POSTGRES_PASSWORD}@db:5432/kubhouse"
+      KH_JWT_SECRET: ${KH_JWT_SECRET:?set KH_JWT_SECRET in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Browsers (Chromium + Chrome) need extra shared memory or they crash.
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health').status==200 else sys.exit(1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL — replaces the Supabase cloud database. The schema in
+  # db/schema.sql is applied automatically the first time the data volume is
+  # created (docker-entrypoint-initdb.d). To re-apply later, run it by hand:
+  #   docker compose exec -T db psql -U kh -d kubhouse < db/schema.sql
+  db:
+    image: postgres:16-alpine
+    container_name: kh-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: kubhouse
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kh -d kubhouse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Reverse proxy with automatic HTTPS (Let's Encrypt). Domains are listed in
+  # the Caddyfile; their A records must point at this server and ports 80/443
+  # must be reachable for the ACME challenge.
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:

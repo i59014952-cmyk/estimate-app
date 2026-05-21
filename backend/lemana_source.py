@@ -16,6 +16,8 @@ import glob
 import json
 import os
 import re
+import shutil
+import subprocess
 import threading
 import time
 from typing import Optional
@@ -24,6 +26,30 @@ from selectolax.parser import HTMLParser
 
 BASE_DOMAIN = os.environ.get("LEMANA_DOMAIN", "https://kazan.lemanapro.ru")
 _FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "tests", "fixtures")
+
+
+def _detect_chrome_major() -> Optional[int]:
+    """Return the installed Chrome's major version, or None when undetectable.
+
+    undetected_chromedriver otherwise downloads a driver for the latest release,
+    which fails ("only supports Chrome version N") whenever the pinned Chrome in
+    the image lags behind. Matching version_main to the actual binary keeps the
+    driver in lockstep across Chrome auto-updates.
+    """
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        path = shutil.which(name)
+        if not path:
+            continue
+        try:
+            out = subprocess.run(
+                [path, "--version"], capture_output=True, text=True, timeout=10
+            ).stdout
+        except Exception:
+            continue
+        m = re.search(r"\b(\d+)\.\d+\.\d+", out)
+        if m:
+            return int(m.group(1))
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -296,11 +322,13 @@ class LemanaSession:
         if os.environ.get("LEMANA_HEADLESS", "1") != "0":
             opts.add_argument("--headless=new")
         kwargs: dict = {"options": opts}
-        # Pin the major Chrome version when the auto-detected driver mismatches
-        # the installed browser (LEMANA_CHROME_MAIN=148). Unset -> auto-detect.
+        # Match the driver to the installed browser. LEMANA_CHROME_MAIN overrides;
+        # otherwise probe the binary so the driver tracks Chrome across updates
+        # (avoids "only supports Chrome version N" mismatches).
         vm = os.environ.get("LEMANA_CHROME_MAIN")
-        if vm:
-            kwargs["version_main"] = int(vm)
+        version_main = int(vm) if vm else _detect_chrome_major()
+        if version_main:
+            kwargs["version_main"] = version_main
         self._driver = uc.Chrome(**kwargs)
         self._driver.set_window_size(1280, 900)
         self._driver.set_page_load_timeout(45)
