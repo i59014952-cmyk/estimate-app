@@ -17,14 +17,26 @@
 --  the bottom (commented out).
 -- ============================================================================
 
--- 1) Enable RLS on every table (default-deny once enabled) -------------------
-alter table public.kh_objects          enable row level security;
-alter table public.kh_user_catalog     enable row level security;
-alter table public.kh_events           enable row level security;
-alter table public.kh_hidden           enable row level security;
-alter table public.kh_contractors      enable row level security;
-alter table public.kh_vendor_prices    enable row level security;
-alter table public.kh_client_estimates enable row level security;
+-- 1) Enable RLS and DROP ALL pre-existing policies, then add only ours -------
+--    These tables already carried permissive "allow everyone" policies from
+--    when the base was fully open; just enabling RLS leaves those in force
+--    (policies are OR-combined). So wipe every existing policy first.
+do $$
+declare t text; r record;
+begin
+  foreach t in array array[
+    'kh_objects','kh_user_catalog','kh_events','kh_hidden',
+    'kh_contractors','kh_vendor_prices','kh_client_estimates'
+  ]
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    for r in select policyname from pg_policies
+             where schemaname = 'public' and tablename = t
+    loop
+      execute format('drop policy if exists %I on public.%I', r.policyname, t);
+    end loop;
+  end loop;
+end $$;
 
 -- 2) Authenticated operator (logged-in estimator) — full access everywhere ---
 do $$
@@ -35,7 +47,6 @@ begin
     'kh_contractors','kh_vendor_prices','kh_client_estimates'
   ]
   loop
-    execute format('drop policy if exists auth_all on public.%I', t);
     execute format(
       'create policy auth_all on public.%I for all to authenticated using (true) with check (true)', t);
   end loop;
