@@ -27,7 +27,7 @@ function isHiddenCategory(name) {
 }
 const VAT_RATE = 0.22;
 const MAX_RESULTS = 20;
-const PRICES_BACKEND = 'https://petrovich-proxy.onrender.com';
+const PRICES_BACKEND = 'https://sme-ta.ru';
 const PRICES_CONCURRENCY = 3;
 const SOURCE_LABELS = {
     local: 'Своя база',
