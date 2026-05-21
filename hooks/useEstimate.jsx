@@ -386,7 +386,7 @@ function useEstimate() {
   }, []);
 
   const createClientLink = React.useCallback(async () => {
-    if (!window.SB) throw new Error("Supabase не подключён");
+    if (!window.SB) throw new Error("Бэкенд не подключён");
     const rows = estimateRef.current;
     if (!rows || !rows.length) throw new Error("Смета пуста");
     const buf = new Uint8Array(16);
