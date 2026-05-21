@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright, Browser, BrowserContext
 
+from lemana_source import LemanaSession
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -92,7 +94,22 @@ class CacheStats(BaseModel):
     misses: int
 
 
-state: dict = {"browser": None, "pw": None, "cache": {}, "hits": 0, "misses": 0}
+state: dict = {"browser": None, "pw": None, "cache": {}, "hits": 0, "misses": 0, "lemana": None}
+
+LEMANA_TIMEOUT_S = float(os.environ.get("LEMANA_TIMEOUT_S", "20"))
+
+
+def _lemana_to_item(d: dict) -> PriceItem:
+    return PriceItem(
+        name=d.get("name") or "",
+        sku=(d.get("sku") or None),
+        price=d.get("price"),
+        currency=d.get("currency") or "RUB",
+        unit="шт.",
+        in_stock=d.get("in_stock"),
+        city="lemana",
+        url=d.get("url") or None,
+    )
 
 
 def _parse_price(text: str) -> Optional[float]:
@@ -141,11 +158,14 @@ async def lifespan(_: FastAPI):
     )
     state["pw"] = pw
     state["browser"] = browser
+    state["lemana"] = LemanaSession()
     try:
         yield
     finally:
         await browser.close()
         await pw.stop()
+        if state["lemana"]:
+            state["lemana"].close()
 
 
 app = FastAPI(title="Petrovich price parser", version="0.2.0", lifespan=lifespan)
@@ -515,12 +535,31 @@ async def kolorit_search(
     return SearchResponse(query=query, city="kolorit", strategy_used="http", cached=False, results=items, trail=tried)
 
 
+@app.get("/lemana/search", response_model=SearchResponse)
+async def lemana_search(
+    query: str = Query(..., min_length=2, max_length=200),
+    limit: int = Query(6, ge=1, le=30),
+):
+    key = _cache_key("lemana", query, limit)
+    cached = _cache_get(key)
+    if cached:
+        return SearchResponse(query=query, city="lemana", strategy_used="cache", cached=True, results=cached)
+    sess = state["lemana"] or LemanaSession()
+    try:
+        raw = await asyncio.wait_for(sess.search(query, limit), timeout=LEMANA_TIMEOUT_S)
+    except Exception as e:
+        raise HTTPException(502, f"lemana failed: {e!s}"[:200])
+    items = [_lemana_to_item(d) for d in raw if d.get("price")]
+    _cache_set(key, items)
+    return SearchResponse(query=query, city="lemana", strategy_used="uc", cached=False, results=items)
+
+
 @app.get("/prices/search", response_model=SearchResponse)
 async def prices_search(
     query: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(6, ge=1, le=30),
 ):
-    """Combined search: Kolorit + Krepmast + Voltkin + moi-instrumenty in parallel, merged by URL."""
+    """Combined search: Kolorit + Krepmast + Voltkin + moi-instrumenty + Lemana in parallel, merged by URL."""
     key = _cache_key("combined", query, limit)
     cached = _cache_get(key)
     if cached:
@@ -556,17 +595,30 @@ async def prices_search(
         except Exception as e:
             return [], [f"moi: error: {e!s}"[:140]]
 
-    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail), (mi_items, mi_trail) = await asyncio.gather(k(), m(), v(), mi())
+    async def lm():
+        # Best-effort: Lemana needs a real browser and may be blocked by Qrator
+        # on datacenter IPs; a timeout/error here must not sink the other sources.
+        sess = state["lemana"]
+        if sess is None:
+            return [], ["lemana: disabled"]
+        try:
+            raw = await asyncio.wait_for(sess.search(query, per_source), timeout=LEMANA_TIMEOUT_S)
+            return [_lemana_to_item(d) for d in raw if d.get("price")], ["lemana: ok"]
+        except Exception as e:
+            return [], [f"lemana: error: {e!s}"[:140]]
+
+    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail), (mi_items, mi_trail), (lm_items, lm_trail) = await asyncio.gather(k(), m(), v(), mi(), lm())
 
     for it in k_items: it.city = "kolorit"
     for it in m_items: it.city = "krepmast"
     for it in v_items: it.city = "voltkin"
     for it in mi_items: it.city = "moi"
+    for it in lm_items: it.city = "lemana"
 
     merged: list[PriceItem] = []
     seen: set[str] = set()
     # Round-robin between sources so results look diverse
-    source_lists = [k_items, m_items, v_items, mi_items]
+    source_lists = [k_items, m_items, v_items, mi_items, lm_items]
     idx = 0
     empty_streak = 0
     while len(merged) < limit and empty_streak < len(source_lists):
@@ -585,7 +637,7 @@ async def prices_search(
     _cache_set(key, merged)
     return SearchResponse(
         query=query, city="combined", strategy_used="http", cached=False,
-        results=merged, trail=k_trail + m_trail + v_trail + mi_trail,
+        results=merged, trail=k_trail + m_trail + v_trail + mi_trail + lm_trail,
     )
 
 
