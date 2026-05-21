@@ -291,7 +291,10 @@ class LemanaSession:
         opts.page_load_strategy = "eager"
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--headless=new")
+        # Headless can trip Qrator; allow a headed run (LEMANA_HEADLESS=0) which
+        # matches the proven local setup. Server keeps the default headless.
+        if os.environ.get("LEMANA_HEADLESS", "1") != "0":
+            opts.add_argument("--headless=new")
         kwargs: dict = {"options": opts}
         # Pin the major Chrome version when the auto-detected driver mismatches
         # the installed browser (LEMANA_CHROME_MAIN=148). Unset -> auto-detect.
