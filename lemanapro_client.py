@@ -43,20 +43,16 @@ SEARCH_QUERY = (
     "Кирпич рядовой керамический полнотелый M125 красный 250x120x65 мм 1 НФ"
 )
 OUTPUT_CSV = "lemanapro_data.csv"                   # имя итогового CSV
-CSV_FIELDS = [                                      # порядок колонок в CSV
-    "url",
-    "sku",
+CSV_FIELDS = [                                      # ключи в dict от parse_product -- порядок колонок в CSV
     "name",
-    "category",
     "price",
-    "currency",
-    "availability",
-    "rating",
-    "review_count",
-    "image",
-    "description",
-    "characteristics_json",
+    "url",
 ]
+CSV_HEADERS = {                                     # как эти ключи показывать в первой строке CSV (отображаемые названия)
+    "name": "Материалы",
+    "price": "price",
+    "url": "url",
+}
 
 
 # =============================================================================
@@ -67,7 +63,10 @@ CSV_FIELDS = [                                      # порядок колон�
 def dismiss_overlays(driver, wait_seconds: int = 10) -> None:
     """
     Закрыть всплывающие баннеры: подтверждение региона ("Всё верно")
-    и куки-баннер ("Хорошо"). Модалки появляются с задержкой ~3-5 сек.
+    и куки-баннер ("Хорошо"). Кук появляется ПОСЛЕ закрытия региона,
+    поэтому крутимся в цикле и после каждого клика ждём, не появится ли
+    следующий оверлей. Выход: либо вышло wait_seconds, либо три пустых
+    итерации подряд (т.е. больше ничего видимого не появляется).
     """
     overlays = [                                    # (тип, селектор, имя)
         ("css", '[data-qa="apply-region-button"]', "регион (data-qa)"),
@@ -76,31 +75,36 @@ def dismiss_overlays(driver, wait_seconds: int = 10) -> None:
     ]
 
     end_time = time.time() + wait_seconds
-    while time.time() < end_time:                   # ждём появления любой кнопки
-        for _, sel, _ in overlays:
-            by = By.CSS_SELECTOR if not sel.startswith("//") else By.XPATH
-            if driver.find_elements(by, sel):
-                break
-        else:
-            time.sleep(0.5)
-            continue
-        break
+    idle_rounds = 0                                 # счётчик пустых итераций подряд
 
-    for kind, sel, name in overlays:
-        by = By.CSS_SELECTOR if kind == "css" else By.XPATH
-        for el in driver.find_elements(by, sel):
-            try:
-                if not el.is_displayed():
-                    continue
+    while time.time() < end_time:
+        clicked_now = False
+        for kind, sel, name in overlays:
+            by = By.CSS_SELECTOR if kind == "css" else By.XPATH
+            for el in driver.find_elements(by, sel):
                 try:
-                    el.click()
+                    if not el.is_displayed():
+                        continue
+                    # JS-click первичным -- надёжнее, когда кнопку перекрывает
+                    # другой модал или Next.js блокирует pointer-events на body
+                    try:
+                        driver.execute_script("arguments[0].click();", el)
+                    except Exception:
+                        el.click()
+                    print(f"Закрыли оверлей: {name}")
+                    clicked_now = True
+                    time.sleep(0.5)                 # даём DOM перерисоваться и появиться следующему
+                    break
                 except Exception:
-                    driver.execute_script("arguments[0].click();", el)
-                print(f"Закрыли оверлей: {name}")
-                time.sleep(0.5)                     # даём DOM перерисоваться
+                    continue
+
+        if clicked_now:
+            idle_rounds = 0                         # сброс: после клика ждём ещё, вдруг придёт куки
+        else:
+            idle_rounds += 1
+            if idle_rounds >= 3:                    # ~0.75 сек тишины -- выходим, больше ничего не появится
                 break
-            except Exception:
-                continue
+            time.sleep(0.25)
 
 
 def perform_search(driver, query: str = SEARCH_QUERY) -> None:
@@ -301,12 +305,17 @@ def parse_search(html: str) -> list[str]:
 
 
 def write_csv(rows: list[dict], path: str) -> None:
-    """Записать строки в CSV. utf-8-sig нужен, чтобы Excel на Windows правильно показывал кириллицу."""
+    """
+    Записать строки в CSV.
+    * encoding="utf-8-sig" -- Excel на Windows читает кириллицу без кракозябр.
+    * delimiter=";"        -- русский Excel ждёт ; как разделитель полей (запятая = десятичный знак).
+                              С обычной запятой строки слипаются в одну колонку A.
+    """
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
-        writer.writeheader()
+        writer = csv.writer(f, delimiter=";")
+        writer.writerow([CSV_HEADERS[k] for k in CSV_FIELDS])  # заголовок с русскими именами
         for row in rows:
-            writer.writerow(row)
+            writer.writerow([row.get(k, "") for k in CSV_FIELDS])
     print(f"CSV: {path} ({len(rows)} строк)")
 
 
@@ -323,7 +332,6 @@ def main():
         driver.get(BASE_DOMAIN + "/?fromRegion=506")  # главная (без __NEXT_DATA__)
 
         dismiss_overlays(driver)
-        time.sleep(1)                               # даём pointer-events вернуться на body
 
         starting_url = driver.current_url
         perform_search(driver, SEARCH_QUERY)
@@ -333,7 +341,6 @@ def main():
         search_url = driver.current_url
         print(f"Search URL: {search_url}")
 
-        time.sleep(3)                               # даём SPA дорендерить карточки в выдаче
         product_urls = parse_search(driver.page_source)
         print(f"Найдено товаров в выдаче: {len(product_urls)}")
         if not product_urls:
@@ -345,7 +352,6 @@ def main():
             print(f"[{i}/{len(product_urls)}] {url}")
             try:
                 driver.get(url)
-                time.sleep(2)                       # ждём рендер карточки
                 row = parse_product(driver.page_source)
                 rows.append(row)
             except Exception as exc:
