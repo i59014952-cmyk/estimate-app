@@ -1,0 +1,6 @@
+# Зависимости домашнего агента-парсера Lemana (lemana_agent.py).
+# Ставить на домашнем РФ-ПК, где Lemana открывается без блокировки Qrator.
+undetected-chromedriver==3.5.5
+selenium>=4.25,<4.50
+selectolax==0.3.25
+requests==2.32.3
