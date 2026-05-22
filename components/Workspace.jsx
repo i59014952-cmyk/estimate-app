@@ -117,7 +117,7 @@ function TopBar({ onTheme, theme, onMenu, onNew, savedAt }) {
   );
 }
 
-function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose }) {
+function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }) {
   if (!index || index.length <= 1) return null; // одну смету не показываем
   return (
     <div className="row center kh-esttabs" style={{
@@ -162,7 +162,123 @@ function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose }) {
           justifyContent: "center", fontSize: 18, lineHeight: 1,
         }}
       >+</button>
+      <button
+        onClick={onCompare}
+        title="Сравнить сметы"
+        className="row center gap-2"
+        style={{
+          flexShrink: 0, marginLeft: "auto", padding: "6px 12px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid var(--rule)", background: "var(--paper-card)", color: "var(--ink-2)",
+          fontSize: 13, whiteSpace: "nowrap",
+        }}
+      >⇆ Сравнить сметы</button>
     </div>
+  );
+}
+
+function CompareEstimatesModal({ open, onClose, index }) {
+  const ids = (index || []).map(e => e.id);
+  const nameOf = (id) => ((index || []).find(e => e.id === id) || {}).name || id;
+  const [aId, setAId] = useState(ids[0] || "");
+  const [bId, setBId] = useState(ids[1] || "");
+  useEffect(() => {
+    if (!open) return;
+    const list = (index || []).map(e => e.id);
+    let a = list.includes(aId) ? aId : list[0];
+    let b = (list.includes(bId) && bId !== a) ? bId : list.find(x => x !== a);
+    if (a !== aId) setAId(a || "");
+    if (b !== bId) setBId(b || "");
+  }, [open]);
+
+  const readRows = (id) => { try { return JSON.parse(localStorage.getItem("kh-estimate-v1::" + id) || "[]"); } catch (_) { return []; } };
+  const norm = (s) => String(s || "").toLowerCase().replace(/ё/g, "е").trim();
+
+  const rows = React.useMemo(() => {
+    if (!open || !aId || !bId) return [];
+    const A = readRows(aId), B = readRows(bId);
+    const map = new Map();
+    const add = (r, side) => {
+      if (!r || !r.name) return;
+      const key = norm(r.name) + "|" + norm(r.unit);
+      if (!map.has(key)) map.set(key, { name: r.name, unit: r.unit || "", a: null, b: null });
+      map.get(key)[side] = Number(r.unitPrice) || 0;
+    };
+    A.forEach(r => add(r, "a"));
+    B.forEach(r => add(r, "b"));
+    const order = { "only-a": 0, "only-b": 0, "diff": 1, "same": 2 };
+    return Array.from(map.values()).map(g => {
+      let status;
+      if (g.a == null) status = "only-b";
+      else if (g.b == null) status = "only-a";
+      else if (g.a !== g.b) status = "diff";
+      else status = "same";
+      return { ...g, status, delta: (g.a != null && g.b != null) ? (g.b - g.a) : null };
+    }).sort((x, y) => (order[x.status] - order[y.status]) || String(x.name).localeCompare(String(y.name), "ru"));
+  }, [open, aId, bId]);
+
+  const diffCount = rows.filter(r => r.status !== "same").length;
+  const selStyle = { padding: "8px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit", maxWidth: 220 };
+  const cell = { width: 120, textAlign: "right", whiteSpace: "nowrap" };
+
+  if (!window.KHModal) return null;
+  const KHM = window.KHModal;
+  return (
+    <KHM open={open} onClose={onClose} wide title="Сравнение смет" subtitle="Различия в позициях и ценах (себестоимость)">
+      <div className="col" style={{ gap: 14 }}>
+        <div className="row center" style={{ gap: 10, flexWrap: "wrap" }}>
+          <select value={aId} onChange={e => setAId(e.target.value)} style={selStyle}>
+            {(index || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          <span className="mono" style={{ color: "var(--ink-3)" }}>↔</span>
+          <select value={bId} onChange={e => setBId(e.target.value)} style={selStyle}>
+            {(index || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          <span className="tiny muted" style={{ marginLeft: "auto" }}>
+            {aId === bId ? "Выберите две разные сметы" : `Различий: ${diffCount} из ${rows.length}`}
+          </span>
+        </div>
+
+        {aId !== bId && (
+          <div className="col" style={{ gap: 0, border: "1px solid var(--rule)", borderRadius: 10, overflow: "hidden" }}>
+            <div className="row center" style={{ gap: 8, padding: "8px 12px", background: "var(--paper-2)", borderBottom: "1px solid var(--rule)", color: "var(--ink-3)" }}>
+              <span className="mono tiny" style={{ flex: 1, letterSpacing: ".06em" }}>ПОЗИЦИЯ</span>
+              <span className="mono tiny" style={{ width: 60 }}>ЕД.</span>
+              <span className="mono tiny" style={cell}>{nameOf(aId)}</span>
+              <span className="mono tiny" style={cell}>{nameOf(bId)}</span>
+              <span className="mono tiny" style={cell}>Δ</span>
+            </div>
+            <div className="col" style={{ maxHeight: 460, overflowY: "auto" }}>
+              {rows.length === 0 && <div className="tiny muted" style={{ padding: 14 }}>Обе сметы пусты.</div>}
+              {rows.map((r, i) => {
+                const isDiff = r.status !== "same";
+                const tone = r.status === "only-a" ? "rgba(110,123,79,.12)"
+                  : r.status === "only-b" ? "rgba(154,68,34,.10)"
+                  : r.status === "diff" ? "rgba(194,88,66,.10)" : "transparent";
+                return (
+                  <div key={i} className="row center" style={{
+                    gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--rule)",
+                    background: tone, fontWeight: isDiff ? 500 : 400,
+                  }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span className="mono tiny muted" style={{ width: 60 }}>{r.unit || "—"}</span>
+                    <span className="mono" style={{ ...cell, color: r.a == null ? "var(--ink-4)" : "var(--ink)" }}>{r.a == null ? "—" : fmtMoney(r.a)}</span>
+                    <span className="mono" style={{ ...cell, color: r.b == null ? "var(--ink-4)" : "var(--ink)" }}>{r.b == null ? "—" : fmtMoney(r.b)}</span>
+                    <span className="mono" style={{ ...cell, color: r.delta == null ? "var(--ink-4)" : (r.delta > 0 ? "var(--rust)" : (r.delta < 0 ? "var(--moss, #4f6f52)" : "var(--ink-4)")) }}>
+                      {r.status === "only-a" ? "нет в B" : r.status === "only-b" ? "нет в A" : (r.delta === 0 ? "=" : (r.delta > 0 ? "+" : "") + fmtMoney(r.delta))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="row center gap-3 tiny muted" style={{ flexWrap: "wrap" }}>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(194,88,66,.5)", marginRight: 4 }} />разная цена</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(110,123,79,.5)", marginRight: 4 }} />только в левой</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(154,68,34,.5)", marginRight: 4 }} />только в правой</span>
+        </div>
+      </div>
+    </KHM>
   );
 }
 
@@ -1581,4 +1697,4 @@ function PriceFetchOverlay({ visible, progress }) {
   return ReactDOM.createPortal(overlay, document.body);
 }
 
-Object.assign(window, { Workspace, EstimatesTabs });
+Object.assign(window, { Workspace, EstimatesTabs, CompareEstimatesModal });

@@ -37,7 +37,7 @@
 <script type="text/babel" src="components/EstimateTable.jsx?v=106"></script>
 <script type="text/babel" src="components/DatabaseSidebar.jsx?v=113"></script>
 <script type="text/babel" src="components/StoresSidebar.jsx?v=101"></script>
-<script type="text/babel" src="components/Workspace.jsx?v=122"></script>
+<script type="text/babel" src="components/Workspace.jsx?v=123"></script>
 <script type="text/babel" src="components/Modal.jsx?v=101"></script>
 <script type="text/babel" src="components/SidebarModals.jsx?v=119"></script>
 
@@ -49,6 +49,7 @@ function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [role, setRole] = React.useState("estimator");
   const est = useEstimatesManager();
+  const [compareOpen, setCompareOpen] = React.useState(false);
   window.KH_EST_ID = est.currentId;
   React.useEffect(() => { document.documentElement.setAttribute("data-theme", t.theme); }, [t.theme]);
   React.useEffect(() => {
@@ -62,7 +63,8 @@ function App() {
   const roleValue = React.useMemo(() => ({ role, caps: capsForRole(role) }), [role]);
   return (
     <KHRoleCtx.Provider value={roleValue}>
-      <EstimatesTabs index={est.index} currentId={est.currentId} onSwitch={est.setCurrentId} onNew={est.create} onClose={est.close} />
+      <EstimatesTabs index={est.index} currentId={est.currentId} onSwitch={est.setCurrentId} onNew={est.create} onClose={est.close} onCompare={() => setCompareOpen(true)} />
+      <CompareEstimatesModal open={compareOpen} onClose={() => setCompareOpen(false)} index={est.index} />
       <Workspace
         key={est.currentId}
         theme={t.theme}
