@@ -134,9 +134,10 @@ function setStatus(kind, text) {
 const NAME_RE = /наимен|name|позиц|товар|материал|работ|услуг|описан|продукт|ассортимент/;
 const UNIT_RE = /^ед\b|unit|един|изм|^е\.?и\.?$|^е\/и$/;
 const PRICE_RE = /цена|price|стоим|тариф|расц|руб|₽/;
+const SUM_RE = /сумм|итог|всего|total/;
 const QTY_RE = /кол-?в|кол\.|колич|объ[её]м|q-?ty|quantity|amount|^кол$/;
 const NUMERIC_NAME_RE = /^[\d.,\s\-]+$/;
-const SKIP_NAME_RE = /^(итог|всего|сумма|подытог|total|subtotal)\b|^№$|^п\/п$/i;
+const SKIP_NAME_RE = /^(итог|всего|подытог|total|subtotal|ндс|сумма)|^№$|^п\/п$|^(срок|услови|гаранти|доставк|оплат|реквизит|менеджер|примечани|комментар)|^с уважением|коммерческое предложение/i;
 
 const normCell = s => String(s == null ? '' : s).trim().toLowerCase();
 const toNum = s => parseFloat(String(s == null ? '' : s).replace(/\s+/g, '').replace(/[^\d,.\-]/g, '').replace(',', '.')) || 0;
@@ -150,9 +151,16 @@ function findHeader(rows) {
     const uIdx = cells.findIndex(h => UNIT_RE.test(h));
     const qIdx = cells.findIndex(h => QTY_RE.test(h));
     let pIdx = -1;
+    // Цена за единицу: предпочитаем явный «цена», избегаем колонку «Сумма».
     for (let k = 0; k < cells.length; k++) {
+      if (PRICE_RE.test(cells[k]) && !SUM_RE.test(cells[k])) { pIdx = k; break; }
+    }
+    if (pIdx === -1) for (let k = 0; k < cells.length; k++) {
       if (PRICE_RE.test(cells[k])) { pIdx = k; break; }
     }
+    // Настоящий заголовок таблицы, а не рекламная строка с «материалы»:
+    // кроме «Наименование» должна быть ещё хотя бы одна колонка.
+    if (uIdx === -1 && qIdx === -1 && pIdx === -1) continue;
     return { hRow: i, nIdx, uIdx, qIdx, pIdx };
   }
   return null;
@@ -221,6 +229,7 @@ function parseSheet(rows) {
       const c = r.map(x => x == null ? '' : String(x).trim());
       const name = (c[nIdx] || '').trim();
       if (!name || name.length < 2) continue;
+      if (NUMERIC_NAME_RE.test(name)) continue;
       if (SKIP_NAME_RE.test(name)) continue;
       let price;
       if (pIdx !== -1) price = toNum(c[pIdx]);
