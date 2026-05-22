@@ -649,6 +649,7 @@ function KHPriceCompare({ contractors }) {
   const [rows, setRows] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [onlyMulti, setOnlyMulti] = React.useState(false);
 
   const nameBySlug = React.useMemo(() => {
     const m = {};
@@ -669,22 +670,34 @@ function KHPriceCompare({ contractors }) {
 
   const norm = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е').trim();
   const query = norm(q);
-  const matches = React.useMemo(() => {
+
+  // Группируем по позиции (название+ед.изм.): в каждой группе — предложения
+  // разных подрядчиков, отсортированные по цене.
+  const groups = React.useMemo(() => {
     if (!rows || query.length < 2) return [];
-    return rows
-      .filter(it => norm(it.name).includes(query) && it.unit_price != null && Number(it.unit_price) > 0)
-      .map(it => ({
-        vendor: it.vendor_name || nameBySlug[it.vendor_slug] || ('Подрядчик ' + String(it.vendor_slug || '').slice(0, 4)),
-        name: it.name, unit: it.unit || '', price: Number(it.unit_price),
-      }))
-      .sort((a, b) => a.price - b.price);
+    const map = new Map();
+    for (const it of rows) {
+      const price = Number(it.unit_price);
+      if (!(price > 0) || !norm(it.name).includes(query)) continue;
+      const key = norm(it.name) + '|' + norm(it.unit);
+      const vendor = it.vendor_name || nameBySlug[it.vendor_slug] || ('Подрядчик ' + String(it.vendor_slug || '').slice(0, 4));
+      if (!map.has(key)) map.set(key, { name: it.name, unit: it.unit || '', offers: [] });
+      const g = map.get(key);
+      const ex = g.offers.find(o => o.vendor === vendor);
+      if (ex) { if (price < ex.price) ex.price = price; }
+      else g.offers.push({ vendor, price });
+    }
+    const arr = Array.from(map.values());
+    for (const g of arr) { g.offers.sort((a, b) => a.price - b.price); g.best = g.offers[0].price; }
+    arr.sort((a, b) => (b.offers.length - a.offers.length) || (a.best - b.best) || a.name.localeCompare(b.name, 'ru'));
+    return arr;
   }, [rows, query, nameBySlug]);
 
-  const best = matches.length ? matches[0].price : null;
-  const vendorCount = new Set(matches.map(m => m.vendor)).size;
+  const shown = onlyMulti ? groups.filter(g => g.offers.length > 1) : groups;
+  const multiCount = groups.filter(g => g.offers.length > 1).length;
 
   return (
-    <div className="col" style={{ gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--rule)', background: 'var(--paper-card)' }}>
+    <div className="col" style={{ gap: 10, padding: 14, borderRadius: 10, border: '1px solid var(--rule)', background: 'var(--paper-card)' }}>
       <div className="row center between" style={{ gap: 8 }}>
         <div className="eyebrow">Сравнение цен по позиции</div>
         <button className="btn btn-sm" onClick={load} title="Обновить прайсы" disabled={loading}>
@@ -701,35 +714,69 @@ function KHPriceCompare({ contractors }) {
       {error && <div className="tiny" style={{ color: 'var(--rust)' }}>{error}</div>}
       {loading && <div className="tiny mono muted">Загрузка прайсов…</div>}
       {!loading && !error && query.length < 2 && (
-        <div className="tiny muted">Введите минимум 2 символа, чтобы сравнить цены подрядчиков.</div>
+        <div className="tiny muted">Введите минимум 2 символа, чтобы сравнить цены подрядчиков по позиции.</div>
       )}
-      {!loading && query.length >= 2 && matches.length === 0 && (
+      {!loading && query.length >= 2 && groups.length === 0 && (
         <div className="tiny muted">Ни у одного подрядчика нет такой позиции в прайсе.</div>
       )}
-      {matches.length > 0 && (
-        <div className="col" style={{ gap: 4 }}>
-          <div className="tiny muted">Нашлось {matches.length} у {vendorCount} подрядчик(ов) · отсортировано по цене</div>
-          {matches.slice(0, 30).map((m, i) => {
-            const cheapest = m.price === best;
-            return (
-              <div key={i} className="row center between" style={{
-                gap: 10, padding: '8px 10px', borderRadius: 8,
-                border: '1px solid ' + (cheapest ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
-                background: cheapest ? 'rgba(110,123,79,.08)' : 'var(--paper)',
-              }}>
-                <div className="col" style={{ gap: 2, minWidth: 0 }}>
-                  <div className="row center gap-2" style={{ minWidth: 0 }}>
-                    <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.vendor}</span>
-                    {cheapest && <span className="mono tiny" style={{ padding: '1px 6px', borderRadius: 99, background: 'var(--moss, #4f6f52)', color: '#fff' }}>выгодно</span>}
-                  </div>
-                  <div className="tiny muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</div>
-                </div>
-                <div className="mono" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                  {fmtMoney(m.price)}{m.unit ? <span className="muted"> / {m.unit}</span> : null}
-                </div>
+      {groups.length > 0 && (
+        <div className="row center between" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <div className="tiny muted">
+            Позиций: {groups.length}{multiCount > 0 ? ` · сравнимо у 2+ подрядчиков: ${multiCount}` : ''}
+          </div>
+          {multiCount > 0 && (
+            <button
+              className="mono tiny"
+              onClick={() => setOnlyMulti(v => !v)}
+              style={{
+                cursor: 'pointer', padding: '4px 10px', borderRadius: 99,
+                border: '1px solid var(--rule)',
+                background: onlyMulti ? 'var(--ink)' : 'transparent',
+                color: onlyMulti ? 'var(--paper)' : 'var(--ink-3)',
+              }}
+            >
+              только сравнимые
+            </button>
+          )}
+        </div>
+      )}
+      {shown.length > 0 && (
+        <div className="col" style={{ gap: 10, maxHeight: 420, overflowY: 'auto' }}>
+          {shown.slice(0, 40).map((g, gi) => (
+            <div key={gi} className="col" style={{ gap: 6, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--rule)', background: 'var(--paper)' }}>
+              <div className="row center between" style={{ gap: 8 }}>
+                <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+                <span className="mono tiny muted" style={{ whiteSpace: 'nowrap' }}>
+                  {g.unit ? `за ${g.unit} · ` : ''}{g.offers.length > 1 ? `${g.offers.length} подрядчика` : '1 подрядчик'}
+                </span>
               </div>
-            );
-          })}
+              <div className="col" style={{ gap: 4 }}>
+                {g.offers.map((o, oi) => {
+                  const cheapest = o.price === g.best;
+                  const diff = o.price - g.best;
+                  const pct = g.best > 0 ? Math.round((diff / g.best) * 100) : 0;
+                  return (
+                    <div key={oi} className="row center between" style={{
+                      gap: 10, padding: '7px 10px', borderRadius: 8,
+                      border: '1px solid ' + (cheapest ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                      background: cheapest ? 'rgba(110,123,79,.10)' : 'transparent',
+                    }}>
+                      <div className="row center gap-2" style={{ minWidth: 0 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.vendor}</span>
+                        {cheapest && <span className="mono tiny" style={{ padding: '1px 7px', borderRadius: 99, background: 'var(--moss, #4f6f52)', color: '#fff', whiteSpace: 'nowrap' }}>лучшая цена</span>}
+                      </div>
+                      <div className="row center gap-2" style={{ whiteSpace: 'nowrap' }}>
+                        {!cheapest && diff > 0 && (
+                          <span className="mono tiny" style={{ color: 'var(--rust)' }}>+{fmtMoney(diff)}{pct ? ` (+${pct}%)` : ''}</span>
+                        )}
+                        <span className="mono" style={{ fontWeight: cheapest ? 600 : 400 }}>{fmtMoney(o.price)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
