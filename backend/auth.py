@@ -147,6 +147,7 @@ class CreateUserIn(BaseModel):
     email: str
     password: str
     role: Optional[str] = "estimator"
+    name: Optional[str] = ""
 
 
 class SetPasswordIn(BaseModel):
@@ -155,6 +156,10 @@ class SetPasswordIn(BaseModel):
 
 class SetRoleIn(BaseModel):
     role: str
+
+
+class SetNameIn(BaseModel):
+    name: str
 
 
 def _valid_password(password: str) -> None:
@@ -172,7 +177,15 @@ def _valid_role(role: str) -> str:
 @router.get("/auth/me")
 async def me(email: str = Depends(require_user)):
     role = await role_of(email)
-    return {"email": email, "role": role, "is_admin": role == "admin"}
+    name = ""
+    try:
+        import db
+        async with db.pool().acquire() as conn:
+            row = await conn.fetchrow("select name from kh_users where email = $1", email.strip().lower())
+        name = (row and row["name"]) or ""
+    except Exception:
+        name = ""
+    return {"email": email, "role": role, "is_admin": role == "admin", "name": name}
 
 
 @router.get("/auth/users")
@@ -181,7 +194,7 @@ async def list_users(_admin: str = Depends(require_admin)):
     admins = _admin_emails()
     async with db.pool().acquire() as conn:
         rows = await conn.fetch(
-            "select email, role, created_at from kh_users order by created_at"
+            "select email, role, name, created_at from kh_users order by created_at"
         )
     out = []
     for r in rows:
@@ -190,6 +203,7 @@ async def list_users(_admin: str = Depends(require_admin)):
         out.append({
             "email": r["email"],
             "role": role,
+            "name": r["name"] or "",
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             "is_admin": role == "admin",
             "role_locked": forced_admin,  # admin via env var; role can't be changed here
@@ -205,15 +219,29 @@ async def create_user(body: CreateUserIn, _admin: str = Depends(require_admin)):
         raise HTTPException(400, "Введите логин")
     _valid_password(body.password)
     role = _valid_role(body.role)
+    name = (body.name or "").strip()
     async with db.pool().acquire() as conn:
         exists = await conn.fetchrow("select 1 from kh_users where email = $1", email)
         if exists is not None:
             raise HTTPException(409, "Пользователь с таким email уже существует")
         await conn.execute(
-            "insert into kh_users (email, password_hash, role) values ($1, $2, $3)",
-            email, pwd.hash(body.password), role,
+            "insert into kh_users (email, password_hash, role, name) values ($1, $2, $3, $4)",
+            email, pwd.hash(body.password), role, name,
         )
-    return {"email": email, "role": role, "is_admin": role == "admin"}
+    return {"email": email, "role": role, "name": name, "is_admin": role == "admin"}
+
+
+@router.post("/auth/users/{email}/name")
+async def set_name(email: str, body: SetNameIn, _admin: str = Depends(require_admin)):
+    import db
+    target = email.strip().lower()
+    async with db.pool().acquire() as conn:
+        result = await conn.execute(
+            "update kh_users set name = $2 where email = $1", target, (body.name or "").strip()
+        )
+    if result.endswith(" 0"):
+        raise HTTPException(404, "Пользователь не найден")
+    return {"ok": True}
 
 
 @router.post("/auth/users/{email}/role")
