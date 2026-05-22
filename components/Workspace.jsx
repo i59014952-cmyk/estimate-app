@@ -177,113 +177,111 @@ function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }
 }
 
 function CompareEstimatesModal({ open, onClose, index }) {
-  const ids = (index || []).map(e => e.id);
+  const allIds = (index || []).map(e => e.id);
   const nameOf = (id) => ((index || []).find(e => e.id === id) || {}).name || id;
-  const [aId, setAId] = useState(ids[0] || "");
-  const [bId, setBId] = useState(ids[1] || "");
+  const [sel, setSel] = useState(allIds.slice(0, 2));
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!open) return;
     setTick(t => t + 1); // перечитать localStorage при каждом открытии
-    const list = (index || []).map(e => e.id);
-    let a = list.includes(aId) ? aId : list[0];
-    let b = (list.includes(bId) && bId !== a) ? bId : list.find(x => x !== a);
-    if (a !== aId) setAId(a || "");
-    if (b !== bId) setBId(b || "");
+    setSel(prev => {
+      const valid = prev.filter(id => allIds.includes(id));
+      return valid.length >= 2 ? valid.slice(0, 4) : allIds.slice(0, 2);
+    });
   }, [open]);
+
+  const toggle = (id) => setSel(prev => prev.includes(id)
+    ? (prev.length <= 2 ? prev : prev.filter(x => x !== id))
+    : (prev.length >= 4 ? prev : [...prev, id]));
 
   const readRows = (id) => { try { return JSON.parse(localStorage.getItem("kh-estimate-v1::" + id) || "[]"); } catch (_) { return []; } };
   const norm = (s) => String(s || "").toLowerCase().replace(/ё/g, "е").trim();
 
   const rows = React.useMemo(() => {
-    if (!open || !aId || !bId) return [];
-    const A = readRows(aId), B = readRows(bId);
+    if (!open || sel.length < 2) return [];
     const map = new Map();
-    // Повторяющиеся названия не схлопываем: n-ю позицию в A сопоставляем с n-й в B.
-    const seen = { a: {}, b: {} };
-    const add = (r, side) => {
-      if (!r || !r.name) return;
-      const base = norm(r.name) + "|" + norm(r.unit);
-      const n = (seen[side][base] = (seen[side][base] || 0) + 1);
-      const key = base + "#" + n;
-      if (!map.has(key)) map.set(key, { name: r.name, unit: r.unit || "", a: null, b: null });
-      map.get(key)[side] = Number(r.unitPrice) || 0;
-    };
-    A.forEach(r => add(r, "a"));
-    B.forEach(r => add(r, "b"));
-    // Разная цена — в самый верх, затем «только в одной», затем одинаковые.
-    const order = { "diff": 0, "only-a": 1, "only-b": 1, "same": 2 };
+    // Повторяющиеся названия не схлопываем: n-ю позицию сопоставляем с n-й.
+    sel.forEach(id => {
+      const seen = {};
+      readRows(id).forEach(r => {
+        if (!r || !r.name) return;
+        const base = norm(r.name) + "|" + norm(r.unit);
+        const n = (seen[base] = (seen[base] || 0) + 1);
+        const key = base + "#" + n;
+        if (!map.has(key)) map.set(key, { name: r.name, unit: r.unit || "", prices: {} });
+        map.get(key).prices[id] = Number(r.unitPrice) || 0;
+      });
+    });
     return Array.from(map.values()).map(g => {
-      let status;
-      if (g.a == null) status = "only-b";
-      else if (g.b == null) status = "only-a";
-      else if (g.a !== g.b) status = "diff";
-      else status = "same";
-      return { ...g, status, delta: (g.a != null && g.b != null) ? (g.b - g.a) : null };
-    }).sort((x, y) => (order[x.status] - order[y.status]) || String(x.name).localeCompare(String(y.name), "ru"));
-  }, [open, aId, bId, tick]);
+      const vals = sel.map(id => g.prices[id]).filter(v => v != null);
+      const distinct = new Set(vals).size;
+      const differs = vals.length < sel.length || distinct > 1;
+      return { ...g, differs, min: vals.length ? Math.min(...vals) : null };
+    }).sort((x, y) => (Number(y.differs) - Number(x.differs)) || String(x.name).localeCompare(String(y.name), "ru"));
+  }, [open, sel.join(","), tick]);
 
-  const diffCount = rows.filter(r => r.status !== "same").length;
-  const selStyle = { padding: "8px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit", maxWidth: 220 };
-  const cell = { width: 120, textAlign: "right", whiteSpace: "nowrap" };
+  const diffCount = rows.filter(r => r.differs).length;
+  const colW = Math.max(84, Math.round(360 / Math.max(2, sel.length)));
+  const cell = { width: colW, textAlign: "right", whiteSpace: "nowrap" };
 
   if (!window.KHModal) return null;
   const KHM = window.KHModal;
   return (
     <KHM open={open} onClose={onClose} wide title="Сравнение смет" subtitle="Различия в позициях и ценах (себестоимость)">
       <div className="col" style={{ gap: 14 }}>
-        <div className="row center" style={{ gap: 10, flexWrap: "wrap" }}>
-          <select value={aId} onChange={e => setAId(e.target.value)} style={selStyle}>
-            {(index || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-          <span className="mono" style={{ color: "var(--ink-3)" }}>↔</span>
-          <select value={bId} onChange={e => setBId(e.target.value)} style={selStyle}>
-            {(index || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-          <span className="tiny muted" style={{ marginLeft: "auto" }}>
-            {aId === bId ? "Выберите две разные сметы" : `Различий: ${diffCount} из ${rows.length}`}
-          </span>
+        <div className="row center" style={{ gap: 8, flexWrap: "wrap" }}>
+          <span className="eyebrow" style={{ marginRight: 2 }}>Сметы (2–4)</span>
+          {(index || []).map(e => {
+            const on = sel.includes(e.id);
+            const disabled = (!on && sel.length >= 4) || (on && sel.length <= 2);
+            return (
+              <button key={e.id} onClick={() => toggle(e.id)} disabled={disabled} className="kh-pill" style={{
+                cursor: disabled ? "not-allowed" : "pointer",
+                border: "1px solid " + (on ? "var(--ink)" : "var(--rule)"),
+                background: on ? "var(--ink)" : "var(--paper-card)",
+                color: on ? "var(--paper)" : (disabled ? "var(--ink-4)" : "var(--ink-2)"),
+                maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{on ? "✓ " : ""}{e.name}</button>
+            );
+          })}
+          <span className="tiny muted" style={{ marginLeft: "auto" }}>Различий: {diffCount} из {rows.length}</span>
           <button className="btn btn-icon" title="Обновить из смет" onClick={() => setTick(t => t + 1)}><Icon name="refresh" size={14} /></button>
         </div>
 
-        {aId !== bId && (
-          <div className="col" style={{ gap: 0, border: "1px solid var(--rule)", borderRadius: 10, overflow: "hidden" }}>
-            <div className="row center" style={{ gap: 8, padding: "8px 12px", background: "var(--paper-2)", borderBottom: "1px solid var(--rule)", color: "var(--ink-3)" }}>
-              <span className="mono tiny" style={{ flex: 1, letterSpacing: ".06em" }}>ПОЗИЦИЯ</span>
-              <span className="mono tiny" style={{ width: 60 }}>ЕД.</span>
-              <span className="mono tiny" style={cell}>{nameOf(aId)}</span>
-              <span className="mono tiny" style={cell}>{nameOf(bId)}</span>
-              <span className="mono tiny" style={cell}>Δ</span>
-            </div>
-            <div className="col" style={{ maxHeight: 460, overflowY: "auto" }}>
-              {rows.length === 0 && <div className="tiny muted" style={{ padding: 14 }}>Обе сметы пусты.</div>}
-              {rows.map((r, i) => {
-                const isDiff = r.status !== "same";
-                const tone = r.status === "only-a" ? "rgba(110,123,79,.12)"
-                  : r.status === "only-b" ? "rgba(154,68,34,.10)"
-                  : r.status === "diff" ? "rgba(194,88,66,.10)" : "transparent";
-                return (
-                  <div key={i} className="row center" style={{
-                    gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--rule)",
-                    background: tone, fontWeight: isDiff ? 500 : 400,
-                  }}>
-                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
-                    <span className="mono tiny muted" style={{ width: 60 }}>{r.unit || "—"}</span>
-                    <span className="mono" style={{ ...cell, color: r.a == null ? "var(--ink-4)" : "var(--ink)" }}>{r.a == null ? "—" : fmtMoney(r.a)}</span>
-                    <span className="mono" style={{ ...cell, color: r.b == null ? "var(--ink-4)" : "var(--ink)" }}>{r.b == null ? "—" : fmtMoney(r.b)}</span>
-                    <span className="mono" style={{ ...cell, color: r.delta == null ? "var(--ink-4)" : (r.delta > 0 ? "var(--rust)" : (r.delta < 0 ? "var(--moss, #4f6f52)" : "var(--ink-4)")) }}>
-                      {r.status === "only-a" ? "нет в B" : r.status === "only-b" ? "нет в A" : (r.delta === 0 ? "=" : (r.delta > 0 ? "+" : "") + fmtMoney(r.delta))}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="col" style={{ gap: 0, border: "1px solid var(--rule)", borderRadius: 10, overflow: "hidden" }}>
+          <div className="row center" style={{ gap: 8, padding: "8px 12px", background: "var(--paper-2)", borderBottom: "1px solid var(--rule)", color: "var(--ink-3)" }}>
+            <span className="mono tiny" style={{ flex: 1, letterSpacing: ".06em", minWidth: 0 }}>ПОЗИЦИЯ</span>
+            <span className="mono tiny" style={{ width: 50 }}>ЕД.</span>
+            {sel.map(id => <span key={id} className="mono tiny" style={{ ...cell, overflow: "hidden", textOverflow: "ellipsis" }} title={nameOf(id)}>{nameOf(id)}</span>)}
           </div>
-        )}
+          <div className="col" style={{ maxHeight: 460, overflowY: "auto" }}>
+            {rows.length === 0 && <div className="tiny muted" style={{ padding: 14 }}>Сметы пусты.</div>}
+            {rows.map((r, i) => (
+              <div key={i} className="row center" style={{
+                gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--rule)",
+                background: r.differs ? "rgba(194,88,66,.10)" : "transparent",
+                fontWeight: r.differs ? 500 : 400,
+              }}>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                <span className="mono tiny muted" style={{ width: 50 }}>{r.unit || "—"}</span>
+                {sel.map(id => {
+                  const v = r.prices[id];
+                  const cheapest = r.differs && v != null && v === r.min && sel.length > 1;
+                  return (
+                    <span key={id} className="mono" style={{
+                      ...cell,
+                      color: v == null ? "var(--ink-4)" : (cheapest ? "var(--moss, #4f6f52)" : "var(--ink)"),
+                      fontWeight: cheapest ? 700 : (v == null ? 400 : "inherit"),
+                    }}>{v == null ? "—" : fmtMoney(v)}</span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="row center gap-3 tiny muted" style={{ flexWrap: "wrap" }}>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(194,88,66,.5)", marginRight: 4 }} />разная цена</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(110,123,79,.5)", marginRight: 4 }} />только в левой</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(154,68,34,.5)", marginRight: 4 }} />только в правой</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(194,88,66,.5)", marginRight: 4 }} />есть расхождение</span>
+          <span><span style={{ color: "var(--moss, #4f6f52)", fontWeight: 700, marginRight: 4 }}>зелёным</span>самая низкая цена в строке · «—» = нет в смете</span>
         </div>
       </div>
     </KHM>
