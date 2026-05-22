@@ -18,6 +18,7 @@
   animation: kh-pop .2s cubic-bezier(.2,.9,.3,1.2);
   font-family: var(--sans, system-ui);
 }
+.kh-modal--wide { width: min(1240px, calc(100vw - 48px)); }
 @keyframes kh-pop {
   from { transform: translateY(12px) scale(.96); opacity: 0 }
   to   { transform: translateY(0)   scale(1);   opacity: 1 }
