@@ -125,6 +125,7 @@ function TopBar({ onTheme, theme, onMenu, onNew, savedAt }) {
 }
 
 function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose }) {
+  if (!index || index.length <= 1) return null; // одну смету не показываем
   return (
     <div className="row center kh-esttabs" style={{
       gap: 6, padding: "6px 16px", background: "var(--paper-2)",
