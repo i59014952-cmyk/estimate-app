@@ -30,10 +30,12 @@ create table if not exists kh_users (
   email         text not null unique,
   password_hash text not null,
   role          text not null default 'estimator',  -- admin | estimator | viewer
+  name          text not null default '',           -- ФИО оператора (для аватара/списка)
   created_at    timestamptz not null default now()
 );
 -- Existing databases (table already created): apply once by hand —
 --   alter table kh_users add column if not exists role text not null default 'estimator';
+--   alter table kh_users add column if not exists name text not null default '';
 
 -- Projects / objects ---------------------------------------------------------
 create table if not exists kh_objects (

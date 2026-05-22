@@ -47,6 +47,14 @@ function AccountMenu() {
   const initials = khInitials(name, email);
   useEffect(() => { try { localStorage.setItem("kh-operator-name-v1", name); } catch (_) {} }, [name]);
   useEffect(() => {
+    let alive = true;
+    if (!(window.KHAuth && window.KHAuth.me)) return;
+    window.KHAuth.me().then((r) => {
+      if (alive && r && r.name && !name) setName(r.name); // имя из учётки (задано админом)
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
     if (!open) return;
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
@@ -331,6 +339,7 @@ function AdminUsersModal({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("estimator");
   const [busy, setBusy] = useState(false);
@@ -350,8 +359,8 @@ function AdminUsersModal({ open, onClose }) {
   const add = async () => {
     setBusy(true); setError("");
     try {
-      await window.KHAuth.createUser(email.trim(), password, role);
-      setEmail(""); setPassword(""); setRole("estimator");
+      await window.KHAuth.createUser(email.trim(), password, role, fullName.trim());
+      setEmail(""); setFullName(""); setPassword(""); setRole("estimator");
       load();
     } catch (e) { setError(e.message || "Не удалось создать пользователя"); }
     finally { setBusy(false); }
@@ -360,6 +369,13 @@ function AdminUsersModal({ open, onClose }) {
   const changeRole = async (u, newRole) => {
     try { await window.KHAuth.setUserRole(u.email, newRole); load(); }
     catch (e) { window.alert(e.message || "Не удалось изменить роль"); }
+  };
+
+  const editName = async (u) => {
+    const nn = window.prompt(`Имя и фамилия для ${u.email}:`, u.name || "");
+    if (nn == null) return;
+    try { await window.KHAuth.setUserName(u.email, nn.trim()); load(); }
+    catch (e) { window.alert(e.message || "Не удалось сохранить имя"); }
   };
 
   const resetPwd = async (u) => {
@@ -384,10 +400,16 @@ function AdminUsersModal({ open, onClose }) {
           <div className="eyebrow">Добавить пользователя</div>
           <div className="row gap-3" style={{ flexWrap: "wrap" }}>
             <input
+              type="text" placeholder="Имя Фамилия" value={fullName}
+              autoComplete="off"
+              onChange={(e) => setFullName(e.target.value)}
+              style={{ flex: "1 1 200px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
+            />
+            <input
               type="text" placeholder="логин" value={email}
               autoComplete="off"
               onChange={(e) => setEmail(e.target.value)}
-              style={{ flex: "1 1 200px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
+              style={{ flex: "1 1 160px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
             />
             <input
               type="text" placeholder="пароль (мин. 6)" value={password}
@@ -424,11 +446,15 @@ function AdminUsersModal({ open, onClose }) {
             <div className="col" style={{ gap: 4 }}>
               {users.map((u) => (
                 <div key={u.email} className="row center between" style={{ padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, gap: 8 }}>
-                  <div className="row center gap-2" style={{ minWidth: 0 }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>
-                    {u.role_locked && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }} title="Роль задана переменной KH_ADMIN_EMAILS">env</span>}
+                  <div className="col" style={{ gap: 1, minWidth: 0 }}>
+                    <div className="row center gap-2" style={{ minWidth: 0 }}>
+                      <span style={{ fontWeight: u.name ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email}</span>
+                      {u.role_locked && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }} title="Роль задана переменной KH_ADMIN_EMAILS">env</span>}
+                    </div>
+                    {u.name && <span className="mono tiny muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>}
                   </div>
                   <div className="row center gap-2">
+                    <button className="btn btn-icon" title="Имя и фамилия" onClick={() => editName(u)}><Icon name="doc" size={14} /></button>
                     <select
                       value={u.role}
                       disabled={u.role_locked}
