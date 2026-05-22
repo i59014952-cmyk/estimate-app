@@ -1125,7 +1125,56 @@ function HistoryFeed() {
   );
 }
 
-function RightPanel({ est }) {
+function ContractorsPanel({ onOpenVendorDb, onOpenContractors }) {
+  const caps = useCaps();
+  const read = () => { try { return JSON.parse(localStorage.getItem('kh-contractors-v1') || '[]'); } catch (_) { return []; } };
+  const [list, setList] = useState(read);
+  useEffect(() => {
+    const refresh = () => setList(read());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('kh-storage', refresh);
+    return () => { window.removeEventListener('storage', refresh); window.removeEventListener('kh-storage', refresh); };
+  }, []);
+  if (!caps.sections.includes('contractors')) return null;
+  const vendors = (list || []).filter(c => c && c.type !== 'Производитель');
+  return (
+    <div>
+      <div className="row center between" style={{ marginBottom: 10 }}>
+        <div className="eyebrow">Подрядчики</div>
+        <button className="mono tiny" onClick={onOpenContractors} title="Открыть раздел подрядчиков"
+          style={{ background: "none", border: 0, cursor: "pointer", color: "var(--ink-3)", letterSpacing: ".06em" }}>
+          все →
+        </button>
+      </div>
+      {vendors.length === 0 ? (
+        <div className="tiny muted">Пока нет подрядчиков. Добавьте в разделе «Подрядчики».</div>
+      ) : (
+        <div className="col gap-2">
+          {vendors.map(c => (
+            <button
+              key={c.id}
+              onClick={() => (c.slug ? onOpenVendorDb(c.slug) : onOpenContractors())}
+              className="row center between"
+              title={c.slug ? "Открыть прайс этого подрядчика" : "Прайс ещё не запрашивался"}
+              style={{
+                padding: "9px 12px", border: "1px solid var(--rule)", borderRadius: 10,
+                background: "var(--paper-card)", cursor: "pointer", textAlign: "left", gap: 8,
+              }}
+            >
+              <div className="col" style={{ gap: 2, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name || "Без названия"}</span>
+                {c.type && <span className="mono tiny muted">{c.type}</span>}
+              </div>
+              <Icon name="chev" size={14} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RightPanel({ est, onOpenVendorDb, onOpenContractors }) {
   return (
     <aside className="col" style={{
       width: 320, padding: "20px 22px 24px", gap: 24,
@@ -1137,6 +1186,7 @@ function RightPanel({ est }) {
         <BudgetCard est={est} />
       </div>
       <MarkupCard est={est} />
+      <ContractorsPanel onOpenVendorDb={onOpenVendorDb} onOpenContractors={onOpenContractors} />
       <PopularMaterials onAdd={est.actions.addRow} />
       <HistoryFeed />
     </aside>
@@ -1222,6 +1272,9 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const [navOpen, setNavOpen] = useState(false);
   const [estCatFilter, setEstCatFilter] = useState("all"); // all | work | material
   const [dbAutoAdd, setDbAutoAdd] = useState(false); // открыть Базу сразу с формой добавления
+  const [dbVendorFilter, setDbVendorFilter] = useState(null); // открыть Базу с фильтром по подрядчику
+  const openVendorDb = (slug) => { setNavActive("database"); setKhModalTab("database"); setDbAutoAdd(false); setDbVendorFilter(slug ? ("vendor:" + slug) : "all"); };
+  const openContractors = () => { setNavActive("contractors"); setKhModalTab("contractors"); setDbAutoAdd(false); };
   const est = useEstimate();
   const [meta, updateMeta] = useEditableMeta();
   const fileInputRef = React.useRef(null);
@@ -1332,12 +1385,12 @@ function Workspace({ embedded = false, onTheme, theme }) {
             />
           )}
         </main>
-        <RightPanel est={est} />
+        <RightPanel est={est} onOpenVendorDb={openVendorDb} onOpenContractors={openContractors} />
       </div>
       <StatusBar />
       <ScrollToTop />
       <ErrorToast status={est.state.status} />
-      <KHModalRoot activeId={khModalTab} autoAdd={dbAutoAdd} onClose={() => { setKhModalTab(null); setDbAutoAdd(false); }} est={est} />
+      <KHModalRoot activeId={khModalTab} autoAdd={dbAutoAdd} vendorFilter={dbVendorFilter} onClose={() => { setKhModalTab(null); setDbAutoAdd(false); setDbVendorFilter(null); }} est={est} />
       <PriceFetchOverlay
         visible={est.state.pricesBusy || est.state.busyTickets > 0}
         progress={est.state.pricesProgress}

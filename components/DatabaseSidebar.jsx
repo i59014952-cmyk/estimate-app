@@ -83,9 +83,10 @@ function PriceCell({ item, est, onSaved }) {
   );
 }
 
-function KHDatabaseView({ est, autoAdd }) {
+function KHDatabaseView({ est, autoAdd, vendorFilter }) {
   const [query, setQuery] = React.useState("");
-  const [filter, setFilter] = React.useState("all");
+  const [filter, setFilter] = React.useState(vendorFilter || "all");
+  React.useEffect(() => { if (vendorFilter) setFilter(vendorFilter); }, [vendorFilter]);
   const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
   const [adding, setAdding] = React.useState(!!autoAdd);
