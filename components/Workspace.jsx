@@ -199,9 +199,13 @@ function CompareEstimatesModal({ open, onClose, index }) {
     if (!open || !aId || !bId) return [];
     const A = readRows(aId), B = readRows(bId);
     const map = new Map();
+    // Повторяющиеся названия не схлопываем: n-ю позицию в A сопоставляем с n-й в B.
+    const seen = { a: {}, b: {} };
     const add = (r, side) => {
       if (!r || !r.name) return;
-      const key = norm(r.name) + "|" + norm(r.unit);
+      const base = norm(r.name) + "|" + norm(r.unit);
+      const n = (seen[side][base] = (seen[side][base] || 0) + 1);
+      const key = base + "#" + n;
       if (!map.has(key)) map.set(key, { name: r.name, unit: r.unit || "", a: null, b: null });
       map.get(key)[side] = Number(r.unitPrice) || 0;
     };
