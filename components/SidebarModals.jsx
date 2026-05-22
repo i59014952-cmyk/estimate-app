@@ -644,6 +644,98 @@ function khSeedIfNeeded(current) {
   return next;
 }
 
+function KHPriceCompare({ contractors }) {
+  const [q, setQ] = React.useState('');
+  const [rows, setRows] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const nameBySlug = React.useMemo(() => {
+    const m = {};
+    (contractors || []).forEach(c => { if (c.slug) m[c.slug] = c.name || ''; });
+    return m;
+  }, [contractors]);
+
+  const load = React.useCallback(() => {
+    if (!(window.SB && window.SB.selectAll)) { setError('Нет подключения к базе'); return; }
+    setLoading(true); setError('');
+    window.SB.selectAll('kh_vendor_prices', 'select=*')
+      .then(r => setRows(Array.isArray(r) ? r : []))
+      .catch(e => setError((e && e.message) || 'Не удалось загрузить прайсы'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const norm = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е').trim();
+  const query = norm(q);
+  const matches = React.useMemo(() => {
+    if (!rows || query.length < 2) return [];
+    return rows
+      .filter(it => norm(it.name).includes(query) && it.unit_price != null && Number(it.unit_price) > 0)
+      .map(it => ({
+        vendor: it.vendor_name || nameBySlug[it.vendor_slug] || ('Подрядчик ' + String(it.vendor_slug || '').slice(0, 4)),
+        name: it.name, unit: it.unit || '', price: Number(it.unit_price),
+      }))
+      .sort((a, b) => a.price - b.price);
+  }, [rows, query, nameBySlug]);
+
+  const best = matches.length ? matches[0].price : null;
+  const vendorCount = new Set(matches.map(m => m.vendor)).size;
+
+  return (
+    <div className="col" style={{ gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--rule)', background: 'var(--paper-card)' }}>
+      <div className="row center between" style={{ gap: 8 }}>
+        <div className="eyebrow">Сравнение цен по позиции</div>
+        <button className="btn btn-sm" onClick={load} title="Обновить прайсы" disabled={loading}>
+          <Icon name="refresh" size={13} />
+        </button>
+      </div>
+      <input
+        autoFocus
+        placeholder="Название позиции (например: брус, OSB, тёплый пол)…"
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        style={khInputStyle()}
+      />
+      {error && <div className="tiny" style={{ color: 'var(--rust)' }}>{error}</div>}
+      {loading && <div className="tiny mono muted">Загрузка прайсов…</div>}
+      {!loading && !error && query.length < 2 && (
+        <div className="tiny muted">Введите минимум 2 символа, чтобы сравнить цены подрядчиков.</div>
+      )}
+      {!loading && query.length >= 2 && matches.length === 0 && (
+        <div className="tiny muted">Ни у одного подрядчика нет такой позиции в прайсе.</div>
+      )}
+      {matches.length > 0 && (
+        <div className="col" style={{ gap: 4 }}>
+          <div className="tiny muted">Нашлось {matches.length} у {vendorCount} подрядчик(ов) · отсортировано по цене</div>
+          {matches.slice(0, 30).map((m, i) => {
+            const cheapest = m.price === best;
+            return (
+              <div key={i} className="row center between" style={{
+                gap: 10, padding: '8px 10px', borderRadius: 8,
+                border: '1px solid ' + (cheapest ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
+                background: cheapest ? 'rgba(110,123,79,.08)' : 'var(--paper)',
+              }}>
+                <div className="col" style={{ gap: 2, minWidth: 0 }}>
+                  <div className="row center gap-2" style={{ minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.vendor}</span>
+                    {cheapest && <span className="mono tiny" style={{ padding: '1px 6px', borderRadius: 99, background: 'var(--moss, #4f6f52)', color: '#fff' }}>выгодно</span>}
+                  </div>
+                  <div className="tiny muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</div>
+                </div>
+                <div className="mono" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  {fmtMoney(m.price)}{m.unit ? <span className="muted"> / {m.unit}</span> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KHContractorsView() {
   const data = useKHData();
   const [list, setList] = React.useState(() => khSeedIfNeeded(khLoadContractors()));
@@ -785,6 +877,10 @@ function KHContractorsView() {
           </button>
         )}
       </div>
+
+      {tab === 'Подрядчики' && !formOpen && (
+        <KHPriceCompare contractors={list} />
+      )}
 
       {formOpen && (
         <form onSubmit={submitForm}
