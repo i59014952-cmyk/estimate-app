@@ -134,6 +134,134 @@ function khReadDynamicCounts() {
   return { objects: activeObjects, contractors, database, stores };
 }
 
+function AdminUsersModal({ open, onClose }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = React.useCallback(() => {
+    setLoading(true); setError("");
+    window.KHAuth.listUsers()
+      .then((rows) => setUsers(Array.isArray(rows) ? rows : []))
+      .catch((e) => setError(e.message || "Не удалось загрузить список"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { if (open) load(); }, [open, load]);
+
+  const add = async () => {
+    setBusy(true); setError("");
+    try {
+      await window.KHAuth.createUser(email.trim(), password);
+      setEmail(""); setPassword("");
+      load();
+    } catch (e) { setError(e.message || "Не удалось создать пользователя"); }
+    finally { setBusy(false); }
+  };
+
+  const resetPwd = async (u) => {
+    const np = window.prompt(`Новый пароль для ${u.email} (минимум 6 символов):`);
+    if (np == null) return;
+    try { await window.KHAuth.setUserPassword(u.email, np); window.alert("Пароль обновлён"); }
+    catch (e) { window.alert(e.message || "Не удалось сменить пароль"); }
+  };
+
+  const del = async (u) => {
+    if (!window.confirm(`Удалить пользователя ${u.email}? Он потеряет доступ к приложению.`)) return;
+    try { await window.KHAuth.deleteUser(u.email); load(); }
+    catch (e) { window.alert(e.message || "Не удалось удалить пользователя"); }
+  };
+
+  const canAdd = email.trim().includes("@") && password.length >= 6 && !busy;
+
+  return (
+    <KHModal open={open} onClose={onClose} title="Пользователи" subtitle="Доступ операторов к приложению">
+      <div className="col" style={{ gap: 18 }}>
+        <div className="col" style={{ gap: 8 }}>
+          <div className="eyebrow">Добавить пользователя</div>
+          <div className="row gap-3" style={{ flexWrap: "wrap" }}>
+            <input
+              type="email" placeholder="email (логин)" value={email}
+              autoComplete="off"
+              onChange={(e) => setEmail(e.target.value)}
+              style={{ flex: "1 1 200px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
+            />
+            <input
+              type="text" placeholder="пароль (мин. 6)" value={password}
+              autoComplete="new-password"
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && canAdd) add(); }}
+              style={{ flex: "1 1 160px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
+            />
+            <button className="btn btn-sm" onClick={add} disabled={!canAdd}
+              style={{ opacity: canAdd ? 1 : 0.5, cursor: canAdd ? "pointer" : "not-allowed" }}>
+              <Icon name="plus" size={14} /> Добавить
+            </button>
+          </div>
+          {error && <div className="tiny" style={{ color: "var(--rust)" }}>{error}</div>}
+        </div>
+
+        <div className="col" style={{ gap: 6 }}>
+          <div className="eyebrow">Пользователи {users.length ? `· ${users.length}` : ""}</div>
+          {loading ? (
+            <div className="tiny mono" style={{ color: "var(--ink-3)" }}>Загрузка…</div>
+          ) : users.length === 0 ? (
+            <div className="tiny mono" style={{ color: "var(--ink-3)" }}>Пока нет пользователей</div>
+          ) : (
+            <div className="col" style={{ gap: 4 }}>
+              {users.map((u) => (
+                <div key={u.email} className="row center between" style={{ padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, gap: 8 }}>
+                  <div className="row center gap-2" style={{ minWidth: 0 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>
+                    {u.is_admin && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }}>админ</span>}
+                  </div>
+                  <div className="row center gap-2">
+                    <button className="btn btn-icon" title="Сменить пароль" onClick={() => resetPwd(u)}><Icon name="refresh" size={14} /></button>
+                    <button className="btn btn-icon" title="Удалить" onClick={() => del(u)}><Icon name="trash" size={14} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </KHModal>
+  );
+}
+
+function AdminPanel() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!(window.KHAuth && window.KHAuth.me)) return;
+    window.KHAuth.me()
+      .then((r) => { if (alive) setIsAdmin(!!(r && r.is_admin)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  if (!isAdmin) return null;
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="row center gap-3 focusable kh-sidebar__admin"
+        style={{
+          marginTop: 10, width: "100%", padding: "9px 12px", borderRadius: 8,
+          background: "transparent", color: "var(--ink-2)", border: "1px solid var(--rule)",
+          cursor: "pointer", textAlign: "left", fontSize: 13, fontFamily: "var(--sans)"
+        }}
+      >
+        <Icon name="users" size={15} /><span>Администрирование</span>
+      </button>
+      <AdminUsersModal open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
 function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
   const [counts, setCounts] = React.useState(khReadDynamicCounts);
   React.useEffect(() => {
@@ -226,6 +354,8 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
           <div><span style={{ color: "var(--ink-4)" }}>Этап</span> <Editable value={meta.stage || "Смета / R3"} onChange={(v) => updateMeta && updateMeta("stage", v)} /></div>
         </div>
       </div>
+
+      <AdminPanel />
     </aside>
     </>
   );
