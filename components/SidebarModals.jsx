@@ -2073,12 +2073,12 @@ const KH_VIEWS = {
   templates:   { title: 'Шаблоны',     sub: 'Типовые позиции',         comp: KHTemplatesView },
 };
 
-function KHModalRoot({ activeId, onClose, est, autoAdd }) {
+function KHModalRoot({ activeId, onClose, est, autoAdd, vendorFilter }) {
   const view = activeId ? KH_VIEWS[activeId] : null;
   const C = view ? view.comp : null;
   return (
     <KHModal open={!!activeId} onClose={onClose} title={view?.title} subtitle={view?.sub}>
-      {C && <C est={est} onClose={onClose} autoAdd={autoAdd} />}
+      {C && <C est={est} onClose={onClose} autoAdd={autoAdd} vendorFilter={vendorFilter} />}
     </KHModal>
   );
 }
