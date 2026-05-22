@@ -1347,8 +1347,6 @@ function RightPanel({ est }) {
         <BudgetCard est={est} />
       </div>
       <MarkupCard est={est} />
-      <PopularMaterials onAdd={est.actions.addRow} />
-      <HistoryFeed />
     </aside>
   );
 }
