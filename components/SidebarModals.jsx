@@ -925,10 +925,6 @@ function KHContractorsView() {
         )}
       </div>
 
-      {tab === 'Подрядчики' && !formOpen && (
-        <KHPriceCompare contractors={list} />
-      )}
-
       {formOpen && (
         <form onSubmit={submitForm}
           className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 10, border: '1px solid var(--moss)', background: 'var(--paper-card)' }}>
