@@ -90,6 +90,9 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
   const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
   const [expandedCmp, setExpandedCmp] = React.useState(null); // ключ позиции с раскрытым сравнением
+  const [compareMode, setCompareMode] = React.useState(false); // режим колонок-сравнения подрядчиков
+  const [compareSlugs, setCompareSlugs] = React.useState([]); // до 3 выбранных подрядчиков
+  const [cmpQuery, setCmpQuery] = React.useState("");
   const [adding, setAdding] = React.useState(!!autoAdd);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "", category: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
@@ -253,6 +256,23 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
     return res;
   }, [vendorItemsList]);
 
+  // Все позиции каждого подрядчика (для режима колонок-сравнения).
+  const vendorItemsBySlug = React.useMemo(() => {
+    const m = new Map();
+    for (const r of vendorRows) {
+      const price = Number(r.unit_price);
+      const slug = r.vendor_slug || '';
+      if (!m.has(slug)) m.set(slug, { slug, name: vendorNameOf(r), items: [] });
+      m.get(slug).items.push({ name: r.name, unit: r.unit || '', price: price > 0 ? price : null });
+    }
+    for (const v of m.values()) v.items.sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+    return m;
+  }, [vendorRows, vendorMap]);
+
+  const toggleCompareSlug = (slug) => setCompareSlugs(prev =>
+    prev.includes(slug) ? prev.filter(s => s !== slug) : (prev.length >= 3 ? prev : [...prev, slug])
+  );
+
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     let out = showHidden ? hiddenList : activeMerged;
@@ -407,7 +427,90 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
           </button>
         )}
         <button className="btn btn-sm" onClick={refreshVendors} title="Перечитать КП подрядчиков из облака">⟳ Обновить</button>
+        <button
+          className="btn btn-sm"
+          onClick={() => setCompareMode(v => !v)}
+          title="Открыть прайсы подрядчиков колонками для ручного сравнения"
+          style={compareMode ? { background: "var(--ink)", color: "var(--paper)", borderColor: "var(--ink)" } : undefined}
+        >⇆ Сравнить подрядчиков</button>
       </div>
+
+      {compareMode && (
+        <div className="col" style={{ gap: 12 }}>
+          <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="eyebrow" style={{ marginRight: 2 }}>Выберите до 3 подрядчиков</span>
+            {vendorGroups.map(g => {
+              const on = compareSlugs.includes(g.slug);
+              const disabled = !on && compareSlugs.length >= 3;
+              return (
+                <button
+                  key={g.slug || g.name}
+                  onClick={() => toggleCompareSlug(g.slug)}
+                  disabled={disabled}
+                  className="kh-pill"
+                  style={{
+                    cursor: disabled ? "not-allowed" : "pointer",
+                    border: "1px solid " + (on ? "var(--moss, #4f6f52)" : "var(--rule)"),
+                    background: on ? "var(--moss, #4f6f52)" : "var(--paper-card)",
+                    color: on ? "#fff" : (disabled ? "var(--ink-4)" : "var(--ink-2)"),
+                    opacity: disabled ? 0.6 : 1,
+                  }}
+                >{on ? "✓ " : ""}{g.name || `Подрядчик ${(g.slug || "").slice(0, 4)}`} · {g.count}</button>
+              );
+            })}
+            <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => { setCompareMode(false); setCompareSlugs([]); setCmpQuery(""); }}>✕ Закрыть сравнение</button>
+          </div>
+
+          {compareSlugs.length === 0 ? (
+            <div className="kh-empty" style={{ padding: 20, textAlign: "center" }}>Отметьте подрядчиков выше — их прайсы откроются колонками рядом.</div>
+          ) : (
+            <>
+              <input
+                placeholder="Фильтр по названию во всех колонках…"
+                value={cmpQuery}
+                onChange={e => setCmpQuery(e.target.value)}
+                style={{ maxWidth: 360 }}
+              />
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", overflowX: "auto", paddingBottom: 6 }}>
+                {compareSlugs.map(slug => {
+                  const v = vendorItemsBySlug.get(slug) || { name: "—", items: [] };
+                  const q = cmpQuery.trim().toLowerCase();
+                  const items = q ? v.items.filter(it => String(it.name).toLowerCase().includes(q)) : v.items;
+                  return (
+                    <div key={slug} style={{ flex: "1 1 0", minWidth: 280, maxWidth: 460, border: "1px solid var(--rule)", borderRadius: 10, background: "var(--paper-card)", overflow: "hidden" }}>
+                      <div className="row center between" style={{ padding: "10px 12px", borderBottom: "1px solid var(--rule)", background: "var(--paper-2)", gap: 8 }}>
+                        <span style={{ fontWeight: 600, color: "var(--rust)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</span>
+                        <span className="mono tiny muted" style={{ whiteSpace: "nowrap" }}>{items.length} поз.</span>
+                      </div>
+                      <div className="col" style={{ maxHeight: 520, overflowY: "auto" }}>
+                        {items.length === 0 ? (
+                          <div className="tiny muted" style={{ padding: 12 }}>Нет позиций</div>
+                        ) : items.map((it, ii) => (
+                          <div key={ii} className="row center between" style={{ gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--rule)" }}>
+                            <span className="col" style={{ gap: 1, minWidth: 0 }}>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</span>
+                              {it.unit ? <span className="mono tiny muted">{it.unit}</span> : null}
+                            </span>
+                            <div className="row center gap-2" style={{ whiteSpace: "nowrap" }}>
+                              <span className="mono">{it.price != null ? fmtMoney(it.price) : "—"}</span>
+                              <button
+                                className="btn btn-icon" title="Добавить в смету" style={{ width: 26, height: 26 }}
+                                onClick={() => est.actions.addRow({ name: it.name, unit: it.unit, unitPrice: it.price || 0, qty: 1, notFound: !(it.price > 0), source: "local", category: classifyItem(it.name, it.unit) })}
+                              >+</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {!compareMode && (<>
 
       {!showHidden && (
         <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -795,6 +898,7 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
           {query ? "Ничего не найдено" : "База пуста — добавьте позиции"}
         </div>
       )}
+      </>)}
     </div>
   );
 }
