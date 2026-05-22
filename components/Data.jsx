@@ -106,4 +106,25 @@ const NAV2 = [
 const fmt = (n, sep=" ") => Number(n).toLocaleString("ru-RU").replace(/\u00A0/g, sep);
 const fmtMoney = (n) => fmt(Math.round(n)) + " ₽";
 
-Object.assign(window, { ESTIMATE, SECTIONS, POPULAR_MATERIALS, HISTORY, OBJECTS, NAV, NAV2, fmt, fmtMoney });
+// --- Roles & access control --------------------------------------------------
+// Single source of truth for what each role may see/do. `sections` lists which
+// sidebar sections are visible; `cost` controls visibility of себестоимость/
+// наценка; `edit` allows modifying data; `users` gates the admin panel. The
+// backend enforces edit/users for shared data — frontend gating is for UX (and
+// for the cost columns, which live client-side).
+const ALL_SECTIONS = ["objects", "stores", "database", "contractors", "calendar", "templates"];
+const ROLE_CAPS = {
+  admin:     { cost: true,  edit: true,  users: true,  sections: ALL_SECTIONS },
+  estimator: { cost: true,  edit: true,  users: false, sections: ALL_SECTIONS },
+  viewer:    { cost: false, edit: false, users: false, sections: ["calendar"] },
+};
+const capsForRole = (role) => ROLE_CAPS[role] || ROLE_CAPS.estimator;
+// Default context = full estimator access, so a failed /auth/me never hides the
+// UI for legitimate operators (writes are still enforced server-side).
+const KHRoleCtx = React.createContext({ role: "estimator", caps: ROLE_CAPS.estimator });
+const useCaps = () => React.useContext(KHRoleCtx).caps;
+
+Object.assign(window, {
+  ESTIMATE, SECTIONS, POPULAR_MATERIALS, HISTORY, OBJECTS, NAV, NAV2, fmt, fmtMoney,
+  ROLE_CAPS, capsForRole, KHRoleCtx, useCaps,
+});

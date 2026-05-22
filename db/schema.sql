@@ -29,8 +29,11 @@ create table if not exists kh_users (
   id            bigint generated always as identity primary key,
   email         text not null unique,
   password_hash text not null,
+  role          text not null default 'estimator',  -- admin | estimator | viewer
   created_at    timestamptz not null default now()
 );
+-- Existing databases (table already created): apply once by hand —
+--   alter table kh_users add column if not exists role text not null default 'estimator';
 
 -- Projects / objects ---------------------------------------------------------
 create table if not exists kh_objects (

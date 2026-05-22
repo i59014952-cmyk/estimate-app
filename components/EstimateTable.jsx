@@ -36,6 +36,7 @@ function EstimateTable({ rows, catFilter = 'all', markup, onUpdateQty, onUpdateR
 }
 
 function EstimateRow({ row, index, markup, onUpdateQty, onUpdateRow, onRemove, onTogglePicker, onApplyCandidate, onApplyManual }) {
+  const caps = useCaps();
   const total = row.notFound ? null : row.qty * row.unitPrice;
   const hasAlternatives = row.candidates && row.candidates.length > 1;
   const sourceLabel = row.sourceLabel || SOURCE_LABELS[row.source] || '—';
@@ -76,81 +77,103 @@ function EstimateRow({ row, index, markup, onUpdateQty, onUpdateRow, onRemove, o
         <div className="mono tiny" style={{ width: 56, color: "var(--ink-4)" }}>
           {String(index).padStart(2, "0")}
         </div>
-        <button
-          onClick={toggleCat}
-          title={cat === 'work' ? 'Работа — нажмите, чтобы сделать материалом' : 'Материал — нажмите, чтобы сделать работой'}
-          className="mono tiny"
-          style={{
-            width: 38, marginRight: 8, padding: "2px 0", borderRadius: 4, cursor: "pointer",
-            border: "1px solid var(--rule)", textAlign: "center", flexShrink: 0,
+        {caps.edit ? (
+          <button
+            onClick={toggleCat}
+            title={cat === 'work' ? 'Работа — нажмите, чтобы сделать материалом' : 'Материал — нажмите, чтобы сделать работой'}
+            className="mono tiny"
+            style={{
+              width: 38, marginRight: 8, padding: "2px 0", borderRadius: 4, cursor: "pointer",
+              border: "1px solid var(--rule)", textAlign: "center", flexShrink: 0,
+              background: cat === 'work' ? "var(--moss, #4f6f52)" : "transparent",
+              color: cat === 'work' ? "#fff" : "var(--ink-3)",
+            }}
+          >
+            {cat === 'work' ? 'Раб' : 'Мат'}
+          </button>
+        ) : (
+          <span className="mono tiny" style={{
+            width: 38, marginRight: 8, padding: "2px 0", borderRadius: 4,
+            border: "1px solid var(--rule)", textAlign: "center", flexShrink: 0, display: "inline-block",
             background: cat === 'work' ? "var(--moss, #4f6f52)" : "transparent",
             color: cat === 'work' ? "#fff" : "var(--ink-3)",
-          }}
-        >
-          {cat === 'work' ? 'Раб' : 'Мат'}
-        </button>
+          }}>
+            {cat === 'work' ? 'Раб' : 'Мат'}
+          </span>
+        )}
         <div style={{ flex: 1, minWidth: 0, paddingRight: 12, color: "var(--ink)" }}>
-          <Editable value={row.name} onChange={updateName} placeholder="Название позиции" />
+          {caps.edit
+            ? <Editable value={row.name} onChange={updateName} placeholder="Название позиции" />
+            : <span>{row.name}</span>}
           {row.url && (
             <a href={row.url} target="_blank" rel="noopener noreferrer"
                style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-3)", textDecoration: "none" }} title="Открыть источник">↗</a>
           )}
         </div>
         <div className="mono tiny" style={{ width: 64, textAlign: "center", color: "var(--ink-3)" }}>
-          <Editable value={row.unit} onChange={updateUnit} placeholder="ед." />
+          {caps.edit
+            ? <Editable value={row.unit} onChange={updateUnit} placeholder="ед." />
+            : <span>{row.unit}</span>}
         </div>
         <div style={{ width: 80, textAlign: "right" }}>
-          <input
-            type="number" min="0" step="0.01" value={row.qty}
-            onChange={(e) => onUpdateQty(row.id, parseFloat(e.target.value))}
-            className="mono"
-            style={{
-              width: 72, textAlign: "right", padding: "4px 6px",
-              border: "1px solid var(--rule)", borderRadius: 4,
-              background: "var(--paper)", color: "var(--ink)", fontSize: 12,
-            }}
-          />
-        </div>
-        <div className="mono" style={{ width: 100, textAlign: "right", color: row.notFound ? "var(--rust)" : "var(--ink)", fontSize: 12 }}>
-          <Editable
-            value={row.unitPrice > 0 ? formatMoney(row.unitPrice) : ""}
-            onChange={updatePrice}
-            placeholder="0"
-          />
-          {row.notFound && (
-            <div>
-              <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
-                {row.expanded ? "Скрыть" : "Подобрать"}
-              </button>
-            </div>
-          )}
-          {!row.notFound && hasAlternatives && (
-            <div>
-              <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
-                {row.expanded ? "Скрыть" : `Заменить (${row.candidates.length})`}
-              </button>
-            </div>
+          {caps.edit ? (
+            <input
+              type="number" min="0" step="0.01" value={row.qty}
+              onChange={(e) => onUpdateQty(row.id, parseFloat(e.target.value))}
+              className="mono"
+              style={{
+                width: 72, textAlign: "right", padding: "4px 6px",
+                border: "1px solid var(--rule)", borderRadius: 4,
+                background: "var(--paper)", color: "var(--ink)", fontSize: 12,
+              }}
+            />
+          ) : (
+            <span className="mono" style={{ fontSize: 12, color: "var(--ink)" }}>{row.qty}</span>
           )}
         </div>
-        <div className="mono" style={{ width: 60, textAlign: "right" }}>
-          <input
-            type="number" min="0" step="1"
-            value={row.markup != null ? row.markup : ''}
-            placeholder={String(Math.round(effPct))}
-            onChange={(e) => updateMarkup(e.target.value)}
-            title="Наценка для этой строки, % (пусто — по категории)"
-            className="mono"
-            style={{
-              width: 48, textAlign: "right", padding: "4px 6px", fontSize: 12,
-              border: "1px solid " + (row.markup != null ? "var(--moss, #4f6f52)" : "var(--rule)"),
-              borderRadius: 4, background: "var(--paper)",
-              color: row.markup != null ? "var(--ink)" : "var(--ink-4)",
-            }}
-          />
-        </div>
+        {caps.cost && (
+          <div className="mono" style={{ width: 100, textAlign: "right", color: row.notFound ? "var(--rust)" : "var(--ink)", fontSize: 12 }}>
+            {caps.edit
+              ? <Editable value={row.unitPrice > 0 ? formatMoney(row.unitPrice) : ""} onChange={updatePrice} placeholder="0" />
+              : <span>{row.unitPrice > 0 ? formatMoney(row.unitPrice) : "—"}</span>}
+            {caps.edit && row.notFound && (
+              <div>
+                <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
+                  {row.expanded ? "Скрыть" : "Подобрать"}
+                </button>
+              </div>
+            )}
+            {caps.edit && !row.notFound && hasAlternatives && (
+              <div>
+                <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
+                  {row.expanded ? "Скрыть" : `Заменить (${row.candidates.length})`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {caps.cost && (
+          <div className="mono" style={{ width: 60, textAlign: "right" }}>
+            <input
+              type="number" min="0" step="1"
+              value={row.markup != null ? row.markup : ''}
+              placeholder={String(Math.round(effPct))}
+              onChange={(e) => updateMarkup(e.target.value)}
+              disabled={!caps.edit}
+              title="Наценка для этой строки, % (пусто — по категории)"
+              className="mono"
+              style={{
+                width: 48, textAlign: "right", padding: "4px 6px", fontSize: 12,
+                border: "1px solid " + (row.markup != null ? "var(--moss, #4f6f52)" : "var(--rule)"),
+                borderRadius: 4, background: "var(--paper)",
+                color: row.markup != null ? "var(--ink)" : "var(--ink-4)",
+              }}
+            />
+          </div>
+        )}
         <div className="mono serif" style={{ width: 130, textAlign: "right", fontSize: 14 }}>
           {clientTotal === null ? "—" : formatMoney(clientTotal)}
-          {clientTotal !== null && (
+          {caps.cost && clientTotal !== null && (
             <div className="mono tiny" style={{ color: "var(--ink-4)", fontWeight: 400, marginTop: 2 }}>
               себест. {formatMoney(total || 0)}
             </div>
@@ -167,15 +190,17 @@ function EstimateRow({ row, index, markup, onUpdateQty, onUpdateRow, onRemove, o
             </span>
           )}
         </div>
-        <button
-          onClick={() => onRemove(row.id)}
-          className="btn btn-icon"
-          style={{ width: 28, height: 28, marginLeft: 8 }}
-          title="Удалить"
-          aria-label="Удалить"
-        >
-          <Icon name="x" size={12} />
-        </button>
+        {caps.edit && (
+          <button
+            onClick={() => onRemove(row.id)}
+            className="btn btn-icon"
+            style={{ width: 28, height: 28, marginLeft: 8 }}
+            title="Удалить"
+            aria-label="Удалить"
+          >
+            <Icon name="x" size={12} />
+          </button>
+        )}
       </div>
       {row.expanded && (
         <Picker
