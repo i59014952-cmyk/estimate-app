@@ -1162,9 +1162,9 @@ function ContractorsPanel({ onOpenVendorDb, onOpenContractors }) {
           {vendors.map(c => (
             <button
               key={c.id}
-              onClick={() => (c.slug ? onOpenVendorDb(c.slug) : onOpenContractors())}
+              onClick={() => ((c.slug || c.name) ? onOpenVendorDb(c) : onOpenContractors())}
               className="row center between"
-              title={c.slug ? "Открыть прайс этого подрядчика" : "Прайс ещё не запрашивался"}
+              title={(c.slug || c.name) ? "Открыть прайс этого подрядчика" : "Прайс ещё не запрашивался"}
               style={{
                 padding: "9px 12px", border: "1px solid var(--rule)", borderRadius: 10,
                 background: "var(--paper-card)", cursor: "pointer", textAlign: "left", gap: 8,
@@ -1281,7 +1281,10 @@ function Workspace({ embedded = false, onTheme, theme }) {
   const [estCatFilter, setEstCatFilter] = useState("all"); // all | work | material
   const [dbAutoAdd, setDbAutoAdd] = useState(false); // открыть Базу сразу с формой добавления
   const [dbVendorFilter, setDbVendorFilter] = useState(null); // открыть Базу с фильтром по подрядчику
-  const openVendorDb = (slug) => { setNavActive("database"); setKhModalTab("database"); setDbAutoAdd(false); setDbVendorFilter(slug ? ("vendor:" + slug) : "all"); };
+  const openVendorDb = (c) => {
+    const f = c && c.name ? ("vname:" + c.name) : (c && c.slug ? ("vendor:" + c.slug) : "all");
+    setNavActive("database"); setKhModalTab("database"); setDbAutoAdd(false); setDbVendorFilter(f);
+  };
   const openContractors = () => { setNavActive("contractors"); setKhModalTab("contractors"); setDbAutoAdd(false); };
   const est = useEstimate();
   const [meta, updateMeta] = useEditableMeta();
