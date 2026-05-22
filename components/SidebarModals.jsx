@@ -786,7 +786,7 @@ function KHPriceCompare({ contractors }) {
 function KHContractorsView() {
   const data = useKHData();
   const [list, setList] = React.useState(() => khSeedIfNeeded(khLoadContractors()));
-  const [tab, setTab] = React.useState('Производители');
+  const [tab, setTab] = React.useState('Подрядчики');
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
   const [draft, setDraft] = React.useState({ name: '', email: '', phone: '', type: 'Производитель', org: '', website: '' });
@@ -916,8 +916,8 @@ function KHContractorsView() {
   return (
     <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid var(--rule)' }}>
-        <Tab id="Производители" />
         <Tab id="Подрядчики" />
+        <Tab id="Производители" />
         {!formOpen && (
           <button className="kh-btn-primary" onClick={startAdd} style={{ marginLeft: 'auto', marginBottom: 6 }}>
             + Добавить {tab === 'Производители' ? 'производителя' : 'подрядчика'}
