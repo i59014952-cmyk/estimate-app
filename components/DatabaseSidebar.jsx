@@ -650,8 +650,8 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
                   });
                 }} />
             </th>
-            <th style={{ width: 70 }}>Источник</th>
-            <th style={{ width: 92 }}>Категория</th>
+            <th style={{ width: 86, whiteSpace: "nowrap" }}>Источник</th>
+            <th style={{ width: 168, whiteSpace: "nowrap" }}>Категория</th>
             <th>Наименование</th>
             <th style={{ width: 80 }}>Ед.</th>
             <th className="num" style={{ width: 130 }}>Цена</th>
