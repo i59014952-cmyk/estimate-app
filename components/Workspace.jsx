@@ -183,7 +183,7 @@ function AdminUsersModal({ open, onClose }) {
     catch (e) { window.alert(e.message || "Не удалось удалить пользователя"); }
   };
 
-  const canAdd = email.trim().includes("@") && password.length >= 6 && !busy;
+  const canAdd = email.trim().length > 0 && password.length >= 6 && !busy;
 
   return (
     <KHModal open={open} onClose={onClose} title="Пользователи" subtitle="Доступ операторов к приложению">
@@ -192,7 +192,7 @@ function AdminUsersModal({ open, onClose }) {
           <div className="eyebrow">Добавить пользователя</div>
           <div className="row gap-3" style={{ flexWrap: "wrap" }}>
             <input
-              type="email" placeholder="email (логин)" value={email}
+              type="text" placeholder="логин" value={email}
               autoComplete="off"
               onChange={(e) => setEmail(e.target.value)}
               style={{ flex: "1 1 200px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}

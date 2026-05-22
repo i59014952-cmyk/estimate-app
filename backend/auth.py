@@ -201,8 +201,8 @@ async def list_users(_admin: str = Depends(require_admin)):
 async def create_user(body: CreateUserIn, _admin: str = Depends(require_admin)):
     import db
     email = body.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(400, "Введите корректный email")
+    if not email:
+        raise HTTPException(400, "Введите логин")
     _valid_password(body.password)
     role = _valid_role(body.role)
     async with db.pool().acquire() as conn:
