@@ -28,6 +28,17 @@ QUERY_TIMEOUT_SEC = int(os.getenv("LEMANA_QUERY_TIMEOUT", "90"))
 RESULT_TTL_SEC = int(os.getenv("LEMANA_RESULT_TTL", "3600"))
 GC_INTERVAL_SEC = 300
 
+# Agent mode: the server itself cannot reach Lemana (Qrator blocks its
+# datacenter IP), so the browser runs on a home PC ("agent") with a Russian
+# residential IP. The agent long-polls /lemana/agent/poll for jobs and posts
+# results back. When enabled the server never launches a local browser; it only
+# brokers the queue. Default off → original behaviour (local browser).
+AGENT_MODE = os.getenv("LEMANA_AGENT_MODE", "0") == "1"
+AGENT_TOKEN = os.getenv("LEMANA_AGENT_TOKEN", "")
+# A claimed-but-never-finished job (agent crashed/lost) is failed after this.
+DISPATCH_TIMEOUT_SEC = int(os.getenv("LEMANA_DISPATCH_TIMEOUT", str(JOB_TIMEOUT_SEC)))
+REAPER_INTERVAL_SEC = 30
+
 
 @dataclass
 class Job:
@@ -44,6 +55,7 @@ class Job:
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     cancel_requested: bool = False
+    dispatched_at: Optional[datetime] = None  # set when an agent claims the job
 
 
 class JobStore:
@@ -79,6 +91,22 @@ class JobStore:
             job.cancel_requested = True
             return True
 
+    async def fail_stuck(self, timeout_sec: int) -> int:
+        """Fail jobs an agent claimed but never completed (agent died/lost)."""
+        cutoff = datetime.utcnow() - timedelta(seconds=timeout_sec)
+        async with self._lock:
+            stuck = [
+                j for j in self._jobs.values()
+                if j.status == "running"
+                and j.dispatched_at is not None
+                and j.dispatched_at < cutoff
+            ]
+            for j in stuck:
+                j.status = "failed"
+                j.error = "agent did not return in time"
+                j.finished_at = datetime.utcnow()
+            return len(stuck)
+
     async def gc_expired(self) -> int:
         """Удалить done/failed/cancelled job-ы старше RESULT_TTL_SEC."""
         cutoff = datetime.utcnow() - timedelta(seconds=RESULT_TTL_SEC)
@@ -105,26 +133,32 @@ class LemanaWorker:
         self._session_city: Optional[str] = None
         self._task: Optional[asyncio.Task] = None
         self._gc_task: Optional[asyncio.Task] = None
+        self._reaper_task: Optional[asyncio.Task] = None
 
     # ------------------------------------------------------------------
     # lifecycle
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        self._task = asyncio.create_task(self._run_forever(), name="lemana-worker")
         self._gc_task = asyncio.create_task(self._gc_loop(), name="lemana-gc")
-        logger.info("LemanaWorker started (concurrency=%d, queue=%d)",
-                    MAX_CONCURRENCY, MAX_QUEUE)
+        if AGENT_MODE:
+            self._reaper_task = asyncio.create_task(self._reaper_loop(), name="lemana-reaper")
+            logger.info("LemanaWorker started in AGENT mode (remote browser, queue=%d)", MAX_QUEUE)
+        else:
+            self._task = asyncio.create_task(self._run_forever(), name="lemana-worker")
+            logger.info("LemanaWorker started in LOCAL mode (concurrency=%d, queue=%d)",
+                        MAX_CONCURRENCY, MAX_QUEUE)
 
     async def stop(self) -> None:
-        for t in (self._task, self._gc_task):
+        for t in (self._task, self._gc_task, self._reaper_task):
             if t is not None:
                 t.cancel()
                 try:
                     await t
                 except (asyncio.CancelledError, Exception):
                     pass
-        await asyncio.to_thread(self._close_session_sync)
+        if not AGENT_MODE:
+            await asyncio.to_thread(self._close_session_sync)
         logger.info("LemanaWorker stopped")
 
     # ------------------------------------------------------------------
@@ -181,6 +215,65 @@ class LemanaWorker:
                 raise
             except Exception:
                 logger.exception("gc loop error")
+
+    async def _reaper_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.sleep(REAPER_INTERVAL_SEC)
+                failed = await self.store.fail_stuck(DISPATCH_TIMEOUT_SEC)
+                if failed:
+                    logger.warning("reaper: failed %d stuck jobs (agent lost?)", failed)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("reaper loop error")
+
+    # ------------------------------------------------------------------
+    # agent broker (AGENT_MODE): browser runs on a remote home agent
+    # ------------------------------------------------------------------
+
+    async def claim_next(self, wait: float) -> Optional[Job]:
+        """Hand the next queued job to a polling agent, or None if none arrives
+        within `wait` seconds. Marks the job running + dispatched."""
+        deadline = asyncio.get_event_loop().time() + max(0.0, wait)
+        while True:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return None
+            try:
+                job_id = await asyncio.wait_for(self.queue.get(), timeout=remaining)
+            except asyncio.TimeoutError:
+                return None
+            job = await self.store.get(job_id)
+            if job is None:
+                continue
+            if job.cancel_requested or job.status in ("done", "failed", "cancelled"):
+                if job.cancel_requested and job.status == "queued":
+                    await self.store.update(
+                        job_id, status="cancelled", finished_at=datetime.utcnow())
+                continue
+            await self.store.update(
+                job_id, status="running",
+                started_at=datetime.utcnow(), dispatched_at=datetime.utcnow())
+            return await self.store.get(job_id)
+
+    async def submit_result(self, job_id: str, results: list[dict],
+                            error: Optional[str] = None) -> bool:
+        """Store results posted back by the agent. Returns False if unknown job."""
+        job = await self.store.get(job_id)
+        if job is None:
+            return False
+        if error:
+            await self.store.update(
+                job_id, status="failed", error=str(error)[:300],
+                results=results or [], done_count=len(results or []),
+                current_query=None, finished_at=datetime.utcnow())
+        else:
+            await self.store.update(
+                job_id, status="done", results=results,
+                done_count=len(results), current_query=None,
+                finished_at=datetime.utcnow())
+        return True
 
     async def _process_job(self, job_id: str) -> None:
         job = await self.store.get(job_id)
@@ -292,9 +385,14 @@ class LemanaWorker:
     async def search_inline(self, query: str, city: str, limit: int,
                             timeout: float = 25.0) -> list[ProductDict]:
         """Synchronous-style search for /prices/search.
-        Shares self.sem with queue jobs to avoid concurrent uc access.
-        On timeout or dead session (InvalidSessionId/NoSuchWindow/etc.)
-        — restarts so the next /prices/search call recovers."""
+
+        In AGENT_MODE the search is delegated to the remote agent: a one-query
+        job is enqueued and we wait (bounded by `timeout`) for the agent to post
+        results. In local mode the browser runs here, sharing self.sem with
+        queue jobs to avoid concurrent uc access; on timeout/dead session it
+        restarts so the next call recovers."""
+        if AGENT_MODE:
+            return await self._search_inline_via_agent(query, city, limit, timeout)
         async with self.sem:
             try:
                 await asyncio.to_thread(self._ensure_session_sync, city)
@@ -308,3 +406,31 @@ class LemanaWorker:
             except WebDriverException:
                 await asyncio.to_thread(self._restart_session_sync)
                 raise
+
+    async def _search_inline_via_agent(self, query: str, city: str, limit: int,
+                                       timeout: float) -> list[ProductDict]:
+        job = Job(id=str(uuid.uuid4()), queries=[query], city=city,
+                  limit_per_query=limit)
+        await self.store.create(job)
+        try:
+            self.queue.put_nowait(job.id)
+        except asyncio.QueueFull:
+            await self.store.update(
+                job.id, status="failed", error="queue is full",
+                finished_at=datetime.utcnow())
+            raise RuntimeError("lemana queue is full")
+        deadline = asyncio.get_event_loop().time() + timeout
+        while True:
+            cur = await self.store.get(job.id)
+            if cur is None:
+                return []
+            if cur.status in ("done", "cancelled", "failed"):
+                products: list[ProductDict] = []
+                for r in cur.results:
+                    if r.get("ok"):
+                        products.extend(r.get("products") or [])
+                return products
+            if asyncio.get_event_loop().time() >= deadline:
+                await self.store.request_cancel(job.id)
+                raise asyncio.TimeoutError
+            await asyncio.sleep(0.4)

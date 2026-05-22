@@ -9,15 +9,16 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import uuid
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from lemana_worker import Job, RESULT_TTL_SEC
+from lemana_worker import AGENT_TOKEN, Job, RESULT_TTL_SEC
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lemana", tags=["lemana"])
@@ -187,3 +188,64 @@ async def cancel_job(job_id: str, request: Request):
     if job.status in ("done", "failed", "cancelled"):
         raise HTTPException(409, f"job already {job.status}")
     await worker.store.request_cancel(job_id)
+
+
+# ----------------------------------------------------------------------
+# agent broker endpoints (used by the home-PC agent in AGENT_MODE)
+# ----------------------------------------------------------------------
+
+class AgentPollRequest(BaseModel):
+    wait_seconds: int = Field(25, ge=0, le=60)
+
+
+class AgentJob(BaseModel):
+    job_id: str
+    queries: list[str]
+    city: str
+    limit_per_query: int
+
+
+class AgentResultSubmit(BaseModel):
+    results: list[LemanaQueryResult] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+def _check_agent_auth(token: Optional[str]) -> None:
+    if not AGENT_TOKEN:
+        raise HTTPException(503, "agent mode not configured (LEMANA_AGENT_TOKEN unset)")
+    if not token or not hmac.compare_digest(token, AGENT_TOKEN):
+        raise HTTPException(401, "invalid agent token")
+
+
+@router.post("/agent/poll", response_model=Optional[AgentJob])
+async def agent_poll(
+    req: AgentPollRequest,
+    request: Request,
+    x_agent_token: Optional[str] = Header(default=None),
+):
+    """Long-poll: the agent claims the next queued job, or gets null on timeout."""
+    _check_agent_auth(x_agent_token)
+    worker = request.app.state.lemana_worker
+    job = await worker.claim_next(req.wait_seconds)
+    if job is None:
+        return None
+    return AgentJob(
+        job_id=job.id, queries=job.queries, city=job.city,
+        limit_per_query=job.limit_per_query,
+    )
+
+
+@router.post("/agent/jobs/{job_id}/result", status_code=204)
+async def agent_submit_result(
+    job_id: str,
+    body: AgentResultSubmit,
+    request: Request,
+    x_agent_token: Optional[str] = Header(default=None),
+):
+    """The agent posts parsed results (or an error) for a claimed job."""
+    _check_agent_auth(x_agent_token)
+    worker = request.app.state.lemana_worker
+    results = [r.model_dump() for r in body.results]
+    ok = await worker.submit_result(job_id, results, error=body.error)
+    if not ok:
+        raise HTTPException(404, "job not found")
