@@ -3,6 +3,7 @@
 const USER_CATALOG_KEY = "kh-user-catalog-v1";
 const HIDDEN_CATALOG_KEY = "kh-hidden-catalog-v1";
 const ESTIMATE_KEY = "kh-estimate-v1";
+const ESTIMATE_SAVED_KEY = "kh-estimate-saved-at-v1";
 const CAT_OVERRIDE_KEY = "kh-cat-override-v1";
 const MARKUP_KEY = "kh-markup-v1";
 
@@ -79,7 +80,10 @@ function saveEstimate(rows) {
       markup: (r.markup != null && isFinite(Number(r.markup))) ? Number(r.markup) : null, url: r.url || "",
     }));
     localStorage.setItem(ESTIMATE_KEY, JSON.stringify(slim));
-  } catch (_) {}
+    const ts = Date.now();
+    localStorage.setItem(ESTIMATE_SAVED_KEY, String(ts));
+    return ts;
+  } catch (_) { return null; }
 }
 
 function loadHiddenCatalog() {
@@ -271,6 +275,10 @@ function useEstimate() {
     window.dispatchEvent(new Event('kh-storage'));
   }, [visibleUserCatalog.length, visibleVendorCatalog.length, visibleCatalog.length, visibleDdcCatalog.length]);
   const [estimate, setEstimate] = React.useState(loadEstimate);
+  const [savedAt, setSavedAt] = React.useState(() => {
+    const v = Number(localStorage.getItem(ESTIMATE_SAVED_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  });
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
   const [pricesBusy, setPricesBusy] = React.useState(false);
@@ -295,7 +303,12 @@ function useEstimate() {
     if (nextIdRef.current <= maxId) nextIdRef.current = maxId + 1;
   }, []);
 
-  React.useEffect(() => { saveEstimate(estimate); }, [estimate]);
+  const firstSaveRef = React.useRef(true);
+  React.useEffect(() => {
+    const ts = saveEstimate(estimate);
+    if (firstSaveRef.current) { firstSaveRef.current = false; return; }
+    if (ts) setSavedAt(ts);
+  }, [estimate]);
 
   React.useEffect(() => {
     const filtered = estimate.filter(r => !isHiddenCategory(r.name));
@@ -1070,7 +1083,7 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, savedAt, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,

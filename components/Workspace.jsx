@@ -2,7 +2,86 @@
 
 const { useState, useMemo, useEffect } = React;
 
-function TopBar({ onTheme, theme, onMenu, onNew }) {
+function khOperatorEmail() {
+  try {
+    const t = window.KHAuth && window.KHAuth.token && window.KHAuth.token();
+    if (!t) return null;
+    const seg = t.split(".")[1];
+    if (!seg) return null;
+    const json = atob(seg.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json);
+    return payload.email || payload.sub || null;
+  } catch (_) { return null; }
+}
+
+function khFormatSavedAt(ts, now) {
+  if (!ts) return "черновик";
+  const diff = Math.max(0, now - ts);
+  if (diff < 60_000) return "только что";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} мин назад`;
+  const d = new Date(ts);
+  const sameDay = new Date(now).toDateString() === d.toDateString();
+  const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return sameDay ? hhmm : `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")} ${hhmm}`;
+}
+
+function AccountMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+  const email = useMemo(() => khOperatorEmail(), [open]);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const signOut = () => {
+    try { window.KHAuth && window.KHAuth.signOut && window.KHAuth.signOut(); } catch (_) {}
+    window.location.reload();
+  };
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        aria-label="Аккаунт"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Аккаунт"
+        style={{
+          width: 32, height: 32, borderRadius: 99, background: "var(--coffee)",
+          color: "#FBF5E7", display: "grid", placeItems: "center", border: "none", cursor: "pointer",
+          fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, letterSpacing: ".05em"
+        }}
+      >АМ</button>
+      {open && (
+        <div role="menu" style={{
+          position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 200,
+          background: "var(--paper)", border: "1px solid var(--rule)", borderRadius: 12,
+          boxShadow: "0 12px 32px rgba(0,0,0,.14)", padding: 6, zIndex: 50
+        }}>
+          <div className="mono tiny" style={{ padding: "8px 10px", color: "var(--ink-3)", borderBottom: "1px solid var(--rule)", marginBottom: 4, wordBreak: "break-all" }}>
+            {email || "Оператор"}
+          </div>
+          <button role="menuitem" onClick={signOut} className="row center gap-2" style={{
+            width: "100%", textAlign: "left", padding: "8px 10px", border: "none", background: "transparent",
+            borderRadius: 8, cursor: "pointer", color: "var(--ink)", font: "inherit"
+          }}>
+            <Icon name="logout" size={14} /> Выйти
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TopBar({ onTheme, theme, onMenu, onNew, savedAt }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   return (
     <div className="row center between kh-topbar" style={{
       padding: "14px 28px", borderBottom: "1px solid var(--rule)",
@@ -34,16 +113,12 @@ function TopBar({ onTheme, theme, onMenu, onNew }) {
           <span style={{
             width: 6, height: 6, borderRadius: 99, background: "var(--moss)",
             boxShadow: "0 0 0 3px rgba(110,123,79,.2)"
-          }} /> Автосохр · 14:32
+          }} /> Автосохр · {khFormatSavedAt(savedAt, now)}
         </div>
         <button className="btn btn-icon" onClick={onTheme} title="Тема">
           <Icon name={theme === "dark" ? "sun" : "moon"} size={14} />
         </button>
-        <div style={{
-          width: 32, height: 32, borderRadius: 99, background: "var(--coffee)",
-          color: "#FBF5E7", display: "grid", placeItems: "center",
-          fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, letterSpacing: ".05em"
-        }}>АМ</div>
+        <AccountMenu />
       </div>
     </div>
   );
@@ -1021,6 +1096,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
       <TopBar
         onTheme={onTheme}
         theme={theme}
+        savedAt={est.state.savedAt}
         onMenu={() => setNavOpen(true)}
         onNew={() => {
           if (est.state.estimate.length === 0 || window.confirm('Создать новую смету? Текущие позиции будут очищены.')) {
