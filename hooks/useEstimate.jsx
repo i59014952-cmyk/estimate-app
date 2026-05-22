@@ -483,7 +483,8 @@ function useEstimate() {
       }
       if (row && row._colored) { skipped++; continue; }
       const { name, qty, unit: rowUnit } = extractNameAndQty(row);
-      const reason = skipReason(name);
+      const reason = skipReason(name)
+        || ((typeof khIsTotalsName === 'function' && khIsTotalsName(name)) ? 'итоговая/служебная строка' : '');
       if (reason) {
         // Текстовый заголовок-раздел («Работы», «Материалы») тоже обновляет контекст.
         const cat = detectSectionCategory(rowText(row));
