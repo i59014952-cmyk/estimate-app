@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright, Browser, BrowserContext
 
-from lemana_source import LemanaSession
+from lemana_api import router as lemana_router
+from lemana_worker import JobStore, LemanaWorker
 
 import auth
 import db
@@ -97,21 +98,28 @@ class CacheStats(BaseModel):
     misses: int
 
 
-state: dict = {"browser": None, "pw": None, "cache": {}, "hits": 0, "misses": 0, "lemana": None}
+state: dict = {"browser": None, "pw": None, "cache": {}, "hits": 0, "misses": 0}
 
 LEMANA_TIMEOUT_S = float(os.environ.get("LEMANA_TIMEOUT_S", "20"))
+LEMANA_CITY = os.environ.get("LEMANA_CITY", "kazan")
+LEMANA_BASE_URL = os.environ.get("LEMANA_BASE_URL", "https://kazan.lemanapro.ru")
 
 
-def _lemana_to_item(d: dict) -> PriceItem:
+def _lemana_product_to_item(p: dict, *, only_in_stock: bool = True) -> Optional[PriceItem]:
+    if only_in_stock and p.get("availability") != "InStock":
+        return None
+    url_ = p.get("url") or ""
+    if url_.startswith("/"):
+        url_ = f"{LEMANA_BASE_URL}{url_}"
     return PriceItem(
-        name=d.get("name") or "",
-        sku=(d.get("sku") or None),
-        price=d.get("price"),
-        currency=d.get("currency") or "RUB",
+        name=p.get("name") or "",
+        sku=(p.get("sku") or None),
+        price=p.get("price"),
+        currency=p.get("currency") or "RUB",
         unit="шт.",
-        in_stock=d.get("in_stock"),
+        in_stock=p.get("availability") == "InStock",
         city="lemana",
-        url=d.get("url") or None,
+        url=url_ or None,
     )
 
 
@@ -153,7 +161,7 @@ def _cache_set(key: str, value):
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(
         headless=True,
@@ -161,16 +169,22 @@ async def lifespan(_: FastAPI):
     )
     state["pw"] = pw
     state["browser"] = browser
-    state["lemana"] = LemanaSession()
+
+    lemana_worker = LemanaWorker(JobStore())
+    await lemana_worker.start()
+    app.state.lemana_worker = lemana_worker
+
     await db.connect()
     try:
         yield
     finally:
         await db.close()
+        try:
+            await lemana_worker.stop()
+        except Exception:
+            pass
         await browser.close()
         await pw.stop()
-        if state["lemana"]:
-            state["lemana"].close()
 
 
 app = FastAPI(title="Petrovich price parser", version="0.2.0", lifespan=lifespan)
@@ -184,6 +198,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(db.router)
+app.include_router(lemana_router)
 
 
 async def _new_context(city: str) -> BrowserContext:
@@ -552,12 +567,16 @@ async def lemana_search(
     cached = _cache_get(key)
     if cached:
         return SearchResponse(query=query, city="lemana", strategy_used="cache", cached=True, results=cached)
-    sess = state["lemana"] or LemanaSession()
+    worker = getattr(app.state, "lemana_worker", None)
+    if worker is None:
+        raise HTTPException(503, "lemana worker not initialised")
     try:
-        raw = await asyncio.wait_for(sess.search(query, limit), timeout=LEMANA_TIMEOUT_S)
+        prods = await worker.search_inline(query, city=LEMANA_CITY, limit=limit, timeout=LEMANA_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "lemana timeout")
     except Exception as e:
         raise HTTPException(502, f"lemana failed: {e!s}"[:200])
-    items = [_lemana_to_item(d) for d in raw if d.get("price")]
+    items = [it for p in prods if (it := _lemana_product_to_item(p)) is not None and it.price]
     _cache_set(key, items)
     return SearchResponse(query=query, city="lemana", strategy_used="uc", cached=False, results=items)
 
@@ -606,14 +625,17 @@ async def prices_search(
     async def lm():
         # Best-effort: Lemana needs a real browser and may be blocked by Qrator
         # on datacenter IPs; a timeout/error here must not sink the other sources.
-        sess = state["lemana"]
-        if sess is None:
-            return [], ["lemana: disabled"]
+        worker = getattr(app.state, "lemana_worker", None)
+        if worker is None:
+            return [], ["lemana: worker not initialised"]
         try:
-            raw = await asyncio.wait_for(sess.search(query, per_source), timeout=LEMANA_TIMEOUT_S)
-            return [_lemana_to_item(d) for d in raw if d.get("price")], ["lemana: ok"]
+            prods = await worker.search_inline(query, city=LEMANA_CITY, limit=per_source, timeout=LEMANA_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            return [], ["lemana: timeout"]
         except Exception as e:
-            return [], [f"lemana: error: {e!s}"[:140]]
+            return [], [f"lemana: error: {type(e).__name__}: {e!s}".splitlines()[0][:140]]
+        items = [it for p in prods if (it := _lemana_product_to_item(p)) is not None and it.price]
+        return items, [f"lemana: {len(items)} in-stock items"]
 
     (k_items, k_trail), (m_items, m_trail), (v_items, v_trail), (mi_items, mi_trail), (lm_items, lm_trail) = await asyncio.gather(k(), m(), v(), mi(), lm())
 
