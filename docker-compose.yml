@@ -16,6 +16,7 @@ services:
       DEFAULT_CITY: "moscow"
       DATABASE_URL: "postgresql://kh:${POSTGRES_PASSWORD}@db:5432/kubhouse"
       KH_JWT_SECRET: ${KH_JWT_SECRET:?set KH_JWT_SECRET in .env}
+      KH_ADMIN_EMAILS: ${KH_ADMIN_EMAILS:-}
     depends_on:
       db:
         condition: service_healthy
