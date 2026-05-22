@@ -156,51 +156,19 @@ function saveUserCatalog(items) {
 }
 
 function parseUserCatalogRows(rows) {
-  if (!rows || rows.length === 0) return [];
-  const norm = (s) => String(s || "").trim().toLowerCase();
-  const head = rows[0].map(norm);
-  const detect = (...keys) => {
-    for (let i = 0; i < head.length; i++) {
-      if (keys.some(k => head[i] === k || head[i].includes(k))) return i;
-    }
-    return -1;
-  };
-  const nameIdx = detect("name", "наимен", "позиц", "товар", "материал");
-  const unitIdx = detect("unit", "ед.", "ед ", "ед изм", "единиц");
-  const priceIdx = detect("price", "цена", "стоимост");
-  const hasHeader = nameIdx !== -1 && priceIdx !== -1;
-  const start = hasHeader ? 1 : 0;
-  const out = [];
-  let currentSection = null; // 'work' | 'material', контекст раздела файла
-  for (let i = start; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row) continue;
-    const cells = row.map(c => String(c == null ? "" : c).trim());
-    let name = "", unit = "", price = NaN;
-    if (hasHeader) {
-      name = cells[nameIdx] || "";
-      unit = unitIdx !== -1 ? (cells[unitIdx] || "") : "";
-      price = toNumber(cells[priceIdx]);
-    } else {
-      for (const c of cells) {
-        if (!c) continue;
-        if (!name && !isPureNumber(c) && c.length >= 3) { name = c; continue; }
-        if (!unit && c.length <= 8 && /\p{L}/u.test(c) && !isPureNumber(c) && c !== name) { unit = c; continue; }
-        const n = toNumber(c);
-        if (!isNaN(n) && n > 0 && isNaN(price)) price = n;
-      }
-    }
-    name = (name || "").trim();
-    // Заголовок-раздел (нет цены либо помечен как section) → обновляем контекст.
-    if (row._sectionLike || isNaN(price) || price <= 0) {
-      const cat = detectSectionCategory(cells.join(' '));
-      if (cat) currentSection = cat;
-      continue;
-    }
-    if (!name || name.length < 2) continue;
-    out.push({ name, unit: unit.trim(), unitPrice: price, category: classifyCategory(name, unit, currentSection) });
-  }
-  return out;
+  // Общий устойчивый разбор: находит реальный заголовок, отсекает итоги/футер,
+  // берёт колонку цены за единицу. Категория (работа/материал) определяется
+  // по названию и единице.
+  const items = (typeof window !== "undefined" && window.khExtractPriceRows)
+    ? window.khExtractPriceRows(rows) : [];
+  return items
+    .filter(it => it.unitPrice > 0)
+    .map(it => ({
+      name: it.name.trim(),
+      unit: (it.unit || "").trim(),
+      unitPrice: it.unitPrice,
+      category: classifyCategory(it.name, it.unit, null),
+    }));
 }
 
 function useEstimate() {
