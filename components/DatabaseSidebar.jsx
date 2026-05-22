@@ -89,7 +89,7 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
   React.useEffect(() => { if (vendorFilter) setFilter(vendorFilter); }, [vendorFilter]);
   const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
-  const [showCompare, setShowCompare] = React.useState(false);
+  const [expandedCmp, setExpandedCmp] = React.useState(null); // ключ позиции с раскрытым сравнением
   const [adding, setAdding] = React.useState(!!autoAdd);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "", category: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
@@ -190,6 +190,25 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
 
   const activeMerged = React.useMemo(() => merged.filter(it => !isHidden(it)), [merged, hiddenCatalog]);
   const hiddenList = React.useMemo(() => merged.filter(isHidden), [merged, hiddenCatalog]);
+
+  // Индекс сравнения: позиция (название+ед.) → предложения подрядчиков, по цене.
+  const cmpKeyOf = (it) => `${String(it.name || "").trim().toLowerCase().replace(/ё/g, "е")}|${String(it.unit || "").trim().toLowerCase()}`;
+  const vendorOffersByItem = React.useMemo(() => {
+    const m = new Map();
+    for (const it of vendorRows) {
+      const price = Number(it.unit_price);
+      if (!(price > 0)) continue;
+      const key = cmpKeyOf({ name: it.name, unit: it.unit });
+      const vendor = it.vendor_name || vendorMap[it.vendor_slug] || ('Подрядчик ' + String(it.vendor_slug || '').slice(0, 4));
+      if (!m.has(key)) m.set(key, []);
+      const arr = m.get(key);
+      const ex = arr.find(o => o.vendor === vendor);
+      if (ex) { if (price < ex.price) ex.price = price; }
+      else arr.push({ vendor, price });
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.price - b.price);
+    return m;
+  }, [vendorRows, vendorMap]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -345,17 +364,7 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
           </button>
         )}
         <button className="btn btn-sm" onClick={refreshVendors} title="Перечитать КП подрядчиков из облака">⟳ Обновить</button>
-        <button
-          className="btn btn-sm"
-          onClick={() => setShowCompare(v => !v)}
-          title="Сравнить цены подрядчиков по позиции"
-          style={showCompare ? { background: "var(--ink)", color: "var(--paper)", borderColor: "var(--ink)" } : undefined}
-        >⇄ Сравнить цены</button>
       </div>
-
-      {showCompare && window.KHPriceCompare && (
-        <window.KHPriceCompare contractors={[]} />
-      )}
 
       {!showHidden && (
         <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -508,8 +517,16 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
           {visible.map((it, i) => {
             const badge = kindBadge(it._kind);
             const rk = rowKeyOf(it);
-            return (
-              <tr key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
+            const cmpKey = cmpKeyOf(it);
+            const offers = vendorOffersByItem.get(cmpKey) || [];
+            const canCompare = offers.length > 1;
+            const bestPrice = offers.length ? offers[0].price : null;
+            const isCheapest = canCompare && Number(it.unitPrice) === bestPrice;
+            const overpayPct = (canCompare && bestPrice > 0 && Number(it.unitPrice) > bestPrice)
+              ? Math.round(((Number(it.unitPrice) - bestPrice) / bestPrice) * 100) : 0;
+            const expanded = canCompare && expandedCmp === cmpKey;
+            const rowFrag = (
+              <tr>
                 <td style={{ textAlign: "center" }}>
                   <input type="checkbox" checked={sel.has(rk)}
                     onChange={() => setSel(prev => { const n = new Set(prev); if (n.has(rk)) n.delete(rk); else n.add(rk); return n; })} />
@@ -555,7 +572,25 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
                     );
                   })()}
                 </td>
-                <td>{it.name}</td>
+                <td>
+                  {canCompare ? (
+                    <span
+                      onClick={() => setExpandedCmp(expanded ? null : cmpKey)}
+                      title="Показать цены всех подрядчиков"
+                      style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
+                    >
+                      <span style={{ borderBottom: "1px dashed var(--ink-3)" }}>{it.name}</span>
+                      {isCheapest ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 999, background: "var(--moss, #4f6f52)", color: "#fff", whiteSpace: "nowrap" }}>лучшая цена</span>
+                      ) : overpayPct > 0 ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 999, border: "1px solid var(--rust)", color: "var(--rust)", whiteSpace: "nowrap" }}>+{overpayPct}%</span>
+                      ) : null}
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 999, border: "1px solid var(--rule)", color: "var(--ink-3)", whiteSpace: "nowrap" }}>
+                        {offers.length} цен {expanded ? "▲" : "▼"}
+                      </span>
+                    </span>
+                  ) : it.name}
+                </td>
                 <td>{it.unit || "—"}</td>
                 <td className="num">
                   <PriceCell item={it} est={est} onSaved={refreshVendors} />
@@ -648,6 +683,42 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
                   </div>
                 </td>
               </tr>
+            );
+            return (
+              <React.Fragment key={`${it._kind}-${it.name}-${it.unit}-${i}`}>
+                {rowFrag}
+                {expanded && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: 0, background: "var(--paper-2)" }}>
+                      <div className="col" style={{ gap: 4, padding: "10px 14px 12px 48px" }}>
+                        <div className="mono tiny muted" style={{ marginBottom: 2 }}>Цены подрядчиков · «{it.name}»</div>
+                        {offers.map((o, oi) => {
+                          const cheapest = o.price === bestPrice;
+                          const diff = o.price - bestPrice;
+                          const pct = bestPrice > 0 ? Math.round((diff / bestPrice) * 100) : 0;
+                          return (
+                            <div key={oi} style={{
+                              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                              padding: "7px 10px", borderRadius: 8,
+                              border: "1px solid " + (cheapest ? "var(--moss, #4f6f52)" : "var(--rule)"),
+                              background: cheapest ? "rgba(110,123,79,.10)" : "var(--paper)",
+                            }}>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.vendor}</span>
+                                {cheapest && <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 999, background: "var(--moss, #4f6f52)", color: "#fff", whiteSpace: "nowrap" }}>лучшая цена</span>}
+                              </span>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                                {!cheapest && diff > 0 && <span className="mono tiny" style={{ color: "var(--rust)" }}>+{fmtMoney(diff)}{pct ? ` (+${pct}%)` : ""}</span>}
+                                <span className="mono" style={{ fontWeight: cheapest ? 600 : 400 }}>{fmtMoney(o.price)}</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}
         </tbody>
