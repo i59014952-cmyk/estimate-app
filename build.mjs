@@ -27,11 +27,16 @@ const STATIC_FILES = [
   'client.html',
   'vendor.html',
   'favicon.svg',
+  'lib/xlsx.full.min.js',
   '.nojekyll',
   'CNAME',
 ];
 
 const stripQuery = (s) => s.split('?')[0];
+
+// Local scripts kept as separate same-origin files (copied via STATIC_FILES),
+// not inlined into the bundle. Served from sme-ta.ru so no external CDN is needed.
+const isVendoredStatic = (src) => /(?:^|\/)xlsx\.full\.min\.js$/.test(stripQuery(src));
 
 function parseScripts(html) {
   // Returns ordered list of { kind, ... } describing every <script> tag.
@@ -73,6 +78,7 @@ async function main() {
   for (const tag of tags) {
     if (tag.kind === 'src') {
       if (/^https?:\/\//i.test(tag.src)) continue; // CDN handled separately in HTML
+      if (isVendoredStatic(tag.src)) continue; // copied verbatim, kept as its own tag
       const file = path.join(ROOT, stripQuery(tag.src));
       const code = await readFile(file, 'utf8');
       pieces.push(`// === ${stripQuery(tag.src)} ===`);
@@ -103,7 +109,7 @@ async function main() {
   for (const tag of tags) {
     if (tag.kind === 'src' && /babel\/standalone/i.test(tag.src)) {
       outHtml = outHtml.replace(tag.raw, '');
-    } else if (tag.kind === 'src' && !/^https?:\/\//i.test(tag.src)) {
+    } else if (tag.kind === 'src' && !/^https?:\/\//i.test(tag.src) && !isVendoredStatic(tag.src)) {
       outHtml = outHtml.replace(tag.raw, '');
     } else if (tag.kind === 'inline' && tag.isBabel) {
       outHtml = outHtml.replace(tag.raw, '');
@@ -114,7 +120,9 @@ async function main() {
 
   for (const f of STATIC_FILES) {
     if (existsSync(path.join(ROOT, f))) {
-      await cp(path.join(ROOT, f), path.join(DIST, f));
+      const dest = path.join(DIST, f);
+      await mkdir(path.dirname(dest), { recursive: true });
+      await cp(path.join(ROOT, f), dest);
     }
   }
 
