@@ -26,6 +26,7 @@ const STATIC_FILES = [
   'th.json',
   'client.html',
   'vendor.html',
+  'favicon.svg',
   '.nojekyll',
   'CNAME',
 ];
