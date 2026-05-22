@@ -1279,6 +1279,7 @@ function khIsJunkTplItem(item) {
   if (!/\p{L}{3,}/u.test(name)) return true;
   if (typeof window.isHiddenCategory === 'function' && window.isHiddenCategory(name)) return true;
   if (typeof window.skipReason === 'function' && window.skipReason(name)) return true;
+  if (typeof window.khIsTotalsName === 'function' && window.khIsTotalsName(name)) return true; // ИТОГО/НДС/Срок/…
   if (/[:：]\s*$/.test(name)) return true;
   const qty = Number(item && item.qty) || 0;
   const unitPrice = Number(item && item.unitPrice) || 0;
