@@ -359,7 +359,7 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
       </div>
       {NAV.filter(it => caps.sections.includes(it.id)).map(it => <Item key={it.id} it={it} />)}
       {NAV2.some(it => caps.sections.includes(it.id)) && (
-        <div className="eyebrow" style={{ padding: "16px 12px 8px" }}>Справочники</div>
+        <div className="eyebrow" style={{ padding: "16px 12px 8px", marginTop: 12, borderTop: "1px solid var(--rule)" }}>Справочники</div>
       )}
       {NAV2.filter(it => caps.sections.includes(it.id)).map(it => <Item key={it.id} it={it} />)}
 
