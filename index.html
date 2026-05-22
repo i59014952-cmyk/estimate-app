@@ -31,13 +31,13 @@
 <script type="text/babel" src="components/Login.jsx?v=102"></script>
 <script type="text/babel" src="components/Logo.jsx?v=102"></script>
 <script type="text/babel" src="components/Data.jsx?v=102"></script>
-<script type="text/babel" src="components/Editable.jsx?v=100"></script>
-<script type="text/babel" src="hooks/useEstimate.jsx?v=110"></script>
+<script type="text/babel" src="components/Editable.jsx?v=101"></script>
+<script type="text/babel" src="hooks/useEstimate.jsx?v=111"></script>
 <script type="text/babel" src="components/SearchResults.jsx?v=100"></script>
 <script type="text/babel" src="components/EstimateTable.jsx?v=106"></script>
 <script type="text/babel" src="components/DatabaseSidebar.jsx?v=113"></script>
 <script type="text/babel" src="components/StoresSidebar.jsx?v=101"></script>
-<script type="text/babel" src="components/Workspace.jsx?v=119"></script>
+<script type="text/babel" src="components/Workspace.jsx?v=120"></script>
 <script type="text/babel" src="components/Modal.jsx?v=101"></script>
 <script type="text/babel" src="components/SidebarModals.jsx?v=116"></script>
 
@@ -48,6 +48,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [role, setRole] = React.useState("estimator");
+  const est = useEstimatesManager();
+  window.KH_EST_ID = est.currentId;
   React.useEffect(() => { document.documentElement.setAttribute("data-theme", t.theme); }, [t.theme]);
   React.useEffect(() => {
     let alive = true;
@@ -60,7 +62,14 @@ function App() {
   const roleValue = React.useMemo(() => ({ role, caps: capsForRole(role) }), [role]);
   return (
     <KHRoleCtx.Provider value={roleValue}>
-      <Workspace theme={t.theme} onTheme={() => setTweak("theme", t.theme === "dark" ? "light" : "dark")} />
+      <EstimatesTabs index={est.index} currentId={est.currentId} onSwitch={est.setCurrentId} onNew={est.create} onClose={est.close} />
+      <Workspace
+        key={est.currentId}
+        theme={t.theme}
+        onTheme={() => setTweak("theme", t.theme === "dark" ? "light" : "dark")}
+        onNewEstimate={est.create}
+        onRename={(name) => est.rename(est.currentId, name)}
+      />
       <TweaksPanel>
         <TweakSection label="Тема" />
         <TweakRadio label="Палитра" value={t.theme}

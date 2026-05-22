@@ -6,16 +6,21 @@ const ESTIMATE_KEY = "kh-estimate-v1";
 const ESTIMATE_SAVED_KEY = "kh-estimate-saved-at-v1";
 const CAT_OVERRIDE_KEY = "kh-cat-override-v1";
 const MARKUP_KEY = "kh-markup-v1";
+const META_KEY = "kh-meta-v1";
+
+// Per-estimate storage: rows/markup/meta/savedAt are scoped by the active
+// estimate id (window.KH_EST_ID). Catalog/categories stay shared (no suffix).
+const _ek = (base) => `${base}::${window.KH_EST_ID || 'default'}`;
 
 function loadMarkup() {
   try {
-    const s = JSON.parse(localStorage.getItem(MARKUP_KEY) || "{}");
+    const s = JSON.parse(localStorage.getItem(_ek(MARKUP_KEY)) || "{}");
     const num = (v) => (isFinite(Number(v)) ? Number(v) : 0);
     return { work: num(s.work), material: num(s.material) };
   } catch (_) { return { work: 0, material: 0 }; }
 }
 function saveMarkup(m) {
-  try { localStorage.setItem(MARKUP_KEY, JSON.stringify(m)); } catch (_) {}
+  try { localStorage.setItem(_ek(MARKUP_KEY), JSON.stringify(m)); } catch (_) {}
 }
 
 const hiddenKey = (name, unit) => `${String(name || "").trim().toLowerCase()}|${String(unit || "").trim().toLowerCase()}`;
@@ -43,7 +48,7 @@ function saveCatOverride(map) {
 
 function loadEstimate() {
   try {
-    const saved = localStorage.getItem(ESTIMATE_KEY);
+    const saved = localStorage.getItem(_ek(ESTIMATE_KEY));
     if (!saved) return [];
     const arr = JSON.parse(saved);
     if (!Array.isArray(arr)) return [];
@@ -79,9 +84,9 @@ function saveEstimate(rows) {
       category: r.category || 'material', catManual: r.catManual === true,
       markup: (r.markup != null && isFinite(Number(r.markup))) ? Number(r.markup) : null, url: r.url || "",
     }));
-    localStorage.setItem(ESTIMATE_KEY, JSON.stringify(slim));
+    localStorage.setItem(_ek(ESTIMATE_KEY), JSON.stringify(slim));
     const ts = Date.now();
-    localStorage.setItem(ESTIMATE_SAVED_KEY, String(ts));
+    localStorage.setItem(_ek(ESTIMATE_SAVED_KEY), String(ts));
     return ts;
   } catch (_) { return null; }
 }
@@ -276,7 +281,7 @@ function useEstimate() {
   }, [visibleUserCatalog.length, visibleVendorCatalog.length, visibleCatalog.length, visibleDdcCatalog.length]);
   const [estimate, setEstimate] = React.useState(loadEstimate);
   const [savedAt, setSavedAt] = React.useState(() => {
-    const v = Number(localStorage.getItem(ESTIMATE_SAVED_KEY));
+    const v = Number(localStorage.getItem(_ek(ESTIMATE_SAVED_KEY)));
     return Number.isFinite(v) && v > 0 ? v : null;
   });
   const [query, setQuery] = React.useState("");
@@ -410,7 +415,7 @@ function useEstimate() {
   const resetEstimate = React.useCallback(() => {
     setEstimate([]);
     nextIdRef.current = 1;
-    try { localStorage.removeItem(ESTIMATE_KEY); } catch (_) {}
+    try { localStorage.removeItem(_ek(ESTIMATE_KEY)); } catch (_) {}
   }, []);
 
   const createClientLink = React.useCallback(async () => {
@@ -736,7 +741,7 @@ function useEstimate() {
     if (estimate.length === 0) return;
 
     let meta = {};
-    try { meta = JSON.parse(localStorage.getItem('kh-meta-v1') || '{}'); } catch (_) {}
+    try { meta = JSON.parse(localStorage.getItem(_ek(META_KEY)) || '{}'); } catch (_) {}
 
     const esc = (s) => String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1092,4 +1097,59 @@ function useEstimate() {
   };
 }
 
-Object.assign(window, { useEstimate });
+// --- Multiple estimates (tabs) ----------------------------------------------
+const KH_ESTIMATES_KEY = "kh-estimates-index-v1";
+const KH_CURRENT_KEY = "kh-current-estimate-v1";
+
+function khLoadEstIndex() {
+  try { const a = JSON.parse(localStorage.getItem(KH_ESTIMATES_KEY) || "null"); if (Array.isArray(a) && a.length) return a; } catch (_) {}
+  return null;
+}
+
+// First run (or upgrade from single-estimate): create one estimate and migrate
+// the old unsuffixed keys into it.
+function khEnsureEstIndex() {
+  let idx = khLoadEstIndex();
+  if (idx) return idx;
+  const id = "e" + Date.now().toString(36);
+  let name = "Смета 1";
+  try { const m = JSON.parse(localStorage.getItem(META_KEY) || "{}"); if (m && m.title) name = m.title; } catch (_) {}
+  const copy = (base) => { try { const v = localStorage.getItem(base); if (v != null && localStorage.getItem(`${base}::${id}`) == null) localStorage.setItem(`${base}::${id}`, v); } catch (_) {} };
+  [ESTIMATE_KEY, MARKUP_KEY, META_KEY, ESTIMATE_SAVED_KEY].forEach(copy);
+  idx = [{ id, name }];
+  try { localStorage.setItem(KH_ESTIMATES_KEY, JSON.stringify(idx)); localStorage.setItem(KH_CURRENT_KEY, id); } catch (_) {}
+  return idx;
+}
+
+function useEstimatesManager() {
+  const [index, setIndex] = React.useState(khEnsureEstIndex);
+  const [currentId, setCurrentId] = React.useState(() => {
+    const cur = localStorage.getItem(KH_CURRENT_KEY);
+    return (cur && index.some(e => e.id === cur)) ? cur : index[0].id;
+  });
+  React.useEffect(() => { try { localStorage.setItem(KH_CURRENT_KEY, currentId); } catch (_) {} }, [currentId]);
+  const persist = (next) => { setIndex(next); try { localStorage.setItem(KH_ESTIMATES_KEY, JSON.stringify(next)); } catch (_) {} };
+  const create = React.useCallback(() => {
+    const id = "e" + Date.now().toString(36);
+    const name = `Смета ${index.length + 1}`;
+    try { localStorage.setItem(`${META_KEY}::${id}`, JSON.stringify({ title: name })); } catch (_) {}
+    setIndex(prev => { const next = [...prev, { id, name }]; try { localStorage.setItem(KH_ESTIMATES_KEY, JSON.stringify(next)); } catch (_) {} return next; });
+    setCurrentId(id);
+  }, [index.length]);
+  const close = React.useCallback((id) => {
+    setIndex(prev => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter(e => e.id !== id);
+      [ESTIMATE_KEY, MARKUP_KEY, META_KEY, ESTIMATE_SAVED_KEY].forEach(b => { try { localStorage.removeItem(`${b}::${id}`); } catch (_) {} });
+      try { localStorage.setItem(KH_ESTIMATES_KEY, JSON.stringify(next)); } catch (_) {}
+      setCurrentId(cur => cur === id ? next[0].id : cur);
+      return next;
+    });
+  }, []);
+  const rename = React.useCallback((id, name) => {
+    setIndex(prev => { const next = prev.map(e => e.id === id ? { ...e, name: name || e.name } : e); try { localStorage.setItem(KH_ESTIMATES_KEY, JSON.stringify(next)); } catch (_) {} return next; });
+  }, []);
+  return { index, currentId, setCurrentId, create, close, rename };
+}
+
+Object.assign(window, { useEstimate, useEstimatesManager });
