@@ -29,9 +29,8 @@ function Login({ onSuccess }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <form onSubmit={submit} style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ textAlign: "center", marginBottom: 8 }}>
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 30, fontWeight: 600 }}>Kub·House</div>
-          <div style={{ color: "var(--ink-3, #8a7f73)", fontSize: 13, letterSpacing: ".04em" }}>Вход для сметчика</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+          <KubLogo size={72} />
         </div>
         <input style={field} type="text" placeholder="Логин" autoComplete="username"
           value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
