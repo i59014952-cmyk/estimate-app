@@ -33,7 +33,7 @@ function Login({ onSuccess }) {
           <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 30, fontWeight: 600 }}>Kub·House</div>
           <div style={{ color: "var(--ink-3, #8a7f73)", fontSize: 13, letterSpacing: ".04em" }}>Вход для сметчика</div>
         </div>
-        <input style={field} type="email" placeholder="Email" autoComplete="username"
+        <input style={field} type="text" placeholder="Логин" autoComplete="username"
           value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
         <input style={field} type="password" placeholder="Пароль" autoComplete="current-password"
           value={password} onChange={(e) => setPassword(e.target.value)} required />
