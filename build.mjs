@@ -8,6 +8,7 @@
 
 import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import babel from '@babel/core';
@@ -115,7 +116,10 @@ async function main() {
       outHtml = outHtml.replace(tag.raw, '');
     }
   }
-  outHtml = outHtml.replace('</body>', `<script src="${BUNDLE_NAME}"></script>\n</body>`);
+  // Content hash busts the browser/CDN cache on every change so deploys are
+  // picked up without a manual hard refresh.
+  const bundleHash = createHash('sha1').update(minified.code).digest('hex').slice(0, 8);
+  outHtml = outHtml.replace('</body>', `<script src="${BUNDLE_NAME}?v=${bundleHash}"></script>\n</body>`);
   await writeFile(path.join(DIST, 'index.html'), outHtml, 'utf8');
 
   for (const f of STATIC_FILES) {
