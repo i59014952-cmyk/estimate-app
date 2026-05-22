@@ -2132,3 +2132,4 @@ function KHModalRoot({ activeId, onClose, est, autoAdd, vendorFilter }) {
 
 window.KH_VIEWS = KH_VIEWS;
 window.KHModalRoot = KHModalRoot;
+window.KHPriceCompare = KHPriceCompare;

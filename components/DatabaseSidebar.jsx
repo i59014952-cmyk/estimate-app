@@ -89,6 +89,7 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
   React.useEffect(() => { if (vendorFilter) setFilter(vendorFilter); }, [vendorFilter]);
   const [catFilter, setCatFilter] = React.useState("all"); // all | work | material
   const [showHidden, setShowHidden] = React.useState(false);
+  const [showCompare, setShowCompare] = React.useState(false);
   const [adding, setAdding] = React.useState(!!autoAdd);
   const [draft, setDraft] = React.useState({ name: "", unit: "", unitPrice: "", category: "" });
   const [uploadStatus, setUploadStatus] = React.useState(null);
@@ -197,6 +198,12 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
       if (filter.indexOf("vendor:") === 0) {
         const slug = filter.slice(7);
         out = out.filter(it => it._kind === "vendor" && (it._vendorSlug || "") === slug);
+      } else if (filter.indexOf("vname:") === 0) {
+        const key = filter.slice(6).toLowerCase();
+        out = out.filter(it => it._kind === "vendor" && (
+          String(it._vendorName || "").toLowerCase() === key ||
+          String(it._vendorSlug || "").toLowerCase() === key
+        ));
       } else {
         out = out.filter(it => it._kind === filter);
       }
@@ -338,7 +345,17 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
           </button>
         )}
         <button className="btn btn-sm" onClick={refreshVendors} title="Перечитать КП подрядчиков из облака">⟳ Обновить</button>
+        <button
+          className="btn btn-sm"
+          onClick={() => setShowCompare(v => !v)}
+          title="Сравнить цены подрядчиков по позиции"
+          style={showCompare ? { background: "var(--ink)", color: "var(--paper)", borderColor: "var(--ink)" } : undefined}
+        >⇄ Сравнить цены</button>
       </div>
+
+      {showCompare && window.KHPriceCompare && (
+        <window.KHPriceCompare contractors={[]} />
+      )}
 
       {!showHidden && (
         <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
