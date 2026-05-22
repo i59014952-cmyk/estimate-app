@@ -14,9 +14,16 @@ services:
       LEMANA_HEADLESS: "0"
       LEMANA_TIMEOUT_S: "90"
       DEFAULT_CITY: "moscow"
+      # Egress proxy for the Lemana parser. The VPS IP is blocked by Qrator at
+      # the TCP level, so Chrome must reach Lemana through a clean (residential/
+      # mobile) IP. Empty = direct. For a home SOCKS tunnel reachable on the
+      # host: socks5://host.docker.internal:1080
+      LEMANA_PROXY: ${LEMANA_PROXY:-}
       DATABASE_URL: "postgresql://kh:${POSTGRES_PASSWORD}@db:5432/kubhouse"
       KH_JWT_SECRET: ${KH_JWT_SECRET:?set KH_JWT_SECRET in .env}
       KH_ADMIN_EMAILS: ${KH_ADMIN_EMAILS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

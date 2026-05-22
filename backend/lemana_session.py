@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Optional, TypedDict
 
@@ -83,6 +84,10 @@ class LemanaSession:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         opts.add_argument("--window-size=1280,900")
+        proxy = os.environ.get("LEMANA_PROXY")
+        if proxy:
+            opts.add_argument(f"--proxy-server={proxy}")
+            logger.info("using proxy %s", proxy)
         kwargs: dict = {"options": opts}
         if self.chrome_version is not None:
             kwargs["version_main"] = self.chrome_version

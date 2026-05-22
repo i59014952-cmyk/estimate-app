@@ -321,6 +321,9 @@ class LemanaSession:
         # matches the proven local setup. Server keeps the default headless.
         if os.environ.get("LEMANA_HEADLESS", "1") != "0":
             opts.add_argument("--headless=new")
+        proxy = os.environ.get("LEMANA_PROXY")
+        if proxy:
+            opts.add_argument(f"--proxy-server={proxy}")
         kwargs: dict = {"options": opts}
         # Match the driver to the installed browser. LEMANA_CHROME_MAIN overrides;
         # otherwise probe the binary so the driver tracks Chrome across updates
