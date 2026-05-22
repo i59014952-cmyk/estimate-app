@@ -24,20 +24,20 @@
 <script src="lib/xlsx.full.min.js"></script>
 
 <script src="lib/estimateCore.js?v=106"></script>
-<script src="lib/auth.js?v=201"></script>
+<script src="lib/auth.js?v=202"></script>
 <script src="lib/supabase.js?v=200"></script>
 
 <script type="text/babel" src="tweaks-panel.jsx?v=100"></script>
 <script type="text/babel" src="components/Login.jsx?v=100"></script>
 <script type="text/babel" src="components/Logo.jsx?v=102"></script>
-<script type="text/babel" src="components/Data.jsx?v=101"></script>
+<script type="text/babel" src="components/Data.jsx?v=102"></script>
 <script type="text/babel" src="components/Editable.jsx?v=100"></script>
 <script type="text/babel" src="hooks/useEstimate.jsx?v=110"></script>
 <script type="text/babel" src="components/SearchResults.jsx?v=100"></script>
-<script type="text/babel" src="components/EstimateTable.jsx?v=105"></script>
+<script type="text/babel" src="components/EstimateTable.jsx?v=106"></script>
 <script type="text/babel" src="components/DatabaseSidebar.jsx?v=107"></script>
 <script type="text/babel" src="components/StoresSidebar.jsx?v=101"></script>
-<script type="text/babel" src="components/Workspace.jsx?v=113"></script>
+<script type="text/babel" src="components/Workspace.jsx?v=114"></script>
 <script type="text/babel" src="components/Modal.jsx?v=100"></script>
 <script type="text/babel" src="components/SidebarModals.jsx?v=111"></script>
 
@@ -47,9 +47,19 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [role, setRole] = React.useState("estimator");
   React.useEffect(() => { document.documentElement.setAttribute("data-theme", t.theme); }, [t.theme]);
+  React.useEffect(() => {
+    let alive = true;
+    if (!(window.KHAuth && window.KHAuth.me)) return;
+    window.KHAuth.me()
+      .then((r) => { if (alive && r && r.role) setRole(r.role); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const roleValue = React.useMemo(() => ({ role, caps: capsForRole(role) }), [role]);
   return (
-    <>
+    <KHRoleCtx.Provider value={roleValue}>
       <Workspace theme={t.theme} onTheme={() => setTweak("theme", t.theme === "dark" ? "light" : "dark")} />
       <TweaksPanel>
         <TweakSection label="Тема" />
@@ -57,7 +67,7 @@ function App() {
           options={[{value:"light",label:"Свет"},{value:"warm",label:"Тёпл."},{value:"dark",label:"Тьма"}]}
           onChange={(v) => setTweak("theme", v)} />
       </TweaksPanel>
-    </>
+    </KHRoleCtx.Provider>
   );
 }
 function Root() {

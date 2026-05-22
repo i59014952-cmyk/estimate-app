@@ -234,7 +234,7 @@ async def db_select(table: str, request: Request, _user: str = Depends(auth.requ
 
 
 @router.post("/db/{table}")
-async def db_upsert(table: str, request: Request, _user: str = Depends(auth.require_user)):
+async def db_upsert(table: str, request: Request, _user: str = Depends(auth.require_writer)):
     cols = _check_table(table)
     body = await request.json()
     rows = body if isinstance(body, list) else [body]
@@ -279,7 +279,7 @@ async def db_upsert(table: str, request: Request, _user: str = Depends(auth.requ
 
 
 @router.patch("/db/{table}")
-async def db_patch(table: str, request: Request, _user: str = Depends(auth.require_user)):
+async def db_patch(table: str, request: Request, _user: str = Depends(auth.require_writer)):
     cols = _check_table(table)
     body = await request.json()
     if not isinstance(body, dict) or not body:
@@ -296,7 +296,7 @@ async def db_patch(table: str, request: Request, _user: str = Depends(auth.requi
 
 
 @router.delete("/db/{table}")
-async def db_delete(table: str, request: Request, _user: str = Depends(auth.require_user)):
+async def db_delete(table: str, request: Request, _user: str = Depends(auth.require_writer)):
     cols = _check_table(table)
     binder = _Binder()
     where = _build_where(cols, request.query_params, binder)

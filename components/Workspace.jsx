@@ -140,7 +140,10 @@ function AdminUsersModal({ open, onClose }) {
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("estimator");
   const [busy, setBusy] = useState(false);
+
+  const ROLE_LABELS = { admin: "Администратор", estimator: "Сметчик", viewer: "Наблюдатель" };
 
   const load = React.useCallback(() => {
     setLoading(true); setError("");
@@ -155,11 +158,16 @@ function AdminUsersModal({ open, onClose }) {
   const add = async () => {
     setBusy(true); setError("");
     try {
-      await window.KHAuth.createUser(email.trim(), password);
-      setEmail(""); setPassword("");
+      await window.KHAuth.createUser(email.trim(), password, role);
+      setEmail(""); setPassword(""); setRole("estimator");
       load();
     } catch (e) { setError(e.message || "Не удалось создать пользователя"); }
     finally { setBusy(false); }
+  };
+
+  const changeRole = async (u, newRole) => {
+    try { await window.KHAuth.setUserRole(u.email, newRole); load(); }
+    catch (e) { window.alert(e.message || "Не удалось изменить роль"); }
   };
 
   const resetPwd = async (u) => {
@@ -196,6 +204,16 @@ function AdminUsersModal({ open, onClose }) {
               onKeyDown={(e) => { if (e.key === "Enter" && canAdd) add(); }}
               style={{ flex: "1 1 160px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
             />
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              title="Роль"
+              style={{ flex: "0 0 auto", padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
+            >
+              <option value="estimator">Сметчик</option>
+              <option value="viewer">Наблюдатель</option>
+              <option value="admin">Администратор</option>
+            </select>
             <button className="btn btn-sm" onClick={add} disabled={!canAdd}
               style={{ opacity: canAdd ? 1 : 0.5, cursor: canAdd ? "pointer" : "not-allowed" }}>
               <Icon name="plus" size={14} /> Добавить
@@ -216,9 +234,20 @@ function AdminUsersModal({ open, onClose }) {
                 <div key={u.email} className="row center between" style={{ padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, gap: 8 }}>
                   <div className="row center gap-2" style={{ minWidth: 0 }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>
-                    {u.is_admin && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }}>админ</span>}
+                    {u.role_locked && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }} title="Роль задана переменной KH_ADMIN_EMAILS">env</span>}
                   </div>
                   <div className="row center gap-2">
+                    <select
+                      value={u.role}
+                      disabled={u.role_locked}
+                      title={u.role_locked ? "Роль задана переменной окружения" : "Роль"}
+                      onChange={(e) => changeRole(u, e.target.value)}
+                      style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit", opacity: u.role_locked ? 0.6 : 1 }}
+                    >
+                      <option value="estimator">Сметчик</option>
+                      <option value="viewer">Наблюдатель</option>
+                      <option value="admin">Администратор</option>
+                    </select>
                     <button className="btn btn-icon" title="Сменить пароль" onClick={() => resetPwd(u)}><Icon name="refresh" size={14} /></button>
                     <button className="btn btn-icon" title="Удалить" onClick={() => del(u)}><Icon name="trash" size={14} /></button>
                   </div>
@@ -233,17 +262,9 @@ function AdminUsersModal({ open, onClose }) {
 }
 
 function AdminPanel() {
-  const [isAdmin, setIsAdmin] = useState(false);
+  const caps = useCaps();
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    if (!(window.KHAuth && window.KHAuth.me)) return;
-    window.KHAuth.me()
-      .then((r) => { if (alive) setIsAdmin(!!(r && r.is_admin)); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-  if (!isAdmin) return null;
+  if (!caps.users) return null;
   return (
     <>
       <button
@@ -263,6 +284,7 @@ function AdminPanel() {
 }
 
 function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
+  const caps = useCaps();
   const [counts, setCounts] = React.useState(khReadDynamicCounts);
   React.useEffect(() => {
     const refresh = () => setCounts(khReadDynamicCounts());
@@ -335,9 +357,11 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
           <Icon name="x" size={14} />
         </button>
       </div>
-      {NAV.map(it => <Item key={it.id} it={it} />)}
-      <div className="eyebrow" style={{ padding: "16px 12px 8px" }}>Справочники</div>
-      {NAV2.map(it => <Item key={it.id} it={it} />)}
+      {NAV.filter(it => caps.sections.includes(it.id)).map(it => <Item key={it.id} it={it} />)}
+      {NAV2.some(it => caps.sections.includes(it.id)) && (
+        <div className="eyebrow" style={{ padding: "16px 12px 8px" }}>Справочники</div>
+      )}
+      {NAV2.filter(it => caps.sections.includes(it.id)).map(it => <Item key={it.id} it={it} />)}
 
       <div className="frame" style={{
         marginTop: "auto", padding: "14px 14px 12px", border: "1px solid var(--rule)",
@@ -402,6 +426,7 @@ function MobileNav({ active, onPick }) {
 }
 
 function HeroBlock({ est, meta, updateMeta, onOpenDatabase }) {
+  const caps = useCaps();
   const dbFileRef = React.useRef(null);
   const [dbUpload, setDbUpload] = React.useState(null);
 
@@ -461,25 +486,27 @@ function HeroBlock({ est, meta, updateMeta, onOpenDatabase }) {
           <div className="serif" style={{ fontSize: 26, lineHeight: 1, letterSpacing: "-0.01em", fontWeight: 600, color: "var(--ink)" }}>База данных</div>
           <div style={{ fontSize: 14, fontWeight: 500, color: "var(--ink-2)" }}>Каталог позиций — загрузка и добавление</div>
         </div>
-        <div className="row center kh-hero__db-actions" style={{ gap: 10, flexWrap: "wrap" }}>
-          {dbUpload && (
-            <span className="tiny" style={{ color: dbUpload.kind === "error" ? "var(--rust)" : "var(--ink-3)", maxWidth: 320 }}>
-              {dbUpload.text}
-            </span>
-          )}
-          <input
-            ref={dbFileRef} type="file" multiple
-            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-            style={{ display: "none" }}
-            onChange={onDbFiles}
-          />
-          <button className="kh-btn-primary" onClick={() => dbFileRef.current && dbFileRef.current.click()}>
-            ↑ Загрузить XLSX/CSV (можно несколько)
-          </button>
-          <button className="btn btn-sm" onClick={onOpenDatabase}>
-            + Добавить позицию
-          </button>
-        </div>
+        {caps.edit && (
+          <div className="row center kh-hero__db-actions" style={{ gap: 10, flexWrap: "wrap" }}>
+            {dbUpload && (
+              <span className="tiny" style={{ color: dbUpload.kind === "error" ? "var(--rust)" : "var(--ink-3)", maxWidth: 320 }}>
+                {dbUpload.text}
+              </span>
+            )}
+            <input
+              ref={dbFileRef} type="file" multiple
+              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              style={{ display: "none" }}
+              onChange={onDbFiles}
+            />
+            <button className="kh-btn-primary" onClick={() => dbFileRef.current && dbFileRef.current.click()}>
+              ↑ Загрузить XLSX/CSV (можно несколько)
+            </button>
+            <button className="btn btn-sm" onClick={onOpenDatabase}>
+              + Добавить позицию
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -700,6 +727,7 @@ function HouseSketch() {
 }
 
 function EmptyState({ onUpload, onAddRow, catalogReady }) {
+  const caps = useCaps();
   return (
     <div className="col center kh-empty" style={{ padding: "40px 32px 44px", alignItems: "center", textAlign: "center" }}>
       <HouseSketch />
@@ -707,8 +735,11 @@ function EmptyState({ onUpload, onAddRow, catalogReady }) {
         Начните <span className="serif-it" style={{ fontStyle: "italic" }}>с чистого листа</span>
       </div>
       <p style={{ maxWidth: 380, fontSize: 13.5, color: "var(--ink-2)", marginBottom: 20 }}>
-        Загрузите коммерческое предложение — распознаем позиции, сопоставим с каталогом и рассчитаем смету. Или добавьте материалы из правой панели.
+        {caps.edit
+          ? "Загрузите коммерческое предложение — распознаем позиции, сопоставим с каталогом и рассчитаем смету. Или добавьте материалы из правой панели."
+          : "Смета пуста. У вашей роли доступ только для просмотра."}
       </p>
+      {caps.edit && (
       <div className="row center gap-3" style={{ marginBottom: 16, flexWrap: "wrap", justifyContent: "center" }}>
         <button className="btn btn-primary" onClick={onUpload} disabled={!catalogReady}>
           <Icon name="upload" size={13} /> Загрузить КП
@@ -717,6 +748,7 @@ function EmptyState({ onUpload, onAddRow, catalogReady }) {
           <Icon name="plus" size={13} /> Добавить строку
         </button>
       </div>
+      )}
       <div className="row center gap-2 mono tiny" style={{ color: "var(--ink-4)", letterSpacing: ".08em" }}>
         {["XLSX","PDF","DOCX","CSV"].map(f => (
           <span key={f} style={{ padding: "3px 7px", border: "1px solid var(--rule)", borderRadius: 4 }}>{f}</span>
@@ -727,6 +759,7 @@ function EmptyState({ onUpload, onAddRow, catalogReady }) {
 }
 
 function PositionsHeader({ est, onAddRow }) {
+  const caps = useCaps();
   const rowCount = est.state.estimate.length;
   const grand = est.state.totals.grand;
   return (
@@ -745,50 +778,58 @@ function PositionsHeader({ est, onAddRow }) {
         </div>
       </div>
       <div className="row gap-2 center kh-positions__actions">
-        <button
-          className="btn btn-sm"
-          onClick={onAddRow}
-          title="Добавить новую строку"
-        >
-          <Icon name="plus" size={13} /> Добавить строку
-        </button>
-        <button
-          className="btn btn-sm"
-          onClick={est.actions.fetchPricesForNotFound}
-          disabled={!est.state.anyNotFound || est.state.pricesBusy}
-        >
-          <Icon name="refresh" size={13} /> {est.state.pricesBusy ? "Запрос…" : "Обновить цены"}
-        </button>
-        <button
-          className="btn btn-sm"
-          onClick={() => {
-            if (rowCount === 0) return;
-            if (confirm(`Очистить всю смету (${rowCount} строк)? Действие отменить нельзя.`)) {
-              est.actions.resetEstimate();
-            }
-          }}
-          disabled={rowCount === 0}
-          title="Очистить всю смету"
-          style={{ color: rowCount === 0 ? undefined : "var(--rust)" }}
-        >
-          <Icon name="x" size={13} /> Очистить всю смету
-        </button>
-        <button
-          className="btn btn-sm"
-          onClick={async () => {
-            try {
-              const url = await est.actions.createClientLink();
-              try { await navigator.clipboard.writeText(url); } catch (_) {}
-              window.prompt("Ссылка для клиента (скопирована в буфер):", url);
-            } catch (err) {
-              alert("Не удалось создать ссылку: " + (err.message || err));
-            }
-          }}
-          disabled={rowCount === 0}
-          title="Создать ссылку для клиента: он сможет менять количество и удалять строки, но не цены"
-        >
-          <Icon name="users" size={13} /> Для клиента
-        </button>
+        {caps.edit && (
+          <button
+            className="btn btn-sm"
+            onClick={onAddRow}
+            title="Добавить новую строку"
+          >
+            <Icon name="plus" size={13} /> Добавить строку
+          </button>
+        )}
+        {caps.edit && (
+          <button
+            className="btn btn-sm"
+            onClick={est.actions.fetchPricesForNotFound}
+            disabled={!est.state.anyNotFound || est.state.pricesBusy}
+          >
+            <Icon name="refresh" size={13} /> {est.state.pricesBusy ? "Запрос…" : "Обновить цены"}
+          </button>
+        )}
+        {caps.edit && (
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              if (rowCount === 0) return;
+              if (confirm(`Очистить всю смету (${rowCount} строк)? Действие отменить нельзя.`)) {
+                est.actions.resetEstimate();
+              }
+            }}
+            disabled={rowCount === 0}
+            title="Очистить всю смету"
+            style={{ color: rowCount === 0 ? undefined : "var(--rust)" }}
+          >
+            <Icon name="x" size={13} /> Очистить всю смету
+          </button>
+        )}
+        {caps.edit && caps.cost && (
+          <button
+            className="btn btn-sm"
+            onClick={async () => {
+              try {
+                const url = await est.actions.createClientLink();
+                try { await navigator.clipboard.writeText(url); } catch (_) {}
+                window.prompt("Ссылка для клиента (скопирована в буфер):", url);
+              } catch (err) {
+                alert("Не удалось создать ссылку: " + (err.message || err));
+              }
+            }}
+            disabled={rowCount === 0}
+            title="Создать ссылку для клиента: он сможет менять количество и удалять строки, но не цены"
+          >
+            <Icon name="users" size={13} /> Для клиента
+          </button>
+        )}
         <button
           className="btn btn-sm"
           onClick={est.actions.exportDoc}
@@ -934,6 +975,7 @@ function EstimateSearch({ rows }) {
 }
 
 function ColumnsHeader() {
+  const caps = useCaps();
   return (
     <div className="row kh-cols" style={{ padding: "10px 32px", borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)", color: "var(--ink-4)", background: "var(--paper-2)" }}>
       <div className="mono tiny" style={{ width: 56, letterSpacing: ".08em" }}>#</div>
@@ -941,8 +983,8 @@ function ColumnsHeader() {
       <div className="mono tiny" style={{ flex: 1, letterSpacing: ".08em" }}>НАИМЕНОВАНИЕ</div>
       <div className="mono tiny" style={{ width: 64, textAlign: "center", letterSpacing: ".08em" }}>ЕД. ИЗМ.</div>
       <div className="mono tiny" style={{ width: 80, textAlign: "right", letterSpacing: ".08em" }}>КОЛ-ВО</div>
-      <div className="mono tiny" style={{ width: 100, textAlign: "right", letterSpacing: ".08em" }}>СЕБЕСТ., ₽</div>
-      <div className="mono tiny" style={{ width: 60, textAlign: "right", letterSpacing: ".08em" }}>НАЦ. %</div>
+      {caps.cost && <div className="mono tiny" style={{ width: 100, textAlign: "right", letterSpacing: ".08em" }}>СЕБЕСТ., ₽</div>}
+      {caps.cost && <div className="mono tiny" style={{ width: 60, textAlign: "right", letterSpacing: ".08em" }}>НАЦ. %</div>}
       <div className="mono tiny" style={{ width: 130, textAlign: "right", letterSpacing: ".08em" }}>КЛИЕНТУ, ₽</div>
       <div className="mono tiny" style={{ width: 110, textAlign: "right", letterSpacing: ".08em" }}>ИСТОЧНИК</div>
     </div>
@@ -950,6 +992,8 @@ function ColumnsHeader() {
 }
 
 function MarkupCard({ est }) {
+  const caps = useCaps();
+  if (!caps.cost) return null;
   const markup = est.state.markup || { work: 0, material: 0 };
   const field = (cat, label) => (
     <div className="row between center" style={{ gap: 10 }}>
@@ -985,11 +1029,14 @@ function MarkupCard({ est }) {
 }
 
 function BudgetCard({ est }) {
+  const caps = useCaps();
   const { cost, margin, subtotal, vat, grand } = est.state.totals;
   const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
   const items = [
-    { label: "Себестоимость", value: cost },
-    { label: "Наценка (маржа)", value: margin },
+    ...(caps.cost ? [
+      { label: "Себестоимость", value: cost },
+      { label: "Наценка (маржа)", value: margin },
+    ] : []),
     { label: "Сумма без НДС", value: subtotal },
     { label: "НДС 22%", value: vat },
   ];

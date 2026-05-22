@@ -72,10 +72,34 @@ def _is_admin(email: str) -> bool:
     return email.strip().lower() in _admin_emails()
 
 
+VALID_ROLES = ("admin", "estimator", "viewer")
+
+
+async def role_of(email: str) -> str:
+    """Effective role: env-listed admins always rank as 'admin'; otherwise the
+    role stored in kh_users (defaulting to 'estimator')."""
+    if _is_admin(email):
+        return "admin"
+    import db
+    async with db.pool().acquire() as conn:
+        row = await conn.fetchrow(
+            "select role from kh_users where email = $1", email.strip().lower()
+        )
+    role = row["role"] if row and row["role"] else "estimator"
+    return role if role in VALID_ROLES else "estimator"
+
+
 async def require_admin(email: str = Depends(require_user)) -> str:
     """FastAPI dependency: like require_user but also enforces admin rights."""
-    if not _is_admin(email):
+    if await role_of(email) != "admin":
         raise HTTPException(403, "Требуются права администратора")
+    return email
+
+
+async def require_writer(email: str = Depends(require_user)) -> str:
+    """FastAPI dependency: blocks read-only (viewer) accounts from writing."""
+    if await role_of(email) == "viewer":
+        raise HTTPException(403, "Недостаточно прав: режим только для просмотра")
     return email
 
 
@@ -122,10 +146,15 @@ async def logout():
 class CreateUserIn(BaseModel):
     email: str
     password: str
+    role: Optional[str] = "estimator"
 
 
 class SetPasswordIn(BaseModel):
     password: str
+
+
+class SetRoleIn(BaseModel):
+    role: str
 
 
 def _valid_password(password: str) -> None:
@@ -133,9 +162,17 @@ def _valid_password(password: str) -> None:
         raise HTTPException(400, "Пароль должен быть не короче 6 символов")
 
 
+def _valid_role(role: str) -> str:
+    r = (role or "estimator").strip().lower()
+    if r not in VALID_ROLES:
+        raise HTTPException(400, f"Недопустимая роль (ожидается одна из: {', '.join(VALID_ROLES)})")
+    return r
+
+
 @router.get("/auth/me")
 async def me(email: str = Depends(require_user)):
-    return {"email": email, "is_admin": _is_admin(email)}
+    role = await role_of(email)
+    return {"email": email, "role": role, "is_admin": role == "admin"}
 
 
 @router.get("/auth/users")
@@ -144,16 +181,20 @@ async def list_users(_admin: str = Depends(require_admin)):
     admins = _admin_emails()
     async with db.pool().acquire() as conn:
         rows = await conn.fetch(
-            "select email, created_at from kh_users order by created_at"
+            "select email, role, created_at from kh_users order by created_at"
         )
-    return [
-        {
+    out = []
+    for r in rows:
+        forced_admin = r["email"].strip().lower() in admins
+        role = "admin" if forced_admin else (r["role"] or "estimator")
+        out.append({
             "email": r["email"],
+            "role": role,
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-            "is_admin": r["email"].strip().lower() in admins,
-        }
-        for r in rows
-    ]
+            "is_admin": role == "admin",
+            "role_locked": forced_admin,  # admin via env var; role can't be changed here
+        })
+    return out
 
 
 @router.post("/auth/users")
@@ -163,15 +204,32 @@ async def create_user(body: CreateUserIn, _admin: str = Depends(require_admin)):
     if not email or "@" not in email:
         raise HTTPException(400, "Введите корректный email")
     _valid_password(body.password)
+    role = _valid_role(body.role)
     async with db.pool().acquire() as conn:
         exists = await conn.fetchrow("select 1 from kh_users where email = $1", email)
         if exists is not None:
             raise HTTPException(409, "Пользователь с таким email уже существует")
         await conn.execute(
-            "insert into kh_users (email, password_hash) values ($1, $2)",
-            email, pwd.hash(body.password),
+            "insert into kh_users (email, password_hash, role) values ($1, $2, $3)",
+            email, pwd.hash(body.password), role,
         )
-    return {"email": email, "is_admin": email in _admin_emails()}
+    return {"email": email, "role": role, "is_admin": role == "admin"}
+
+
+@router.post("/auth/users/{email}/role")
+async def set_role(email: str, body: SetRoleIn, admin: str = Depends(require_admin)):
+    import db
+    target = email.strip().lower()
+    role = _valid_role(body.role)
+    if target in _admin_emails():
+        raise HTTPException(400, "Роль этого администратора задана переменной KH_ADMIN_EMAILS")
+    async with db.pool().acquire() as conn:
+        result = await conn.execute(
+            "update kh_users set role = $2 where email = $1", target, role
+        )
+    if result.endswith(" 0"):
+        raise HTTPException(404, "Пользователь не найден")
+    return {"email": target, "role": role}
 
 
 @router.post("/auth/users/{email}/password")
