@@ -1,4 +1,4 @@
-function KHModal({ open, onClose, title, subtitle, children }) {
+function KHModal({ open, onClose, title, subtitle, children, wide }) {
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -13,7 +13,7 @@ function KHModal({ open, onClose, title, subtitle, children }) {
   if (!open) return null;
   return (
     <div className="kh-backdrop" onClick={onClose}>
-      <div className="kh-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={"kh-modal" + (wide ? " kh-modal--wide" : "")} onClick={(e) => e.stopPropagation()}>
         <div className="kh-modal__head">
           <div>
             <div className="kh-modal__title">{title}</div>
