@@ -74,6 +74,7 @@
   box-shadow: inset 0 -1px 0 var(--rule, rgba(0,0,0,.08));
 }
 .kh-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kh-table th.num { text-align: right; }
 .kh-table tr.section td { background: rgba(0,0,0,.04); font-weight: 600; }
 
 .kh-toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; }
