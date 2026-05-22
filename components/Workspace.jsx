@@ -536,23 +536,9 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose, onOpen
         </div>
       )}
 
-      <div className="frame" style={{
-        marginTop: "auto", padding: "14px 14px 12px", border: "1px solid var(--rule)",
-        background: "var(--paper-card)", position: "relative"
-      }}>
-        <div className="frame-bl" /><div className="frame-br" />
-        <div className="eyebrow" style={{ marginBottom: 8 }}>Текущий объект</div>
-        <div className="serif-it" style={{ fontSize: 22, lineHeight: 1.05, marginBottom: 10, fontStyle: "italic" }}>
-          {meta.kind || "Резиденция"} «<Editable value={meta.title} onChange={(v) => updateMeta && updateMeta("title", v)} />»
-        </div>
-        <div className="col tiny mono" style={{ gap: 5, color: "var(--ink-3)" }}>
-          <div><span style={{ color: "var(--ink-4)" }}>Д.</span> <Editable value={meta.location || "Горки, 14 соток"} onChange={(v) => updateMeta && updateMeta("location", v)} /></div>
-          <div><span style={{ color: "var(--ink-4)" }}>Площадь</span> <Editable value={meta.areaText || "284 м²"} onChange={(v) => updateMeta && updateMeta("areaText", v)} /></div>
-          <div><span style={{ color: "var(--ink-4)" }}>Этап</span> <Editable value={meta.stage || "Смета / R3"} onChange={(v) => updateMeta && updateMeta("stage", v)} /></div>
-        </div>
+      <div style={{ marginTop: "auto" }}>
+        <AdminPanel />
       </div>
-
-      <AdminPanel />
     </aside>
     </>
   );
