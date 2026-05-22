@@ -18,10 +18,14 @@ function ensureKHLoaded() {
   if (window.KH_DATA.ready || khLoadingStarted) return;
   khLoadingStarted = true;
   (async () => {
-    const wrap = (t) => {
-      t = t.trim();
-      if (t.startsWith('[') || t.startsWith('{')) return t;
-      return '[' + t + ']';
+    // Files may be a single JSON value, OR a comma-separated list of objects
+    // without the surrounding [ ]. Parse as-is first, then retry array-wrapped.
+    const parseLoose = (t) => {
+      t = (t || '').trim().replace(/^﻿/, '');
+      if (!t) return [];
+      try { return JSON.parse(t); } catch (_) {}
+      try { return JSON.parse('[' + t + ']'); } catch (_) {}
+      return [];
     };
     try {
       const [oneTxt, twoTxt, thTxt] = await Promise.all([
@@ -29,9 +33,9 @@ function ensureKHLoaded() {
         fetch('two.json').then(r => r.text()),
         fetch('th.json').then(r => r.text()),
       ]);
-      const one = JSON.parse(wrap(oneTxt));
-      const two = JSON.parse(wrap(twoTxt));
-      const th  = JSON.parse(thTxt);
+      const one = parseLoose(oneTxt);
+      const two = parseLoose(twoTxt);
+      const th  = parseLoose(thTxt);
 
       // ONE → Николина Гора
       const oneRows = [];
