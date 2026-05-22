@@ -15,11 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget gnupg ca-c
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
-COPY lemana_source.py .
-COPY db.py .
-COPY auth.py .
-COPY create_user.py .
+COPY *.py ./
 
 ENV PORT=8000
 # Run Chrome "headed" under a virtual display: headless trips Qrator on Lemana.
