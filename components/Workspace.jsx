@@ -25,10 +25,27 @@ function khFormatSavedAt(ts, now) {
   return sameDay ? hhmm : `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")} ${hhmm}`;
 }
 
+function khInitials(name, email) {
+  const n = String(name || "").trim();
+  if (n) {
+    const p = n.split(/\s+/).filter(Boolean);
+    const s = ((p[0] && p[0][0]) || "") + ((p[1] && p[1][0]) || "");
+    return (s || (p[0] || "").slice(0, 2)).toUpperCase();
+  }
+  const e = String(email || "").trim();
+  if (e) return e.slice(0, 2).toUpperCase();
+  return "АМ";
+}
+
 function AccountMenu() {
+  const caps = useCaps();
   const [open, setOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [name, setName] = useState(() => { try { return localStorage.getItem("kh-operator-name-v1") || ""; } catch (_) { return ""; } });
   const ref = React.useRef(null);
   const email = useMemo(() => khOperatorEmail(), [open]);
+  const initials = khInitials(name, email);
+  useEffect(() => { try { localStorage.setItem("kh-operator-name-v1", name); } catch (_) {} }, [name]);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -41,37 +58,48 @@ function AccountMenu() {
     try { window.KHAuth && window.KHAuth.signOut && window.KHAuth.signOut(); } catch (_) {}
     window.location.reload();
   };
+  const itemStyle = {
+    width: "100%", textAlign: "left", padding: "8px 10px", border: "none", background: "transparent",
+    borderRadius: 8, cursor: "pointer", color: "var(--ink)", font: "inherit",
+  };
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
         onClick={() => setOpen(v => !v)}
-        aria-label="Аккаунт"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Аккаунт"
+        aria-label="Аккаунт" aria-haspopup="menu" aria-expanded={open} title={name || "Аккаунт"}
         style={{
           width: 32, height: 32, borderRadius: 99, background: "var(--coffee)",
           color: "#FBF5E7", display: "grid", placeItems: "center", border: "none", cursor: "pointer",
           fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, letterSpacing: ".05em"
         }}
-      >АМ</button>
+      >{initials}</button>
       {open && (
         <div role="menu" style={{
-          position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 200,
+          position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 220,
           background: "var(--paper)", border: "1px solid var(--rule)", borderRadius: 12,
           boxShadow: "0 12px 32px rgba(0,0,0,.14)", padding: 6, zIndex: 50
         }}>
-          <div className="mono tiny" style={{ padding: "8px 10px", color: "var(--ink-3)", borderBottom: "1px solid var(--rule)", marginBottom: 4, wordBreak: "break-all" }}>
-            {email || "Оператор"}
+          <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--rule)", marginBottom: 4 }}>
+            <input
+              placeholder="Имя Фамилия"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper-card)", color: "var(--ink)", font: "inherit", boxSizing: "border-box" }}
+            />
+            {email && <div className="mono tiny" style={{ color: "var(--ink-3)", marginTop: 6, wordBreak: "break-all" }}>{email}</div>}
           </div>
-          <button role="menuitem" onClick={signOut} className="row center gap-2" style={{
-            width: "100%", textAlign: "left", padding: "8px 10px", border: "none", background: "transparent",
-            borderRadius: 8, cursor: "pointer", color: "var(--ink)", font: "inherit"
-          }}>
+          {caps.users && (
+            <button role="menuitem" className="row center gap-2" style={itemStyle}
+              onClick={() => { setAdminOpen(true); setOpen(false); }}>
+              <Icon name="users" size={14} /> Администрирование
+            </button>
+          )}
+          <button role="menuitem" onClick={signOut} className="row center gap-2" style={itemStyle}>
             <Icon name="logout" size={14} /> Выйти
           </button>
         </div>
       )}
+      <AdminUsersModal open={adminOpen} onClose={() => setAdminOpen(false)} />
     </div>
   );
 }
@@ -425,28 +453,6 @@ function AdminUsersModal({ open, onClose }) {
   );
 }
 
-function AdminPanel() {
-  const caps = useCaps();
-  const [open, setOpen] = useState(false);
-  if (!caps.users) return null;
-  return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="row center gap-3 focusable kh-sidebar__admin"
-        style={{
-          marginTop: 10, width: "100%", padding: "9px 12px", borderRadius: 8,
-          background: "transparent", color: "var(--ink-2)", border: "1px solid var(--rule)",
-          cursor: "pointer", textAlign: "left", fontSize: 13, fontFamily: "var(--sans)"
-        }}
-      >
-        <Icon name="users" size={15} /><span>Администрирование</span>
-      </button>
-      <AdminUsersModal open={open} onClose={() => setOpen(false)} />
-    </>
-  );
-}
-
 function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose, onOpenVendorDb, onOpenContractors }) {
   const caps = useCaps();
   const [counts, setCounts] = React.useState(khReadDynamicCounts);
@@ -535,10 +541,6 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose, onOpen
           />
         </div>
       )}
-
-      <div style={{ marginTop: "auto" }}>
-        <AdminPanel />
-      </div>
     </aside>
     </>
   );
