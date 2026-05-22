@@ -181,8 +181,10 @@ function CompareEstimatesModal({ open, onClose, index }) {
   const nameOf = (id) => ((index || []).find(e => e.id === id) || {}).name || id;
   const [aId, setAId] = useState(ids[0] || "");
   const [bId, setBId] = useState(ids[1] || "");
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!open) return;
+    setTick(t => t + 1); // перечитать localStorage при каждом открытии
     const list = (index || []).map(e => e.id);
     let a = list.includes(aId) ? aId : list[0];
     let b = (list.includes(bId) && bId !== a) ? bId : list.find(x => x !== a);
@@ -205,7 +207,8 @@ function CompareEstimatesModal({ open, onClose, index }) {
     };
     A.forEach(r => add(r, "a"));
     B.forEach(r => add(r, "b"));
-    const order = { "only-a": 0, "only-b": 0, "diff": 1, "same": 2 };
+    // Разная цена — в самый верх, затем «только в одной», затем одинаковые.
+    const order = { "diff": 0, "only-a": 1, "only-b": 1, "same": 2 };
     return Array.from(map.values()).map(g => {
       let status;
       if (g.a == null) status = "only-b";
@@ -214,7 +217,7 @@ function CompareEstimatesModal({ open, onClose, index }) {
       else status = "same";
       return { ...g, status, delta: (g.a != null && g.b != null) ? (g.b - g.a) : null };
     }).sort((x, y) => (order[x.status] - order[y.status]) || String(x.name).localeCompare(String(y.name), "ru"));
-  }, [open, aId, bId]);
+  }, [open, aId, bId, tick]);
 
   const diffCount = rows.filter(r => r.status !== "same").length;
   const selStyle = { padding: "8px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit", maxWidth: 220 };
@@ -236,6 +239,7 @@ function CompareEstimatesModal({ open, onClose, index }) {
           <span className="tiny muted" style={{ marginLeft: "auto" }}>
             {aId === bId ? "Выберите две разные сметы" : `Различий: ${diffCount} из ${rows.length}`}
           </span>
+          <button className="btn btn-icon" title="Обновить из смет" onClick={() => setTick(t => t + 1)}><Icon name="refresh" size={14} /></button>
         </div>
 
         {aId !== bId && (
