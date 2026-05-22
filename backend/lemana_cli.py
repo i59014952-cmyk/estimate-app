@@ -49,12 +49,14 @@ def collect(
     limit: int,
     headless: bool,
     chrome_version: Optional[int],
+    proxy: Optional[str] = None,
 ) -> list[dict]:
     """Один прогон Chrome на все запросы и URL-ы."""
     from lemana_session import LemanaSession  # deferred: тянет браузер
 
     rows: list[dict] = []
-    with LemanaSession(city=city, headless=headless, chrome_version=chrome_version) as s:
+    with LemanaSession(city=city, headless=headless,
+                       chrome_version=chrome_version, proxy=proxy) as s:
         for q in queries:
             try:
                 rows.extend(s.search(q, limit=limit))
@@ -131,6 +133,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--no-headless", action="store_true",
         help="Запустить браузер с окном (иногда помогает против Qrator).",
     )
+    p.add_argument(
+        "--proxy", default=None, metavar="URL",
+        help="Прокси, напр. http://host:port или socks5://host:port "
+             "(или env LEMANA_PROXY). Без user:pass.",
+    )
     out = p.add_mutually_exclusive_group()
     out.add_argument("--json", metavar="FILE", nargs="?", const="-",
                      help="Вывести JSON (в FILE или stdout при отсутствии аргумента).")
@@ -153,6 +160,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         limit=args.limit,
         headless=not args.no_headless,
         chrome_version=args.chrome_version,
+        proxy=args.proxy,
     )
 
     if args.json is not None:

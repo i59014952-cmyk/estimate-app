@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import random
 import time
 from typing import Optional, TypedDict
 
@@ -56,10 +58,20 @@ class LemanaSession:
     BASE_URL_TPL = "https://{city}.lemanapro.ru/?fromRegion={region}"
 
     def __init__(self, city: str = "kazan", headless: bool = True,
-                 chrome_version: Optional[int] = None):
+                 chrome_version: Optional[int] = None,
+                 proxy: Optional[str] = None):
         self.city = city
         self.headless = headless
         self.chrome_version = chrome_version
+        # Прокси помогает, когда IP сервера попал в датацентр-диапазоны Qrator.
+        # Формат: "http://host:port" или "socks5://host:port". Chrome через
+        # --proxy-server не поддерживает user:pass — для авторизованного прокси
+        # нужен отдельный extension (тут не реализовано).
+        self.proxy = proxy if proxy is not None else (os.environ.get("LEMANA_PROXY") or None)
+        # Рандомная пауза между загрузками карточек, чтобы не выглядеть ботом.
+        # Отключается LEMANA_DELAY_MAX=0.
+        self._delay_min = float(os.environ.get("LEMANA_DELAY_MIN", "0.8"))
+        self._delay_max = float(os.environ.get("LEMANA_DELAY_MAX", "2.5"))
         self._driver: Optional[uc.Chrome] = None
 
     def __enter__(self) -> "LemanaSession":
@@ -83,6 +95,9 @@ class LemanaSession:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         opts.add_argument("--window-size=1280,900")
+        if self.proxy:
+            opts.add_argument(f"--proxy-server={self.proxy}")
+            logger.info("uc.Chrome via proxy %s", self.proxy)
         kwargs: dict = {"options": opts}
         if self.chrome_version is not None:
             kwargs["version_main"] = self.chrome_version
@@ -122,13 +137,24 @@ class LemanaSession:
         assert self._driver is not None, "session not started"
         urls = self._perform_search(query)[:limit]
         out: list[ProductDict] = []
-        for url in urls:
+        for i, url in enumerate(urls):
+            if i:
+                self._sleep_between()
             try:
                 out.append(self._parse_product_page(url))
             except Exception as e:
                 logger.warning("[%s] parse_product failed for %s: %s", query, url, e)
         logger.info("search('%s', limit=%d) -> %d products", query, limit, len(out))
         return out
+
+    def _sleep_between(self) -> None:
+        """Случайная пауза между карточками (анти-бот). Off при DELAY_MAX<=0."""
+        if self._delay_max <= 0:
+            return
+        lo, hi = self._delay_min, self._delay_max
+        if hi < lo:
+            lo, hi = hi, lo
+        time.sleep(random.uniform(lo, hi))
 
     # ------------------------------------------------------------------
     # overlay handling (region/cookie banners)
