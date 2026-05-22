@@ -270,8 +270,34 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
   }, [vendorRows, vendorMap]);
 
   const toggleCompareSlug = (slug) => setCompareSlugs(prev =>
-    prev.includes(slug) ? prev.filter(s => s !== slug) : (prev.length >= 3 ? prev : [...prev, slug])
+    prev.includes(slug) ? prev.filter(s => s !== slug) : (prev.length >= 10 ? prev : [...prev, slug])
   );
+
+  // Матрица сравнения: позиции (строки) × подрядчики (колонки), цена в ячейке.
+  const compareMatrix = React.useMemo(() => {
+    if (!compareMode || compareSlugs.length === 0) return [];
+    const norm = s => String(s || "").toLowerCase().replace(/ё/g, "е").trim();
+    const map = new Map();
+    compareSlugs.forEach(slug => {
+      const v = vendorItemsBySlug.get(slug); if (!v) return;
+      v.items.forEach(it => {
+        const key = norm(it.name) + "|" + norm(it.unit);
+        if (!map.has(key)) map.set(key, { name: it.name, unit: it.unit || "", prices: {} });
+        const g = map.get(key);
+        if (it.price != null && (g.prices[slug] == null || it.price < g.prices[slug])) g.prices[slug] = it.price;
+      });
+    });
+    let arr = Array.from(map.values());
+    const q = cmpQuery.trim().toLowerCase();
+    if (q) arr = arr.filter(r => r.name.toLowerCase().includes(q));
+    arr.forEach(r => {
+      const vals = compareSlugs.map(s => r.prices[s]).filter(v => v != null);
+      r.min = vals.length ? Math.min(...vals) : null;
+      r.differs = vals.length < compareSlugs.length || new Set(vals).size > 1;
+    });
+    arr.sort((a, b) => (Number(b.differs) - Number(a.differs)) || a.name.localeCompare(b.name, "ru"));
+    return arr;
+  }, [compareMode, compareSlugs.join(","), vendorItemsBySlug, cmpQuery]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -438,10 +464,10 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
       {compareMode && (
         <div className="col" style={{ gap: 12 }}>
           <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <span className="eyebrow" style={{ marginRight: 2 }}>Выберите до 3 подрядчиков</span>
+            <span className="eyebrow" style={{ marginRight: 2 }}>Выберите до 10 подрядчиков</span>
             {vendorGroups.map(g => {
               const on = compareSlugs.includes(g.slug);
-              const disabled = !on && compareSlugs.length >= 3;
+              const disabled = !on && compareSlugs.length >= 10;
               return (
                 <button
                   key={g.slug || g.name}
@@ -462,49 +488,54 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
           </div>
 
           {compareSlugs.length === 0 ? (
-            <div className="kh-empty" style={{ padding: 20, textAlign: "center" }}>Отметьте подрядчиков выше — их прайсы откроются колонками рядом.</div>
+            <div className="kh-empty" style={{ padding: 20, textAlign: "center" }}>Отметьте подрядчиков выше — позиции выстроятся в таблицу для сравнения цен.</div>
           ) : (
             <>
               <input
-                placeholder="Фильтр по названию во всех колонках…"
+                placeholder="Фильтр по названию позиции…"
                 value={cmpQuery}
                 onChange={e => setCmpQuery(e.target.value)}
                 style={{ maxWidth: 360 }}
               />
-              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", overflowX: "auto", paddingBottom: 6 }}>
-                {compareSlugs.map(slug => {
-                  const v = vendorItemsBySlug.get(slug) || { name: "—", items: [] };
-                  const q = cmpQuery.trim().toLowerCase();
-                  const items = q ? v.items.filter(it => String(it.name).toLowerCase().includes(q)) : v.items;
-                  return (
-                    <div key={slug} style={{ flex: "1 1 0", minWidth: 280, maxWidth: 460, border: "1px solid var(--rule)", borderRadius: 10, background: "var(--paper-card)", overflow: "hidden" }}>
-                      <div className="row center between" style={{ padding: "10px 12px", borderBottom: "1px solid var(--rule)", background: "var(--paper-2)", gap: 8 }}>
-                        <span style={{ fontWeight: 600, color: "var(--rust)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</span>
-                        <span className="mono tiny muted" style={{ whiteSpace: "nowrap" }}>{items.length} поз.</span>
-                      </div>
-                      <div className="col" style={{ maxHeight: 520, overflowY: "auto" }}>
-                        {items.length === 0 ? (
-                          <div className="tiny muted" style={{ padding: 12 }}>Нет позиций</div>
-                        ) : items.map((it, ii) => (
-                          <div key={ii} className="row center between" style={{ gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--rule)" }}>
-                            <span className="col" style={{ gap: 1, minWidth: 0 }}>
-                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</span>
-                              {it.unit ? <span className="mono tiny muted">{it.unit}</span> : null}
-                            </span>
-                            <div className="row center gap-2" style={{ whiteSpace: "nowrap" }}>
-                              <span className="mono">{it.price != null ? fmtMoney(it.price) : "—"}</span>
-                              <button
-                                className="btn btn-icon" title="Добавить в смету" style={{ width: 26, height: 26 }}
-                                onClick={() => est.actions.addRow({ name: it.name, unit: it.unit, unitPrice: it.price || 0, qty: 1, notFound: !(it.price > 0), source: "local", category: classifyItem(it.name, it.unit) })}
-                              >+</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div style={{ overflow: "auto", maxHeight: 540, border: "1px solid var(--rule)", borderRadius: 10 }}>
+                <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "max-content", minWidth: "100%", fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ position: "sticky", left: 0, top: 0, zIndex: 3, background: "var(--paper-2)", textAlign: "left", padding: "9px 12px", minWidth: 240, borderBottom: "1px solid var(--rule)" }}>Позиция</th>
+                      {compareSlugs.map(slug => {
+                        const v = vendorItemsBySlug.get(slug) || {};
+                        return <th key={slug} title={v.name} style={{ position: "sticky", top: 0, zIndex: 2, background: "var(--paper-2)", padding: "9px 10px", minWidth: 96, maxWidth: 140, textAlign: "right", color: "var(--rust)", borderBottom: "1px solid var(--rule)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name || "—"}</th>;
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compareMatrix.length === 0 && (
+                      <tr><td colSpan={compareSlugs.length + 1} className="tiny muted" style={{ padding: 14 }}>Нет позиций.</td></tr>
+                    )}
+                    {compareMatrix.map((r, i) => (
+                      <tr key={i}>
+                        <td style={{ position: "sticky", left: 0, zIndex: 1, background: "var(--paper-card)", padding: "7px 12px", borderBottom: "1px solid var(--rule)", minWidth: 240, maxWidth: 360 }}>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                          {r.unit ? <div className="mono tiny muted">{r.unit}</div> : null}
+                        </td>
+                        {compareSlugs.map(slug => {
+                          const p = r.prices[slug];
+                          const cheapest = r.differs && p != null && p === r.min;
+                          return (
+                            <td key={slug} className="mono" style={{
+                              textAlign: "right", padding: "7px 10px", borderBottom: "1px solid var(--rule)", whiteSpace: "nowrap",
+                              background: r.differs ? "rgba(194,88,66,.06)" : "transparent",
+                              color: p == null ? "var(--ink-4)" : (cheapest ? "var(--moss, #4f6f52)" : "var(--ink)"),
+                              fontWeight: cheapest ? 700 : 400,
+                            }}>{p == null ? "—" : fmtMoney(p)}</td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+              <div className="tiny muted">Зелёным — самая низкая цена в строке · «—» = нет у подрядчика · красноватые ячейки — есть расхождение</div>
             </>
           )}
         </div>
