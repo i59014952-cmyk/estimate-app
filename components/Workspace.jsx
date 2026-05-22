@@ -283,7 +283,7 @@ function AdminPanel() {
   );
 }
 
-function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
+function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose, onOpenVendorDb, onOpenContractors }) {
   const caps = useCaps();
   const [counts, setCounts] = React.useState(khReadDynamicCounts);
   React.useEffect(() => {
@@ -362,6 +362,15 @@ function Sidebar({ active, onPick, meta, updateMeta, mobileOpen, onClose }) {
         <div className="eyebrow" style={{ padding: "16px 12px 8px", marginTop: 12, borderTop: "1px solid var(--rule)" }}>Справочники</div>
       )}
       {NAV2.filter(it => caps.sections.includes(it.id)).map(it => <Item key={it.id} it={it} />)}
+
+      {caps.sections.includes('contractors') && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--rule)" }}>
+          <ContractorsPanel
+            onOpenVendorDb={(slug) => { onOpenVendorDb && onOpenVendorDb(slug); onClose && onClose(); }}
+            onOpenContractors={() => { onOpenContractors && onOpenContractors(); onClose && onClose(); }}
+          />
+        </div>
+      )}
 
       <div className="frame" style={{
         marginTop: "auto", padding: "14px 14px 12px", border: "1px solid var(--rule)",
@@ -1174,7 +1183,7 @@ function ContractorsPanel({ onOpenVendorDb, onOpenContractors }) {
   );
 }
 
-function RightPanel({ est, onOpenVendorDb, onOpenContractors }) {
+function RightPanel({ est }) {
   return (
     <aside className="col" style={{
       width: 320, padding: "20px 22px 24px", gap: 24,
@@ -1186,7 +1195,6 @@ function RightPanel({ est, onOpenVendorDb, onOpenContractors }) {
         <BudgetCard est={est} />
       </div>
       <MarkupCard est={est} />
-      <ContractorsPanel onOpenVendorDb={onOpenVendorDb} onOpenContractors={onOpenContractors} />
       <PopularMaterials onAdd={est.actions.addRow} />
       <HistoryFeed />
     </aside>
@@ -1348,6 +1356,8 @@ function Workspace({ embedded = false, onTheme, theme }) {
           updateMeta={updateMeta}
           mobileOpen={navOpen}
           onClose={() => setNavOpen(false)}
+          onOpenVendorDb={openVendorDb}
+          onOpenContractors={openContractors}
         />
         <main className="col" style={{ flex: 1, minWidth: 0 }}>
           <HeroBlock est={est} meta={meta} updateMeta={updateMeta} onOpenDatabase={() => { setNavActive("database"); setKhModalTab("database"); setDbAutoAdd(true); }} />
@@ -1385,7 +1395,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
             />
           )}
         </main>
-        <RightPanel est={est} onOpenVendorDb={openVendorDb} onOpenContractors={openContractors} />
+        <RightPanel est={est} />
       </div>
       <StatusBar />
       <ScrollToTop />
