@@ -66,7 +66,7 @@ function Editable({ value, onChange, placeholder, style, className }) {
 }
 
 function useEditableMeta() {
-  const KEY = "kh-meta-v1";
+  const KEY = `kh-meta-v1::${window.KH_EST_ID || 'default'}`;
   const defaults = (typeof ESTIMATE !== "undefined") ? ESTIMATE : {};
   const [meta, setMeta] = React.useState(() => {
     try {

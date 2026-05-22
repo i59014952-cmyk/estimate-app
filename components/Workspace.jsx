@@ -124,6 +124,54 @@ function TopBar({ onTheme, theme, onMenu, onNew, savedAt }) {
   );
 }
 
+function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose }) {
+  return (
+    <div className="row center kh-esttabs" style={{
+      gap: 6, padding: "6px 16px", background: "var(--paper-2)",
+      borderBottom: "1px solid var(--rule)", overflowX: "auto", flexShrink: 0,
+    }}>
+      {index.map(e => {
+        const active = e.id === currentId;
+        return (
+          <div
+            key={e.id}
+            onClick={() => !active && onSwitch(e.id)}
+            className="row center gap-2"
+            style={{
+              cursor: active ? "default" : "pointer", flexShrink: 0,
+              padding: "6px 10px", borderRadius: 8,
+              border: "1px solid " + (active ? "var(--ink)" : "var(--rule)"),
+              background: active ? "var(--ink)" : "transparent",
+              color: active ? "var(--paper)" : "var(--ink-2)",
+              fontSize: 13, maxWidth: 200,
+            }}
+            title={e.name}
+          >
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</span>
+            {index.length > 1 && (
+              <span
+                onClick={(ev) => { ev.stopPropagation(); if (window.confirm(`Закрыть смету «${e.name}»? Её данные будут удалены.`)) onClose(e.id); }}
+                title="Закрыть смету"
+                style={{ display: "inline-flex", opacity: 0.7, padding: "0 2px", borderRadius: 4 }}
+              >×</span>
+            )}
+          </div>
+        );
+      })}
+      <button
+        onClick={onNew}
+        title="Новая смета"
+        className="row center"
+        style={{
+          flexShrink: 0, width: 30, height: 30, borderRadius: 8, cursor: "pointer",
+          border: "1px dashed var(--rule)", background: "transparent", color: "var(--ink-2)",
+          justifyContent: "center", fontSize: 18, lineHeight: 1,
+        }}
+      >+</button>
+    </div>
+  );
+}
+
 function khReadDynamicCounts() {
   const tryParse = (k) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
   const objects = tryParse('kh-objects-v1');
@@ -1274,7 +1322,7 @@ function StatusBar() {
   );
 }
 
-function Workspace({ embedded = false, onTheme, theme }) {
+function Workspace({ embedded = false, onTheme, theme, onNewEstimate, onRename }) {
   const [navActive, setNavActive] = useState("estimates");
   const [khModalTab, setKhModalTab] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
@@ -1287,7 +1335,11 @@ function Workspace({ embedded = false, onTheme, theme }) {
   };
   const openContractors = () => { setNavActive("contractors"); setKhModalTab("contractors"); setDbAutoAdd(false); };
   const est = useEstimate();
-  const [meta, updateMeta] = useEditableMeta();
+  const [meta, updateMetaRaw] = useEditableMeta();
+  const updateMeta = React.useCallback((key, value) => {
+    updateMetaRaw(key, value);
+    if (key === "title" && onRename) onRename(value);
+  }, [updateMetaRaw, onRename]);
   const fileInputRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -1339,13 +1391,7 @@ function Workspace({ embedded = false, onTheme, theme }) {
         theme={theme}
         savedAt={est.state.savedAt}
         onMenu={() => setNavOpen(true)}
-        onNew={() => {
-          if (est.state.estimate.length === 0 || window.confirm('Создать новую смету? Текущие позиции будут очищены.')) {
-            est.actions.resetEstimate();
-            setEstCatFilter('all');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-        }}
+        onNew={() => { if (onNewEstimate) onNewEstimate(); }}
       />
       <MobileNav
         active={navActive}
@@ -1541,4 +1587,4 @@ function PriceFetchOverlay({ visible, progress }) {
   return ReactDOM.createPortal(overlay, document.body);
 }
 
-Object.assign(window, { Workspace });
+Object.assign(window, { Workspace, EstimatesTabs });
