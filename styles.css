@@ -544,18 +544,16 @@ body{overscroll-behavior-y:none;overflow-x:hidden}
 @keyframes kh-aurora-a{ from{transform:translate3d(0,0,0) scale(1)} to{transform:translate3d(9vmax,7vmax,0) scale(1.12)} }
 @keyframes kh-aurora-b{ from{transform:translate3d(0,0,0) scale(1.08)} to{transform:translate3d(-8vmax,-6vmax,0) scale(1)} }
 
-/* Чертёжная сетка, медленно ползущая, с радиальным затуханием к краям */
+/* Чертёжная сетка, медленно ползущая, на весь экран */
 .kh-login__grid{
   position:absolute; inset:-2px; z-index:0; pointer-events:none; opacity:.4;
   background-image:
     linear-gradient(var(--rule) 1px, transparent 1px),
     linear-gradient(90deg, var(--rule) 1px, transparent 1px);
-  background-size:46px 46px;
-  -webkit-mask-image:radial-gradient(circle at 50% 45%, #000 0%, rgba(0,0,0,.35) 45%, transparent 72%);
-  mask-image:radial-gradient(circle at 50% 45%, #000 0%, rgba(0,0,0,.35) 45%, transparent 72%);
+  background-size:24px 24px;
   animation:kh-grid-pan 36s linear infinite;
 }
-@keyframes kh-grid-pan{ from{background-position:0 0} to{background-position:46px 46px} }
+@keyframes kh-grid-pan{ from{background-position:0 0} to{background-position:24px 24px} }
 
 /* Карточка формы поверх фона, плавно всплывает */
 .kh-login__card{
