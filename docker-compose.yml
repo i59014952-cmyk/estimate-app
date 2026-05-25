@@ -13,6 +13,10 @@ services:
       ALLOWED_ORIGINS: "*"
       LEMANA_HEADLESS: "0"
       LEMANA_TIMEOUT_S: "90"
+      # Прокси для Lemana (Qrator блокирует серверный IP). Задаётся в .env:
+      #   LEMANA_PROXY=http://HOST:PORT  (или http://USER:PASS@HOST:PORT)
+      # Пусто = парсить напрямую (на этом сервере будет блок Qrator).
+      LEMANA_PROXY: "${LEMANA_PROXY:-}"
       DEFAULT_CITY: "moscow"
       DATABASE_URL: "postgresql://kh:${POSTGRES_PASSWORD}@db:5432/kubhouse"
       KH_JWT_SECRET: ${KH_JWT_SECRET:?set KH_JWT_SECRET in .env}
