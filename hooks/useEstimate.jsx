@@ -706,7 +706,7 @@ function useEstimate() {
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
   }, [estimate, totals, markup]);
 
-  const exportDoc = React.useCallback(() => {
+  const exportDoc = React.useCallback((format = 'doc') => {
     if (estimate.length === 0) return;
 
     let meta = {};
@@ -865,13 +865,29 @@ function useEstimate() {
 
     const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '').trim();
     const fileTag = safe(code) || safe(title) || new Date().toISOString().slice(0, 10);
-    const blob = new Blob(['﻿', html], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Смета-${fileTag}.doc`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 8000);
+
+    const docData = {
+      title, code, construction, areaText, location, date, estimator,
+      validUntil: vu,
+      grand: totals.grand,
+      rows: estimate.map((r, i) => {
+        const cu = clientUnitPrice(r, markup);
+        return {
+          idx: i + 1,
+          name: r.name,
+          unit: r.unit || '',
+          qty: r.qty,
+          price: r.notFound ? null : cu,
+          total: r.notFound ? null : r.qty * cu,
+        };
+      }),
+    };
+
+    const X = window.KHDocExport;
+    if (!X) { alert('Модуль экспорта не загружен. Обновите страницу.'); return; }
+    if (format === 'pdf') X.printPdf(html, title);
+    else if (format === 'docx') X.downloadDocx(docData, `Смета-${fileTag}.docx`);
+    else X.downloadDoc(html, `Смета-${fileTag}.doc`);
   }, [estimate, totals, markup]);
 
   const addBlankRow = React.useCallback(() => {
