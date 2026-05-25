@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import shutil
+import subprocess
 import sys
 import time
 from typing import Optional, TypedDict
@@ -26,6 +29,33 @@ from selenium.webdriver.support.ui import WebDriverWait
 uc.Chrome.__del__ = lambda self: None  # WinError 6 из двойного quit в __del__ библиотеки
 
 logger = logging.getLogger(__name__)
+
+
+def _detect_chrome_major() -> Optional[int]:
+    """Мажорная версия установленного Chrome, чтобы uc скачал совместимый драйвер.
+
+    Без этого uc берёт драйвер под последний Chrome, и при более старом
+    google-chrome-stable в образе сессия падает с "only supports Chrome NNN".
+    Возвращает None, если определить не удалось — тогда решает сам uc.
+    """
+    candidates = [
+        "google-chrome-stable", "google-chrome", "chromium-browser", "chromium",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]
+    for name in candidates:
+        path = name if "/" in name else shutil.which(name)
+        if not path:
+            continue
+        try:
+            out = subprocess.run(
+                [path, "--version"], capture_output=True, text=True, timeout=10,
+            )
+        except Exception:
+            continue
+        m = re.search(r"(\d+)\.\d+\.\d+", f"{out.stdout}\n{out.stderr}")
+        if m:
+            return int(m.group(1))
+    return None
 
 
 CITY_TO_REGION = {
@@ -94,8 +124,16 @@ class LemanaSession:
         kwargs: dict = {"options": opts}
         if _is_mac:
             kwargs["use_subprocess"] = True   # фикс 'target window already closed' на macOS
-        if self.chrome_version is not None:
-            kwargs["version_main"] = self.chrome_version
+        # uc по умолчанию качает драйвер под ПОСЛЕДНИЙ Chrome, а в образе может
+        # стоять более старый google-chrome-stable → "only supports Chrome NNN".
+        # Привязываем драйвер к фактически установленной версии: явное значение
+        # из env имеет приоритет, иначе определяем автоматически.
+        version_main = self.chrome_version
+        if version_main is None:
+            version_main = _detect_chrome_major()
+        if version_main is not None:
+            kwargs["version_main"] = version_main
+            logger.info("uc.Chrome version_main=%s", version_main)
         self._driver = uc.Chrome(**kwargs)
         if self.headless and _is_mac:
             try:
