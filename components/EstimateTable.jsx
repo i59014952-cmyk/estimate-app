@@ -138,9 +138,15 @@ function EstimateRow({ row, index, markup, onUpdateQty, onUpdateRow, onRemove, o
               : <span>{row.unitPrice > 0 ? formatMoney(row.unitPrice) : "—"}</span>}
             {caps.edit && row.notFound && (
               <div>
-                <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
-                  {row.expanded ? "Скрыть" : "Подобрать"}
-                </button>
+                {row.lemanaPending ? (
+                  <span className="kh-lemana-loading" title="Идёт поиск в Лемана ПРО">
+                    <span className="kh-spinner" /> Лемана…
+                  </span>
+                ) : (
+                  <button onClick={() => onTogglePicker(row.id)} className="btn btn-sm" style={{ padding: "2px 6px", fontSize: 10, marginTop: 2 }}>
+                    {row.expanded ? "Скрыть" : "Подобрать"}
+                  </button>
+                )}
               </div>
             )}
             {caps.edit && !row.notFound && hasAlternatives && (
