@@ -585,6 +585,10 @@ function useEstimate() {
       .filter(r => r.notFound)
       .map(r => ({ id: r.id, name: r.name }));
     if (initialTargets.length === 0) return;
+    // Сразу показываем индикатор занятости — иначе на большом КП кнопка
+    // «висит», пока отправляется фоновая задача (submitLemanaBatch ниже).
+    bumpBusy(+1);
+    setPricesBusy(true);
     // Фоновая пакетная загрузка Лемана ПРО: парсинг тяжёлый (по ~минуте на
     // позицию через прокси за Qrator), поэтому отправляем все позиции одной
     // фоновой задачей — она наполнит кэш, а searchLemana подтянет из кэша.
@@ -595,8 +599,6 @@ function useEstimate() {
       const targetIds = new Set(initialTargets.map(t => t.id));
       setEstimate(prev => prev.map(r => (targetIds.has(r.id) && r.notFound) ? { ...r, lemanaPending: true } : r));
     }
-    bumpBusy(+1);
-    setPricesBusy(true);
     let totalFilled = 0, totalFailed = 0;
 
     // Один проход воркеров. progressBase позволяет ретраю продолжать счётчик
