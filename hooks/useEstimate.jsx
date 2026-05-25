@@ -255,6 +255,8 @@ function useEstimate() {
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState({ kind: "idle", text: "" });
   const [pricesBusy, setPricesBusy] = React.useState(false);
+  // Фоновый режим обновления цен (большой КП): без блокирующего оверлея.
+  const [pricesBgBusy, setPricesBgBusy] = React.useState(false);
   const [pricesProgress, setPricesProgress] = React.useState({ done: 0, total: 0, filled: 0, failed: 0 });
   // Счётчик активных «жизненных циклов» фетча. Инкрементим в самом начале
   // (синхронно, до любого await), декрементим в самом конце (тоже синхронно,
@@ -585,10 +587,16 @@ function useEstimate() {
       .filter(r => r.notFound)
       .map(r => ({ id: r.id, name: r.name }));
     if (initialTargets.length === 0) return;
-    // Сразу показываем индикатор занятости — иначе на большом КП кнопка
-    // «висит», пока отправляется фоновая задача (submitLemanaBatch ниже).
-    bumpBusy(+1);
-    setPricesBusy(true);
+    // Большой КП (>10 неизвестных) ищем В ФОНЕ: без блокирующего оверлея,
+    // чтобы можно было работать параллельно. Прогресс виден построчными
+    // спиннерами. Маленький КП — как раньше, с оверлеем.
+    const background = initialTargets.length > 10;
+    if (background) {
+      setPricesBgBusy(true);
+    } else {
+      bumpBusy(+1);
+      setPricesBusy(true);
+    }
     // Фоновая пакетная загрузка Лемана ПРО: парсинг тяжёлый (по ~минуте на
     // позицию через прокси за Qrator), поэтому отправляем все позиции одной
     // фоновой задачей — она наполнит кэш, а searchLemana подтянет из кэша.
@@ -730,8 +738,12 @@ function useEstimate() {
     } catch (err) {
       setStatus({ kind: "error", text: `Сервис цен недоступен: ${err.message}` });
     } finally {
-      setPricesBusy(false);
-      bumpBusy(-1);
+      if (background) {
+        setPricesBgBusy(false);
+      } else {
+        setPricesBusy(false);
+        bumpBusy(-1);
+      }
       // Фоновый опрос Lemana — не блокируем (индикаторы снимутся по мере готовности).
       pollLemanaJobs(lemanaJobs).catch(err => console.error('[lemana poll]', err));
       if (totalFailed > 0) {
@@ -1129,7 +1141,7 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, savedAt, query, status, pricesBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, savedAt, query, status, pricesBusy, pricesBgBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
