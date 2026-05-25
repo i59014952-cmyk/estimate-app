@@ -122,6 +122,13 @@ class LemanaSession:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         opts.add_argument("--window-size=1280,900")
+        # Экономия памяти (сервер 4 ГБ): один renderer, лимит JS-кучи, без кэша
+        # на диск и фоновых процессов — чтобы Chrome не раздувался и не вызывал OOM.
+        opts.add_argument("--renderer-process-limit=1")
+        opts.add_argument("--js-flags=--max-old-space-size=256")
+        opts.add_argument("--disk-cache-size=1")
+        opts.add_argument("--disable-application-cache")
+        opts.add_argument("--disable-background-networking")
         # На macOS режим --headless=new у uc 3.5.5 + свежего Chrome падает
         # ("target window already closed"). Поэтому локально (darwin) не уходим
         # в настоящий headless, а уводим окно за пределы экрана — пользователь
