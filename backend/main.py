@@ -171,6 +171,15 @@ async def lifespan(app: FastAPI):
     state["browser"] = browser
 
     lemana_worker = LemanaWorker(JobStore())
+
+    def _cache_lemana_job_result(q: str, products: list) -> None:
+        # Результаты фоновой пакетной задачи кладём в тот же кэш, что читает
+        # /lemana/search (ключ с limit=5), чтобы цены отдавались мгновенно.
+        items = [it for p in (products or [])
+                 if (it := _lemana_product_to_item(p)) is not None and it.price]
+        _cache_set(_cache_key("lemana", q, 5), items)
+
+    lemana_worker.on_query_result = _cache_lemana_job_result
     await lemana_worker.start()
     app.state.lemana_worker = lemana_worker
 
@@ -562,12 +571,17 @@ async def kolorit_search(
 async def lemana_search(
     query: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(6, ge=1, le=30),
+    cache_only: bool = Query(False),
 ):
     limit = min(limit, 5)  # Lemana: не более 5 вариантов на позицию
     key = _cache_key("lemana", query, limit)
     cached = _cache_get(key)
     if cached:
         return SearchResponse(query=query, city="lemana", strategy_used="cache", cached=True, results=cached)
+    if cache_only:
+        # Массовое обновление: парсинг идёт фоновой пачкой (/lemana/jobs) и
+        # наполняет кэш; инлайн не блокируем — отдаём пусто до готовности.
+        return SearchResponse(query=query, city="lemana", strategy_used="cache-miss", cached=False, results=[])
     worker = getattr(app.state, "lemana_worker", None)
     if worker is None:
         raise HTTPException(503, "lemana worker not initialised")

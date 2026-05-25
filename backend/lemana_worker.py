@@ -105,6 +105,9 @@ class LemanaWorker:
         self._session_city: Optional[str] = None
         self._task: Optional[asyncio.Task] = None
         self._gc_task: Optional[asyncio.Task] = None
+        # Колбэк (query, products) после каждого успешного запроса в job —
+        # main.py кладёт результат в общий кэш /lemana/search.
+        self.on_query_result = None
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -212,6 +215,11 @@ class LemanaWorker:
             await self.store.update(job_id, current_query=q)
             result = await self._run_query_with_retry(q, job.limit_per_query)
             results.append(result)
+            if result.get("ok") and self.on_query_result:
+                try:
+                    self.on_query_result(q, result.get("products") or [])
+                except Exception:
+                    logger.exception("on_query_result failed for '%s'", q)
             await self.store.update(
                 job_id, done_count=len(results), results=results,
             )
@@ -236,13 +244,15 @@ class LemanaWorker:
                 if attempt == 2:
                     return {"query": query, "ok": False, "error": "timeout",
                             "products": []}
-            except WebDriverException as e:
-                logger.warning("query '%s' WebDriverException (attempt %d)",
-                               query, attempt, exc_info=True)
+            except (WebDriverException, RuntimeError) as e:
+                # RuntimeError = 'search trigger not found' (битая страница/сессия):
+                # тоже перезапускаем сессию, иначе один сбой валит всю пачку.
+                logger.warning("query '%s' %s (attempt %d)",
+                               query, type(e).__name__, attempt, exc_info=True)
                 await asyncio.to_thread(self._restart_session_sync)
                 if attempt == 2:
                     return {"query": query, "ok": False,
-                            "error": f"webdriver: {e}"[:200], "products": []}
+                            "error": f"{type(e).__name__}: {e}"[:200], "products": []}
             except Exception as e:
                 logger.exception("query '%s' failed", query)
                 return {"query": query, "ok": False, "error": str(e)[:200],

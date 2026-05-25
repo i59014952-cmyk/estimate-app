@@ -13,6 +13,9 @@ services:
       ALLOWED_ORIGINS: "*"
       LEMANA_HEADLESS: "0"
       LEMANA_TIMEOUT_S: "90"
+      # Фоновая пакетная задача (/lemana/jobs) парсит весь КП — даём ей много
+      # времени: до ~50 позиций по ~90с = больше часа.
+      LEMANA_JOB_TIMEOUT: "5400"
       # Прокси для Lemana (Qrator блокирует серверный IP). Задаётся в .env.
       # Вариант 1 — прокси без авторизации (whitelist по IP) или HTTP с логином:
       #   LEMANA_PROXY=http://HOST:PORT  (или http://USER:PASS@HOST:PORT)
