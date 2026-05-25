@@ -83,7 +83,7 @@ class LemanaSession:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         opts.add_argument("--window-size=1280,900")
-        kwargs: dict = {"options": opts}
+        kwargs: dict = {"options": opts, "use_subprocess": True}
         if self.chrome_version is not None:
             kwargs["version_main"] = self.chrome_version
         self._driver = uc.Chrome(**kwargs)

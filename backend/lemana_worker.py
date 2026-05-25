@@ -259,7 +259,9 @@ class LemanaWorker:
             return
         self._close_session_sync()
         headless = os.getenv("LEMANA_HEADLESS", "1") != "0"
-        sess = LemanaSession(city=city, headless=headless)
+        _cv = os.getenv("LEMANA_CHROME_VERSION")
+        chrome_version = int(_cv) if _cv else None
+        sess = LemanaSession(city=city, headless=headless, chrome_version=chrome_version)
         sess.__enter__()
         self._session = sess
         self._session_city = city

@@ -178,7 +178,7 @@ async def get_result(job_id: str, request: Request) -> LemanaJobResult:
 
 
 @router.delete("/jobs/{job_id}", status_code=204)
-async def cancel_job(job_id: str, request: Request) -> None:
+async def cancel_job(job_id: str, request: Request):
     """Best-effort отмена. Воркер проверяет флаг между queries."""
     worker = request.app.state.lemana_worker
     job = await worker.store.get(job_id)
