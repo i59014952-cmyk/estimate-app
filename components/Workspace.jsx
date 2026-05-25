@@ -156,14 +156,21 @@ function TopBar({ onTheme, theme, onMenu, onNew, savedAt }) {
 function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }) {
   const count = index ? index.length : 0;
   const compareBtnRef = React.useRef(null);
+  const prevCount = React.useRef(count);
   const [hint, setHint] = React.useState(false);
   const [hintPos, setHintPos] = React.useState(null);
 
   React.useEffect(() => {
-    if (count < 2) return;
-    try { if (localStorage.getItem("kh-compare-hint-seen")) return; } catch (_) {}
-    setHint(true);
+    const prev = prevCount.current;
+    prevCount.current = count;
+    if (prev < 2 && count >= 2) setHint(true); // открыли вторую смету
   }, [count]);
+
+  React.useEffect(() => {
+    if (!hint) return;
+    const t = setTimeout(() => setHint(false), 12000);
+    return () => clearTimeout(t);
+  }, [hint]);
 
   React.useLayoutEffect(() => {
     if (!hint) return;
@@ -182,10 +189,7 @@ function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }
     };
   }, [hint]);
 
-  const dismissHint = () => {
-    try { localStorage.setItem("kh-compare-hint-seen", "1"); } catch (_) {}
-    setHint(false);
-  };
+  const dismissHint = () => setHint(false);
 
   if (!index || index.length <= 1) return null; // одну смету не показываем
   return (
