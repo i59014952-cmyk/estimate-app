@@ -512,3 +512,92 @@ body{overscroll-behavior-y:none;overflow-x:hidden}
   .kh-statusbar{font-size:9px !important}
   .kh-hero, .kh-card, .kh-card__title, .kh-card__meta{overflow-wrap:anywhere;word-break:break-word}
 }
+
+/* === Экран входа: фоновая анимация + появление карточки === */
+.kh-login{
+  position:relative;
+  min-height:100vh; min-height:100dvh;
+  display:flex; align-items:center; justify-content:center;
+  padding:24px; overflow:hidden;
+}
+/* Два мягких цветных свечения, медленно дрейфующих по экрану */
+.kh-login__bg{ position:absolute; inset:0; z-index:0; pointer-events:none; }
+.kh-login__bg::before,
+.kh-login__bg::after{
+  content:""; position:absolute; border-radius:50%; filter:blur(70px);
+}
+.kh-login__bg::before{
+  width:62vmax; height:62vmax; left:-14vmax; top:-18vmax;
+  background:radial-gradient(circle, rgba(92,58,30,.20), transparent 68%);
+  animation:kh-aurora-a 19s ease-in-out infinite alternate;
+}
+.kh-login__bg::after{
+  width:56vmax; height:56vmax; right:-16vmax; bottom:-20vmax;
+  background:radial-gradient(circle, rgba(110,123,79,.18), transparent 68%);
+  animation:kh-aurora-b 24s ease-in-out infinite alternate;
+}
+[data-theme="dark"] .kh-login__bg::before{background:radial-gradient(circle, rgba(200,147,104,.16), transparent 68%)}
+[data-theme="dark"] .kh-login__bg::after{background:radial-gradient(circle, rgba(156,174,123,.14), transparent 68%)}
+@keyframes kh-aurora-a{ from{transform:translate3d(0,0,0) scale(1)} to{transform:translate3d(9vmax,7vmax,0) scale(1.12)} }
+@keyframes kh-aurora-b{ from{transform:translate3d(0,0,0) scale(1.08)} to{transform:translate3d(-8vmax,-6vmax,0) scale(1)} }
+
+/* Чертёжная сетка, медленно ползущая, с радиальным затуханием к краям */
+.kh-login__grid{
+  position:absolute; inset:-2px; z-index:0; pointer-events:none; opacity:.4;
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(circle at 50% 45%, #000 0%, rgba(0,0,0,.35) 45%, transparent 72%);
+  mask-image:radial-gradient(circle at 50% 45%, #000 0%, rgba(0,0,0,.35) 45%, transparent 72%);
+  animation:kh-grid-pan 36s linear infinite;
+}
+@keyframes kh-grid-pan{ from{background-position:0 0} to{background-position:46px 46px} }
+
+/* Карточка формы поверх фона, плавно всплывает */
+.kh-login__card{
+  position:relative; z-index:1;
+  animation:kh-login-rise .7s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes kh-login-rise{
+  from{opacity:0; transform:translateY(14px)}
+  to{opacity:1; transform:translateY(0)}
+}
+/* Поля и кнопка появляются со ступенчатой задержкой */
+.kh-login__in{ animation:kh-login-rise .6s cubic-bezier(.2,.7,.3,1) both; }
+.kh-login__card input.kh-login__in:nth-of-type(1){animation-delay:.45s}
+.kh-login__card input.kh-login__in:nth-of-type(2){animation-delay:.55s}
+.kh-login__card button.kh-login__in{animation-delay:.65s}
+.kh-login__in:focus{
+  border-color:var(--coffee) !important;
+  box-shadow:0 0 0 3px rgba(92,58,30,.14);
+}
+
+/* Логотип: «прорисовка» крыши, всплытие трубы и подписи */
+.kh-logo--draw .kh-logo-roof{
+  stroke-dasharray:130; stroke-dashoffset:130;
+  animation:kh-logo-draw 1.3s .25s cubic-bezier(.6,.05,.3,1) forwards;
+}
+.kh-logo--draw .kh-logo-chimney{
+  opacity:0; transform-box:fill-box; transform-origin:50% 100%;
+  animation:kh-logo-chimney .5s 1.15s cubic-bezier(.2,.8,.3,1.4) forwards;
+}
+.kh-logo--draw .kh-logo-word{
+  opacity:0; animation:kh-login-rise .6s 1.0s cubic-bezier(.2,.7,.3,1) forwards;
+}
+@keyframes kh-logo-draw{ to{stroke-dashoffset:0} }
+@keyframes kh-logo-chimney{ from{opacity:0; transform:scaleY(0)} to{opacity:1; transform:scaleY(1)} }
+
+@media (prefers-reduced-motion: reduce){
+  .kh-login__bg::before,
+  .kh-login__bg::after,
+  .kh-login__grid,
+  .kh-login__card,
+  .kh-login__in,
+  .kh-logo--draw .kh-logo-roof,
+  .kh-logo--draw .kh-logo-chimney,
+  .kh-logo--draw .kh-logo-word{ animation:none }
+  .kh-logo--draw .kh-logo-roof{ stroke-dashoffset:0 }
+  .kh-logo--draw .kh-logo-chimney,
+  .kh-logo--draw .kh-logo-word{ opacity:1 }
+}
