@@ -493,14 +493,16 @@ function useEstimate() {
       }
       const q = isFinite(qty) && qty > 0 ? qty : 1;
       const match = fuzzyFind(name, [...visibleUserCatalog, ...visibleCatalog], visibleDdcCatalog);
-      const itemName = match ? match.name : name;
-      const itemUnit = match ? (match.unit || rowUnit || '') : (rowUnit || '');
-      const category = classifyCategory(itemName, itemUnit, currentSection);
+      // Название всегда берём из КП. Каталог нужен только чтобы подставить цену:
+      // слабое совпадение по паре общих слов («скрытой установки») раньше подменяло
+      // название позиции на чужое из каталога.
+      const itemUnit = rowUnit || (match && match.unit) || '';
+      const category = classifyCategory(name, itemUnit, currentSection);
       if (category === 'work') works++; else materials++;
       if (match) {
-        additions.push({ name: match.name, unit: match.unit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source, category });
+        additions.push({ name, unit: itemUnit, unitPrice: match.unitPrice, qty: q, notFound: false, source: match.source, category });
       } else {
-        additions.push({ name, unit: '', unitPrice: 0, qty: q, notFound: true, source: 'none', category });
+        additions.push({ name, unit: itemUnit, unitPrice: 0, qty: q, notFound: true, source: 'none', category });
         notFoundCount++;
       }
       imported++;
