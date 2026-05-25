@@ -1261,6 +1261,7 @@ function ColumnsHeader() {
       {caps.cost && <div className="mono tiny" style={{ width: 60, textAlign: "right", letterSpacing: ".08em" }}>НАЦ. %</div>}
       <div className="mono tiny" style={{ width: 130, textAlign: "right", letterSpacing: ".08em" }}>КЛИЕНТУ, ₽</div>
       <div className="mono tiny" style={{ width: 110, textAlign: "right", letterSpacing: ".08em" }}>ИСТОЧНИК</div>
+      {caps.edit && <div style={{ width: 28, marginLeft: 8, flexShrink: 0 }} aria-hidden="true" />}
     </div>
   );
 }
