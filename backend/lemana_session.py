@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import time
 from typing import Optional, TypedDict
 
@@ -77,16 +78,30 @@ class LemanaSession:
     def _start_driver(self) -> None:
         opts = uc.ChromeOptions()
         opts.page_load_strategy = "eager"
-        if self.headless:
-            opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         opts.add_argument("--window-size=1280,900")
+        # На macOS режим --headless=new у uc 3.5.5 + свежего Chrome падает
+        # ("target window already closed"). Поэтому локально (darwin) не уходим
+        # в настоящий headless, а уводим окно за пределы экрана — пользователь
+        # его не видит. На сервере (Linux, без дисплея) нужен реальный headless.
+        _is_mac = sys.platform == "darwin"
+        if self.headless and not _is_mac:
+            opts.add_argument("--headless=new")
+        if self.headless and _is_mac:
+            opts.add_argument("--window-position=-32000,-32000")
         kwargs: dict = {"options": opts}
+        if _is_mac:
+            kwargs["use_subprocess"] = True   # фикс 'target window already closed' на macOS
         if self.chrome_version is not None:
             kwargs["version_main"] = self.chrome_version
         self._driver = uc.Chrome(**kwargs)
+        if self.headless and _is_mac:
+            try:
+                self._driver.set_window_position(-32000, -32000)
+            except Exception:
+                pass
         self._driver.set_window_size(1280, 900)
         self._driver.set_page_load_timeout(self.PAGE_TIMEOUT)
         logger.info("uc.Chrome started (headless=%s, city=%s)", self.headless, self.city)
