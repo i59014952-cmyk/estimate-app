@@ -585,6 +585,11 @@ function useEstimate() {
       .filter(r => r.notFound)
       .map(r => ({ id: r.id, name: r.name }));
     if (initialTargets.length === 0) return;
+    // Фоновая пакетная загрузка Лемана ПРО: парсинг тяжёлый (по ~минуте на
+    // позицию через прокси за Qrator), поэтому отправляем все позиции одной
+    // фоновой задачей — она наполнит кэш, а searchLemana подтянет из кэша
+    // (частично уже в этом проходе, остальное — на повторном «обновить цены»).
+    try { submitLemanaBatch(initialTargets.map(t => t.name)); } catch (_) {}
     bumpBusy(+1);
     setPricesBusy(true);
     let totalFilled = 0, totalFailed = 0;
