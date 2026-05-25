@@ -242,9 +242,9 @@ function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }
         className="row center gap-2"
         style={{
           flexShrink: 0, marginLeft: "auto", padding: "7px 16px", borderRadius: 8, cursor: "pointer",
-          border: "1px solid var(--moss, #4f6f52)", background: "var(--moss, #4f6f52)", color: "#fff",
+          border: "1px solid transparent", background: "var(--coffee)", color: "#FBF5E7",
           fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
-          boxShadow: hint ? "0 0 0 4px rgba(79,111,82,.25)" : "0 1px 3px rgba(79,111,82,.35)",
+          boxShadow: hint ? "0 0 0 4px rgba(92,58,30,.30)" : "0 8px 22px -8px rgba(92,58,30,.55)",
         }}
       >⇆ Сравнить сметы</button>
       {hint && hintPos && (
