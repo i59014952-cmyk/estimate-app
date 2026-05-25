@@ -1106,14 +1106,62 @@ function PositionsHeader({ est, onAddRow }) {
             <Icon name="users" size={13} /> Для клиента
           </button>
         )}
-        <button
-          className="btn btn-sm"
-          onClick={est.actions.exportDoc}
-          disabled={rowCount === 0}
-        >
-          <Icon name="export" size={13} /> Экспорт
-        </button>
+        <ExportMenu est={est} disabled={rowCount === 0} />
       </div>
+    </div>
+  );
+}
+
+function ExportMenu({ est, disabled }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const pick = (fmt) => { setOpen(false); est.actions.exportDoc(fmt); };
+  const items = [
+    { fmt: "pdf", label: "PDF", hint: "печать / отправка" },
+    { fmt: "docx", label: "DOCX", hint: "Word (.docx)" },
+    { fmt: "doc", label: "DOC", hint: "Word (.doc)" },
+  ];
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        className="btn btn-sm"
+        onClick={() => setOpen(v => !v)}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Выгрузить смету"
+      >
+        <Icon name="export" size={13} /> Экспорт <Icon name="chevd" size={12} />
+      </button>
+      {open && (
+        <div role="menu" style={{
+          position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 210,
+          background: "var(--paper)", border: "1px solid var(--rule)", borderRadius: 12,
+          boxShadow: "0 12px 32px rgba(0,0,0,.14)", padding: 6, zIndex: 50,
+        }}>
+          <div className="eyebrow" style={{ padding: "6px 10px 8px" }}>Формат файла</div>
+          {items.map(it => (
+            <button
+              key={it.fmt}
+              role="menuitem"
+              className="kh-menu-item row center"
+              onClick={() => pick(it.fmt)}
+              style={{ width: "100%", textAlign: "left", padding: "8px 10px", border: "none", background: "transparent", borderRadius: 8, cursor: "pointer", color: "var(--ink)", font: "inherit", gap: 8 }}
+            >
+              <span style={{ fontWeight: 600 }}>{it.label}</span>
+              <span className="tiny muted" style={{ marginLeft: "auto" }}>{it.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

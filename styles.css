@@ -183,6 +183,11 @@ button:disabled,
   cursor:pointer !important;
 }
 
+/* Пункты всплывающих меню (экспорт и т.п.) */
+.kh-menu-item{transition:background .12s ease}
+.kh-menu-item:hover{background:rgba(110,123,79,.14)}
+[data-theme="dark"] .kh-menu-item:hover{background:rgba(156,174,123,.16)}
+
 /* Inline editable fields */
 .kh-editable{transition:background .15s ease, box-shadow .15s ease}
 .kh-editable:hover:not(.kh-editable--editing){background:rgba(110,123,79,.10);box-shadow:0 0 0 1px rgba(110,123,79,.25)}
