@@ -607,3 +607,15 @@ body{overscroll-behavior-y:none;overflow-x:hidden}
   .kh-logo--draw .kh-logo-chimney,
   .kh-logo--draw .kh-logo-word{ opacity:1 }
 }
+
+/* Индикатор фонового поиска в Лемана ПРО (фоновая пакетная загрузка). */
+@keyframes kh-spin { to { transform: rotate(360deg); } }
+.kh-spinner{
+  display:inline-block; width:10px; height:10px; vertical-align:-1px;
+  border:2px solid var(--rule, #ccc); border-top-color: var(--accent, #5b5bf1);
+  border-radius:50%; animation:kh-spin .7s linear infinite;
+}
+.kh-lemana-loading{
+  display:inline-flex; align-items:center; gap:4px; margin-top:2px;
+  font-size:10px; color: var(--accent, #5b5bf1); white-space:nowrap;
+}

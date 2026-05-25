@@ -587,9 +587,14 @@ function useEstimate() {
     if (initialTargets.length === 0) return;
     // Фоновая пакетная загрузка Лемана ПРО: парсинг тяжёлый (по ~минуте на
     // позицию через прокси за Qrator), поэтому отправляем все позиции одной
-    // фоновой задачей — она наполнит кэш, а searchLemana подтянет из кэша
-    // (частично уже в этом проходе, остальное — на повторном «обновить цены»).
-    try { submitLemanaBatch(initialTargets.map(t => t.name)); } catch (_) {}
+    // фоновой задачей — она наполнит кэш, а searchLemana подтянет из кэша.
+    // Помечаем строки lemanaPending (индикатор загрузки) и опрашиваем задачу.
+    let lemanaJobs = [];
+    try { lemanaJobs = (await submitLemanaBatch(initialTargets.map(t => t.name))) || []; } catch (_) {}
+    if (lemanaJobs.length) {
+      const targetIds = new Set(initialTargets.map(t => t.id));
+      setEstimate(prev => prev.map(r => (targetIds.has(r.id) && r.notFound) ? { ...r, lemanaPending: true } : r));
+    }
     bumpBusy(+1);
     setPricesBusy(true);
     let totalFilled = 0, totalFailed = 0;
@@ -654,6 +659,46 @@ function useEstimate() {
       return { filled, failed };
     };
 
+    // Фоновый опрос Lemana-задачи: по мере готовности позиций тянем их из кэша
+    // и подставляем цену, снимая индикатор загрузки. В конце снимаем индикатор
+    // со всех оставшихся. Работает поверх инлайн-проходов, не блокируя UI.
+    const pollLemanaJobs = async (jobs) => {
+      if (!jobs || !jobs.length) return;
+      const applied = new Set();
+      const deadline = Date.now() + 90 * 60 * 1000;   // максимум 90 минут
+      while (Date.now() < deadline) {
+        let allDone = true;
+        for (const job of jobs) {
+          const st = await getLemanaJobStatus(job.jobId);
+          if (!st) { allDone = false; continue; }
+          const readyNames = (job.names || []).slice(0, st.done_count || 0);
+          for (const nm of readyNames) {
+            if (applied.has(nm)) continue;
+            applied.add(nm);
+            let cands = [];
+            try { cands = (await searchLemana(nm)).filter(c => c.price && isRelevantCandidate(nm, c)); } catch (_) {}
+            setEstimate(prev => prev.map(r => {
+              if (r.name !== nm || !r.lemanaPending) return r;
+              if (r.notFound && cands.length) {
+                const c = cands[0];
+                return {
+                  ...r, lemanaPending: false, candidates: cands,
+                  name: c.name || r.name, unitPrice: c.price, unit: c.unit || r.unit || 'шт.',
+                  source: 'lemana', sourceLabel: c.sourceLabel || 'Лемана ПРО',
+                  url: c.url || '', notFound: false, expanded: false,
+                };
+              }
+              return { ...r, lemanaPending: false };
+            }));
+          }
+          if (!['done', 'failed', 'cancelled'].includes(st.status)) allDone = false;
+        }
+        if (allDone) break;
+        await new Promise(res => setTimeout(res, 5000));
+      }
+      setEstimate(prev => prev.map(r => r.lemanaPending ? { ...r, lemanaPending: false } : r));
+    };
+
     try {
       // Первый проход.
       const pass1 = await runPass(initialTargets, 0, initialTargets.length);
@@ -685,6 +730,8 @@ function useEstimate() {
     } finally {
       setPricesBusy(false);
       bumpBusy(-1);
+      // Фоновый опрос Lemana — не блокируем (индикаторы снимутся по мере готовности).
+      pollLemanaJobs(lemanaJobs).catch(err => console.error('[lemana poll]', err));
       if (totalFailed > 0) {
         setStatus({
           kind: totalFailed === initialTargets.length ? "error" : "done",
