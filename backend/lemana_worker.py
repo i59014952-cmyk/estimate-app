@@ -237,8 +237,8 @@ class LemanaWorker:
                     return {"query": query, "ok": False, "error": "timeout",
                             "products": []}
             except WebDriverException as e:
-                logger.warning("query '%s' WebDriverException (attempt %d): %s",
-                               query, attempt, e)
+                logger.warning("query '%s' WebDriverException (attempt %d)",
+                               query, attempt, exc_info=True)
                 await asyncio.to_thread(self._restart_session_sync)
                 if attempt == 2:
                     return {"query": query, "ok": False,
