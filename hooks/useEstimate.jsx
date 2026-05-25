@@ -257,6 +257,11 @@ function useEstimate() {
   const [pricesBusy, setPricesBusy] = React.useState(false);
   // Фоновый режим обновления цен (большой КП): без блокирующего оверлея.
   const [pricesBgBusy, setPricesBgBusy] = React.useState(false);
+  // Активен фоновый опрос Lemana-задачи: пока true — повторный запуск
+  // «обновить цены» заблокирован, чтобы не плодить параллельные задачи/нагрузку.
+  const [lemanaBgActive, setLemanaBgActive] = React.useState(false);
+  const lemanaBgActiveRef = React.useRef(false);
+  const setLemanaBg = (v) => { lemanaBgActiveRef.current = v; setLemanaBgActive(v); };
   const [pricesProgress, setPricesProgress] = React.useState({ done: 0, total: 0, filled: 0, failed: 0 });
   // Счётчик активных «жизненных циклов» фетча. Инкрементим в самом начале
   // (синхронно, до любого await), декрементим в самом конце (тоже синхронно,
@@ -583,6 +588,8 @@ function useEstimate() {
   }, [importRows]);
 
   const fetchPricesForNotFound = React.useCallback(async () => {
+    // Уже идёт фоновая Lemana-задача — не запускаем вторую (защита от перегрузки).
+    if (lemanaBgActiveRef.current) return;
     const initialTargets = estimateRef.current
       .filter(r => r.notFound)
       .map(r => ({ id: r.id, name: r.name }));
@@ -745,7 +752,12 @@ function useEstimate() {
         bumpBusy(-1);
       }
       // Фоновый опрос Lemana — не блокируем (индикаторы снимутся по мере готовности).
-      pollLemanaJobs(lemanaJobs).catch(err => console.error('[lemana poll]', err));
+      if (lemanaJobs.length) {
+        setLemanaBg(true);
+        pollLemanaJobs(lemanaJobs)
+          .catch(err => console.error('[lemana poll]', err))
+          .finally(() => setLemanaBg(false));
+      }
       if (totalFailed > 0) {
         setStatus({
           kind: totalFailed === initialTargets.length ? "error" : "done",
@@ -1141,7 +1153,7 @@ function useEstimate() {
   }, []);
 
   return {
-    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, savedAt, query, status, pricesBusy, pricesBgBusy, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
+    state: { catalog, ddcCatalog, userCatalog, vendorCatalog, hiddenCatalog, catOverride, markup, catalogReady, estimate, savedAt, query, status, pricesBusy, pricesBgBusy, lemanaBgActive, pricesProgress, searchResults, totals, anyNotFound, busyTickets },
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
