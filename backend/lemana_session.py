@@ -129,6 +129,9 @@ class LemanaSession:
         opts.add_argument("--disk-cache-size=1")
         opts.add_argument("--disable-application-cache")
         opts.add_argument("--disable-background-networking")
+        # Не грузим картинки: данные берём из JSON-LD/HTML (текст), а картинки
+        # только жрут память и трафик прокси. Меньше RAM + быстрее загрузка.
+        opts.add_argument("--blink-settings=imagesEnabled=false")
         # На macOS режим --headless=new у uc 3.5.5 + свежего Chrome падает
         # ("target window already closed"). Поэтому локально (darwin) не уходим
         # в настоящий headless, а уводим окно за пределы экрана — пользователь
