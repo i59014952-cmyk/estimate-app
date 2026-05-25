@@ -188,6 +188,20 @@ async def me(email: str = Depends(require_user)):
     return {"email": email, "role": role, "is_admin": role == "admin", "name": name}
 
 
+@router.post("/auth/me/name")
+async def set_my_name(body: SetNameIn, email: str = Depends(require_user)):
+    """Let the logged-in operator update their own display name (no admin rights
+    needed). Mirrors the admin-only /auth/users/{email}/name so the profile menu
+    and the admin Users list stay in sync against the same kh_users.name column."""
+    import db
+    async with db.pool().acquire() as conn:
+        await conn.execute(
+            "update kh_users set name = $2 where email = $1",
+            email.strip().lower(), (body.name or "").strip(),
+        )
+    return {"ok": True}
+
+
 @router.get("/auth/users")
 async def list_users(_admin: str = Depends(require_admin)):
     import db

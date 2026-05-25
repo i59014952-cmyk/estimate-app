@@ -43,17 +43,40 @@ function AccountMenu() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [name, setName] = useState(() => { try { return localStorage.getItem("kh-operator-name-v1") || ""; } catch (_) { return ""; } });
   const ref = React.useRef(null);
+  const saveTimer = React.useRef(null);
   const email = useMemo(() => khOperatorEmail(), [open]);
   const initials = khInitials(name, email);
   useEffect(() => { try { localStorage.setItem("kh-operator-name-v1", name); } catch (_) {} }, [name]);
+  // Бэкенд — источник истины: при загрузке берём имя из учётки, чтобы правки
+  // администратора были видны в профиле. Если в учётке имени ещё нет, а локально
+  // оно есть — поднимаем его на сервер, чтобы оно появилось и в админ-панели.
   useEffect(() => {
     let alive = true;
     if (!(window.KHAuth && window.KHAuth.me)) return;
+    const local = name.trim();
     window.KHAuth.me().then((r) => {
-      if (alive && r && r.name && !name) setName(r.name); // имя из учётки (задано админом)
+      if (!alive || !r) return;
+      const remote = (r.name || "").trim();
+      if (remote) setName(remote);
+      else if (local && window.KHAuth.setMyName) window.KHAuth.setMyName(local).catch(() => {});
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
+  // Сохраняем имя в учётку (debounce при вводе + сразу при потере фокуса), чтобы
+  // оно синхронизировалось с админ-панелью.
+  const persistName = React.useCallback((value) => {
+    if (window.KHAuth && window.KHAuth.setMyName) window.KHAuth.setMyName(value).catch(() => {});
+  }, []);
+  const onNameChange = (e) => {
+    const v = e.target.value;
+    setName(v);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => persistName(v.trim()), 600);
+  };
+  const onNameBlur = () => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    persistName(name.trim());
+  };
   useEffect(() => {
     if (!open) return;
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -91,7 +114,8 @@ function AccountMenu() {
             <input
               placeholder="Имя Фамилия"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={onNameChange}
+              onBlur={onNameBlur}
               style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper-card)", color: "var(--ink)", font: "inherit", boxSizing: "border-box" }}
             />
             {email && <div className="mono tiny" style={{ color: "var(--ink-3)", marginTop: 6, wordBreak: "break-all" }}>{email}</div>}
@@ -512,7 +536,7 @@ function AdminUsersModal({ open, onClose }) {
                   <div className="col" style={{ gap: 1, minWidth: 0 }}>
                     <div className="row center gap-2" style={{ minWidth: 0 }}>
                       <span style={{ fontWeight: u.name ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email}</span>
-                      {u.role_locked && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }} title="Роль задана переменной KH_ADMIN_EMAILS">env</span>}
+                      {u.role_locked && <span className="mono tiny" style={{ padding: "2px 6px", borderRadius: 99, background: "var(--coffee)", color: "#FBF5E7" }} title="Роль задана переменной KH_ADMIN_EMAILS">Вы</span>}
                     </div>
                     {u.name && <span className="mono tiny muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>}
                   </div>
