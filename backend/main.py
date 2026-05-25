@@ -10,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright, Browser, BrowserContext
 
+from lemana_api import router as lemana_router
+from lemana_worker import JobStore, LemanaWorker
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -133,7 +136,7 @@ def _cache_set(key: str, value):
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(
         headless=True,
@@ -141,9 +144,18 @@ async def lifespan(_: FastAPI):
     )
     state["pw"] = pw
     state["browser"] = browser
+
+    lemana_worker = LemanaWorker(JobStore())
+    await lemana_worker.start()
+    app.state.lemana_worker = lemana_worker
+
     try:
         yield
     finally:
+        try:
+            await lemana_worker.stop()
+        except Exception:
+            pass
         await browser.close()
         await pw.stop()
 
@@ -156,6 +168,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(lemana_router)
 
 
 async def _new_context(city: str) -> BrowserContext:
@@ -556,17 +570,48 @@ async def prices_search(
         except Exception as e:
             return [], [f"moi: error: {e!s}"[:140]]
 
-    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail), (mi_items, mi_trail) = await asyncio.gather(k(), m(), v(), mi())
+    async def lp():
+        worker = getattr(app.state, "lemana_worker", None)
+        if worker is None:
+            return [], ["lemana: worker not initialised"]
+        try:
+            prods = await worker.search_inline(query, city="kazan",
+                                               limit=per_source, timeout=25.0)
+        except asyncio.TimeoutError:
+            return [], ["lemana: timeout"]
+        except Exception as e:
+            import logging as _log, traceback as _tb
+            _log.getLogger(__name__).warning("lemana inline failed:\n%s", _tb.format_exc())
+            return [], [f"lemana: error: {type(e).__name__}: {e!s}".splitlines()[0][:500]]
+        items: list[PriceItem] = []
+        for p in prods:
+            if p.get("availability") != "InStock":
+                continue
+            url_ = p.get("url") or ""
+            if url_.startswith("/"):
+                url_ = f"https://kazan.lemanapro.ru{url_}"
+            items.append(PriceItem(
+                name=p.get("name") or "",
+                sku=p.get("sku"),
+                price=p.get("price"),
+                unit=None,
+                city="lemana",
+                url=url_,
+            ))
+        return items, [f"lemana: {len(items)} in-stock items"]
+
+    (k_items, k_trail), (m_items, m_trail), (v_items, v_trail), (mi_items, mi_trail), (lp_items, lp_trail) = await asyncio.gather(k(), m(), v(), mi(), lp())
 
     for it in k_items: it.city = "kolorit"
     for it in m_items: it.city = "krepmast"
     for it in v_items: it.city = "voltkin"
     for it in mi_items: it.city = "moi"
+    for it in lp_items: it.city = "lemana"
 
     merged: list[PriceItem] = []
     seen: set[str] = set()
     # Round-robin between sources so results look diverse
-    source_lists = [k_items, m_items, v_items, mi_items]
+    source_lists = [k_items, m_items, v_items, mi_items, lp_items]
     idx = 0
     empty_streak = 0
     while len(merged) < limit and empty_streak < len(source_lists):
@@ -585,7 +630,7 @@ async def prices_search(
     _cache_set(key, merged)
     return SearchResponse(
         query=query, city="combined", strategy_used="http", cached=False,
-        results=merged, trail=k_trail + m_trail + v_trail + mi_trail,
+        results=merged, trail=k_trail + m_trail + v_trail + mi_trail + lp_trail,
     )
 
 

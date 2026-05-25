@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 node_modules/
 dist/
+
+# Claude Code
+CLAUDE.md

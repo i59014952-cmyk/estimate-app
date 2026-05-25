@@ -21,7 +21,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 
-<script src="lib/estimateCore.js?v=106"></script>
+<script src="lib/estimateCore.js?v=108"></script>
 <script src="lib/auth.js?v=100"></script>
 <script src="lib/supabase.js?v=101"></script>
 
@@ -59,8 +59,6 @@ function App() {
   );
 }
 function Root() {
-  const [authed, setAuthed] = React.useState(() => window.KHAuth.isAuthed());
-  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
   return <App />;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
