@@ -27,17 +27,19 @@ function Login({ onSuccess }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <form onSubmit={submit} style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-          <KubLogo size={72} />
+    <div className="kh-login">
+      <div className="kh-login__bg" aria-hidden="true" />
+      <div className="kh-login__grid" aria-hidden="true" />
+      <form onSubmit={submit} className="kh-login__card" style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="kh-login__logo" style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+          <KubLogo size={150} draw />
         </div>
-        <input style={field} type="text" placeholder="Логин" autoComplete="username"
+        <input style={field} className="kh-login__in" type="text" placeholder="Логин" autoComplete="username"
           value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-        <input style={field} type="password" placeholder="Пароль" autoComplete="current-password"
+        <input style={field} className="kh-login__in" type="password" placeholder="Пароль" autoComplete="current-password"
           value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error ? <div style={{ color: "#a44a3f", fontSize: 13 }}>{error}</div> : null}
-        <button type="submit" disabled={busy} style={{
+        <button type="submit" disabled={busy} className="kh-login__in" style={{
           padding: "12px 14px", fontSize: 15, fontFamily: "inherit", fontWeight: 600,
           border: 0, borderRadius: 8, cursor: busy ? "default" : "pointer",
           background: "var(--ink, #1f1a15)", color: "var(--paper, #f4efe4)", opacity: busy ? 0.6 : 1,

@@ -1,30 +1,31 @@
 // Logo.jsx — знак «смета»: контур крыши + рыжая труба, под ней серифная подпись.
-function KubLogo({ size = 36, light = false }) {
+function KubLogo({ size = 36, light = false, draw = false }) {
   const stroke = light ? "currentColor" : "var(--ink)";
   const chimney = "var(--rust)";
   const textSize = size * 0.62;
   const houseW = size * 0.95;
   const houseH = size * 0.42;
   return (
-    <div className="col center" style={{ lineHeight: 1, gap: Math.max(2, size * 0.04) }}>
+    <div className={"col center" + (draw ? " kh-logo--draw" : "")} style={{ lineHeight: 1, gap: Math.max(2, size * 0.04) }}>
       <svg
         width={houseW}
         height={houseH}
         viewBox="0 0 100 44"
         fill="none"
-        style={{ display: "block" }}
+        style={{ display: "block", overflow: "visible" }}
         aria-hidden="true"
       >
         <path
+          className="kh-logo-roof"
           d="M12 42 L12 30 L50 6 L88 30 L88 42"
           stroke={stroke}
           strokeWidth="4.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <rect x="68" y="11" width="7" height="13" fill={chimney} />
+        <rect className="kh-logo-chimney" x="68" y="11" width="7" height="13" fill={chimney} />
       </svg>
-      <div className="serif" style={{
+      <div className="serif kh-logo-word" style={{
         fontSize: textSize,
         lineHeight: .9,
         color: stroke,
