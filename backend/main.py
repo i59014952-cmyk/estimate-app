@@ -563,6 +563,7 @@ async def lemana_search(
     query: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(6, ge=1, le=30),
 ):
+    limit = min(limit, 5)  # Lemana: не более 5 вариантов на позицию
     key = _cache_key("lemana", query, limit)
     cached = _cache_get(key)
     if cached:

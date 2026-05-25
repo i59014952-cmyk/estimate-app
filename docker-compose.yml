@@ -13,6 +13,16 @@ services:
       ALLOWED_ORIGINS: "*"
       LEMANA_HEADLESS: "0"
       LEMANA_TIMEOUT_S: "90"
+      # Прокси для Lemana (Qrator блокирует серверный IP). Задаётся в .env.
+      # Вариант 1 — прокси без авторизации (whitelist по IP) или HTTP с логином:
+      #   LEMANA_PROXY=http://HOST:PORT  (или http://USER:PASS@HOST:PORT)
+      # Вариант 2 — прокси с авторизацией, особенно SOCKS5 (Chrome не умеет
+      # авторизацию SOCKS5): задать upstream, а локальный релиз gost сам
+      # авторизуется (см. start.sh). Имеет приоритет над LEMANA_PROXY:
+      #   LEMANA_UPSTREAM_PROXY=socks5://USER:PASS@HOST:PORT
+      # Пусто = парсить напрямую (на этом сервере будет блок Qrator).
+      LEMANA_PROXY: "${LEMANA_PROXY:-}"
+      LEMANA_UPSTREAM_PROXY: "${LEMANA_UPSTREAM_PROXY:-}"
       DEFAULT_CITY: "moscow"
       DATABASE_URL: "postgresql://kh:${POSTGRES_PASSWORD}@db:5432/kubhouse"
       KH_JWT_SECRET: ${KH_JWT_SECRET:?set KH_JWT_SECRET in .env}
