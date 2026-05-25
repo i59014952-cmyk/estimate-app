@@ -553,7 +553,10 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
                   </tbody>
                 </table>
               </div>
-              <div className="tiny muted">Зелёным — самая низкая цена в строке · «—» = нет у подрядчика · красноватые ячейки — есть расхождение</div>
+              <div className="row center gap-3 tiny muted" style={{ flexWrap: "wrap" }}>
+                <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(194,88,66,.5)", marginRight: 4 }} />есть расхождение</span>
+                <span><span style={{ color: "var(--moss, #4f6f52)", fontWeight: 700, marginRight: 4 }}>зелёным</span>самая низкая цена в строке · «—» = нет у подрядчика</span>
+              </div>
             </>
           )}
         </div>
