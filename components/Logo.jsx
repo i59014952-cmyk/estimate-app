@@ -1,5 +1,5 @@
 // Logo.jsx — знак «смета»: контур крыши + рыжая труба, под ней серифная подпись.
-function KubLogo({ size = 36, light = false }) {
+function KubLogo({ size = 36, light = false, animate = false }) {
   const stroke = light ? "currentColor" : "var(--ink)";
   const chimney = "var(--rust)";
   const textSize = size * 0.62;
@@ -16,13 +16,14 @@ function KubLogo({ size = 36, light = false }) {
         aria-hidden="true"
       >
         <path
+          className={animate ? "kub-roof-draw" : undefined}
           d="M12 42 L12 30 L50 6 L88 30 L88 42"
           stroke={stroke}
           strokeWidth="4.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <rect x="68" y="11" width="7" height="13" fill={chimney} />
+        <rect className={animate ? "kub-chimney-in" : undefined} x="68" y="11" width="7" height="13" fill={chimney} />
       </svg>
       <div className="serif" style={{
         fontSize: textSize,
