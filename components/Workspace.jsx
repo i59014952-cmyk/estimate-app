@@ -1067,9 +1067,9 @@ function PositionsHeader({ est, onAddRow }) {
           <button
             className="btn btn-sm"
             onClick={est.actions.fetchPricesForNotFound}
-            disabled={!est.state.anyNotFound || est.state.pricesBusy || est.state.pricesBgBusy}
+            disabled={!est.state.anyNotFound || est.state.pricesBusy || est.state.pricesBgBusy || est.state.lemanaBgActive}
           >
-            <Icon name="refresh" size={13} /> {est.state.pricesBusy ? "Запрос…" : (est.state.pricesBgBusy ? "Ищу в фоне…" : "Обновить цены")}
+            <Icon name="refresh" size={13} /> {est.state.pricesBusy ? "Запрос…" : (est.state.pricesBgBusy ? "Ищу в фоне…" : (est.state.lemanaBgActive ? "Лемана в фоне…" : "Обновить цены"))}
           </button>
         )}
         {caps.edit && (
