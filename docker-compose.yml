@@ -18,10 +18,13 @@ services:
       PORT: "8000"
       ALLOWED_ORIGINS: "*"
       LEMANA_HEADLESS: "0"
-      LEMANA_TIMEOUT_S: "90"
+      # Таймауты увеличены под медленный мобильный прокси (телефон): страница
+      # через мобильный канал + Qrator грузится дольше.
+      LEMANA_TIMEOUT_S: "300"
+      LEMANA_QUERY_TIMEOUT: "300"
       # Фоновая пакетная задача (/lemana/jobs) парсит весь КП — даём ей много
-      # времени: до ~50 позиций по ~90с = больше часа.
-      LEMANA_JOB_TIMEOUT: "5400"
+      # времени: до ~50 позиций через медленный мобильный прокси.
+      LEMANA_JOB_TIMEOUT: "9000"
       # Прокси для Lemana (Qrator блокирует серверный IP). Задаётся в .env.
       # Вариант 1 — прокси без авторизации (whitelist по IP) или HTTP с логином:
       #   LEMANA_PROXY=http://HOST:PORT  (или http://USER:PASS@HOST:PORT)

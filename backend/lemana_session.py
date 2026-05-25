@@ -84,9 +84,11 @@ class ProductDict(TypedDict, total=False):
 class LemanaSession:
     """Одна Chrome-сессия для серии поисков."""
 
-    DEFAULT_TIMEOUT = 15
-    OVERLAY_WAIT = 10
-    PAGE_TIMEOUT = 45
+    # Таймауты рассчитаны на медленный мобильный прокси (телефон): страница
+    # lemanapro + проверка Qrator через мобильный канал грузятся долго.
+    DEFAULT_TIMEOUT = 30
+    OVERLAY_WAIT = 15
+    PAGE_TIMEOUT = 120
     BASE_URL_TPL = "https://{city}.lemanapro.ru/?fromRegion={region}"
 
     def __init__(self, city: str = "kazan", headless: bool = True,
@@ -164,6 +166,7 @@ class LemanaSession:
                 pass
         self._driver.set_window_size(1280, 900)
         self._driver.set_page_load_timeout(self.PAGE_TIMEOUT)
+        self._driver.set_script_timeout(self.PAGE_TIMEOUT)
         logger.info("uc.Chrome started (headless=%s, city=%s, proxy=%s)",
                     self.headless, self.city, bool(self.proxy))
 
@@ -314,7 +317,7 @@ class LemanaSession:
         """Ввести запрос, дождаться выдачи, вернуть URL-ы карточек."""
         driver = self._driver
         assert driver is not None
-        WebDriverWait(driver, 20).until(
+        WebDriverWait(driver, 60).until(
             EC.presence_of_element_located((
                 By.XPATH,
                 "//*[contains(@placeholder, 'Поиск')"
@@ -362,16 +365,16 @@ class LemanaSession:
                 trigger.click()
             except Exception:
                 driver.execute_script("arguments[0].click();", trigger)
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 30).until(
                 lambda d: d.switch_to.active_element.tag_name.lower() == "input"
             )
             search_input = driver.switch_to.active_element
             search_input.send_keys(query)
             search_input.send_keys(Keys.RETURN)
 
-        WebDriverWait(driver, 15).until(lambda d: d.current_url != starting_url)
+        WebDriverWait(driver, 45).until(lambda d: d.current_url != starting_url)
         try:
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 30).until(
                 lambda d: d.find_elements(By.CSS_SELECTOR, '[data-qa="product"]')
             )
         except Exception:
@@ -407,7 +410,7 @@ class LemanaSession:
             url = base + url
         driver.get(url)
         try:
-            WebDriverWait(driver, 8).until(
+            WebDriverWait(driver, 30).until(
                 lambda d: d.find_elements(By.CSS_SELECTOR, 'script[type="application/ld+json"]')
             )
         except Exception:
