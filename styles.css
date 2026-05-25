@@ -197,6 +197,40 @@ button:disabled,
 }
 .kh-row-highlight{animation:kh-row-flash 1.8s ease-out}
 
+/* === Кастомные полосы прокрутки — под «бумажную» палитру === */
+/* Firefox */
+*{
+  scrollbar-width:thin;
+  scrollbar-color:var(--rule) transparent;
+}
+/* WebKit (Chrome, Safari, Edge) */
+*::-webkit-scrollbar{
+  width:11px;
+  height:11px;
+}
+*::-webkit-scrollbar-track{
+  background:transparent;
+}
+*::-webkit-scrollbar-thumb{
+  background:var(--rule);
+  border-radius:99px;
+  border:3px solid var(--paper);
+  background-clip:padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{
+  background:var(--ink-4);
+  background-clip:padding-box;
+}
+*::-webkit-scrollbar-corner{
+  background:transparent;
+}
+/* Внутри панелей с другим фоном рамка бегунка совпадает с фоном панели */
+.kh-sidebar *::-webkit-scrollbar-thumb,
+.kh-prices-card *::-webkit-scrollbar-thumb,
+[class*="paper-2"] *::-webkit-scrollbar-thumb{
+  border-color:var(--paper-2);
+}
+
 /* Hide browser-native number-input spin buttons */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
