@@ -151,6 +151,13 @@ def _check_col(cols: dict[str, str], name: str) -> str:
     return kind
 
 
+# Kinds that _coerce binds as a Python str for Postgres to cast. A bare
+# `$n::timestamptz` makes asyncpg resolve the parameter type to timestamptz and
+# refuse the str ("expected a datetime instance"); routing through `::text`
+# first keeps the parameter a text value that Postgres then casts.
+_TEXT_BOUND = {"numeric", "timestamptz", "text"}
+
+
 class _Binder:
     """Accumulates bound parameters and emits $n::cast placeholders."""
 
@@ -159,10 +166,14 @@ class _Binder:
 
     def bind(self, kind: str, value: Any) -> str:
         self.params.append(_coerce(kind, value))
+        if kind in _TEXT_BOUND:
+            return f"(${len(self.params)}::text)::{CASTS[kind]}"
         return f"${len(self.params)}::{CASTS[kind]}"
 
     def bind_array(self, kind: str, values: list) -> str:
         self.params.append([_coerce(kind, v) for v in values])
+        if kind in _TEXT_BOUND:
+            return f"(${len(self.params)}::text[])::{CASTS[kind]}[]"
         return f"${len(self.params)}::{CASTS[kind]}[]"
 
 
