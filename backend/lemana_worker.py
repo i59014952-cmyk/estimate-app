@@ -261,7 +261,9 @@ class LemanaWorker:
         headless = os.getenv("LEMANA_HEADLESS", "1") != "0"
         _cv = os.getenv("LEMANA_CHROME_VERSION")
         chrome_version = int(_cv) if _cv else None
-        sess = LemanaSession(city=city, headless=headless, chrome_version=chrome_version)
+        proxy = os.getenv("LEMANA_PROXY") or None
+        sess = LemanaSession(city=city, headless=headless,
+                             chrome_version=chrome_version, proxy=proxy)
         sess.__enter__()
         self._session = sess
         self._session_city = city

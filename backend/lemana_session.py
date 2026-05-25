@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Optional, TypedDict
+from urllib.parse import urlparse
 
 import undetected_chromedriver as uc
 from selectolax.parser import HTMLParser
@@ -87,10 +90,17 @@ class LemanaSession:
     BASE_URL_TPL = "https://{city}.lemanapro.ru/?fromRegion={region}"
 
     def __init__(self, city: str = "kazan", headless: bool = True,
-                 chrome_version: Optional[int] = None):
+                 chrome_version: Optional[int] = None,
+                 proxy: Optional[str] = None):
         self.city = city
         self.headless = headless
         self.chrome_version = chrome_version
+        # Прокси для обхода Qrator (серверный IP блокируется). Формат:
+        # "http://host:port", "socks5://host:port" или с авторизацией
+        # "http://user:pass@host:port". Лучше брать прокси с whitelist по IP
+        # (без логина/пароля) — тогда расширение для авторизации не нужно.
+        self.proxy = proxy or None
+        self._proxy_ext_dir: Optional[str] = None
         self._driver: Optional[uc.Chrome] = None
 
     def __enter__(self) -> "LemanaSession":
@@ -121,6 +131,8 @@ class LemanaSession:
             opts.add_argument("--headless=new")
         if self.headless and _is_mac:
             opts.add_argument("--window-position=-32000,-32000")
+        if self.proxy:
+            self._apply_proxy(opts)
         kwargs: dict = {"options": opts}
         if _is_mac:
             kwargs["use_subprocess"] = True   # фикс 'target window already closed' на macOS
@@ -142,7 +154,60 @@ class LemanaSession:
                 pass
         self._driver.set_window_size(1280, 900)
         self._driver.set_page_load_timeout(self.PAGE_TIMEOUT)
-        logger.info("uc.Chrome started (headless=%s, city=%s)", self.headless, self.city)
+        logger.info("uc.Chrome started (headless=%s, city=%s, proxy=%s)",
+                    self.headless, self.city, bool(self.proxy))
+
+    def _apply_proxy(self, opts: "uc.ChromeOptions") -> None:
+        """Направить Chrome через прокси (env LEMANA_PROXY).
+
+        Без логина/пароля (whitelist по IP) — просто --proxy-server.
+        С логином/паролем — генерируем временное MV2-расширение, которое
+        отвечает на запрос авторизации прокси (Chrome не принимает user:pass
+        прямо во флаге). Рекомендуется прокси с whitelist по IP.
+        """
+        p = urlparse(self.proxy if "://" in self.proxy else f"http://{self.proxy}")
+        scheme = (p.scheme or "http").lower()
+        host, port = p.hostname, p.port
+        if not host or not port:
+            logger.warning("LEMANA_PROXY некорректен, пропускаю: %r", self.proxy)
+            return
+        opts.add_argument(f"--proxy-server={scheme}://{host}:{port}")
+        if p.username and p.password:
+            self._proxy_ext_dir = self._build_proxy_auth_extension(
+                scheme, host, port, p.username, p.password,
+            )
+            if self._proxy_ext_dir:
+                opts.add_argument(f"--load-extension={self._proxy_ext_dir}")
+        logger.info("proxy applied: %s://%s:%s (auth=%s)",
+                    scheme, host, port, bool(p.username))
+
+    @staticmethod
+    def _build_proxy_auth_extension(scheme: str, host: str, port: int,
+                                    user: str, password: str) -> Optional[str]:
+        try:
+            d = tempfile.mkdtemp(prefix="lemana_proxy_ext_")
+            manifest = {
+                "name": "lemana-proxy-auth",
+                "version": "1.0.0",
+                "manifest_version": 2,
+                "permissions": ["proxy", "webRequest", "webRequestBlocking",
+                                 "<all_urls>"],
+                "background": {"scripts": ["bg.js"]},
+            }
+            bg = (
+                "chrome.webRequest.onAuthRequired.addListener(\n"
+                "  function(details){return {authCredentials:{username:%r,password:%r}};},\n"
+                "  {urls:['<all_urls>']}, ['blocking']\n"
+                ");\n" % (user, password)
+            )
+            with open(os.path.join(d, "manifest.json"), "w") as f:
+                json.dump(manifest, f)
+            with open(os.path.join(d, "bg.js"), "w") as f:
+                f.write(bg)
+            return d
+        except Exception:
+            logger.exception("не удалось собрать proxy-auth extension")
+            return None
 
     def _open_home_and_dismiss_overlays(self) -> None:
         region = CITY_TO_REGION.get(self.city, CITY_TO_REGION["kazan"])
@@ -165,6 +230,9 @@ class LemanaSession:
             except Exception as e:
                 logger.warning("driver.quit() failed: %s", e)
             self._driver = None
+        if self._proxy_ext_dir:
+            shutil.rmtree(self._proxy_ext_dir, ignore_errors=True)
+            self._proxy_ext_dir = None
 
     # ------------------------------------------------------------------
     # public search
