@@ -163,7 +163,7 @@ function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }
   React.useEffect(() => {
     const prev = prevCount.current;
     prevCount.current = count;
-    if (prev < 2 && count >= 2) setHint(true); // открыли вторую смету
+    if (count > prev && count >= 2) setHint(true); // открыли ещё одну смету — есть что сравнить
   }, [count]);
 
   React.useEffect(() => {
