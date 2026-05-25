@@ -6,6 +6,12 @@ services:
     image: petrovich-proxy:latest
     container_name: petrovich-proxy
     restart: unless-stopped
+    # Лимит памяти: если бэкенд (браузеры Lemana/Petrovich) переберёт RAM,
+    # ядро прибьёт процессы ВНУТРИ контейнера (Docker перезапустит его), а
+    # Postgres/Caddy/SSH и сам сервер останутся живы. Без лимита OOM валил
+    # весь сервер. ~3 ГБ под бэкенд, остальное (из 4 ГБ + swap) — системе/БД.
+    mem_limit: 3g
+    memswap_limit: 5g
     expose:
       - "8000"
     environment:
