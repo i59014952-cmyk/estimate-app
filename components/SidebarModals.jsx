@@ -479,10 +479,8 @@ function KHObjectsView() {
           <textarea placeholder="Описание / комментарий" value={draft.note}
             onChange={e => setDraft({ ...draft, note: e.target.value })}
             rows={3} style={{ ...khInputStyle(), resize: 'vertical' }} />
-          <select value={draft.status || 'active'} onChange={e => setDraft({ ...draft, status: e.target.value })} style={khInputStyle()}>
-            <option value="active">Активный</option>
-            <option value="completed">Завершённый</option>
-          </select>
+          <KHSelect value={draft.status || 'active'} onChange={v => setDraft({ ...draft, status: v })} style={khInputStyle()}
+            options={[{ value: 'active', label: 'Активный' }, { value: 'completed', label: 'Завершённый' }]} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-sm" onClick={cancelForm}>Отмена</button>
             <button type="submit" className="kh-btn-primary" disabled={!draft.name.trim()}>
@@ -944,9 +942,8 @@ function KHContractorsView() {
           <input placeholder="Телефон" type="tel" value={draft.phone}
             onChange={e => setDraft({ ...draft, phone: e.target.value })} style={khInputStyle()} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <select value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value })} style={{ ...khInputStyle(), width: 200 }}>
-              <option>Производитель</option><option>Поставщик</option><option>Бригада</option><option>Субподрядчик</option>
-            </select>
+            <KHSelect value={draft.type} onChange={v => setDraft({ ...draft, type: v })} style={{ ...khInputStyle(), width: 200 }}
+              options={['Производитель', 'Поставщик', 'Бригада', 'Субподрядчик']} />
             <input placeholder="Описание / организация" value={draft.org}
               onChange={e => setDraft({ ...draft, org: e.target.value })} style={{ ...khInputStyle(), flex: 1 }} />
           </div>
@@ -2034,20 +2031,18 @@ function KHTemplatesView({ est, onClose }) {
                             onChange={() => setSelItems(prev => { const n = new Set(prev); if (n.has(it.id)) n.delete(it.id); else n.add(it.id); return n; })} />
                         </td>
                         <td>
-                          <select
+                          <KHSelect
                             value={c}
-                            onChange={(e) => setItemCatAt(t.id, ii, e.target.value)}
+                            onChange={(v) => setItemCatAt(t.id, ii, v)}
                             title="Категория позиции"
+                            options={[{ value: 'work', label: 'Работа' }, { value: 'material', label: 'Материал' }]}
                             style={{
-                              fontSize: 12, fontWeight: 600, padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
+                              fontSize: 12, fontWeight: 600, padding: '4px 6px', borderRadius: 6,
                               border: '1px solid ' + (c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)'),
                               background: c === 'work' ? 'var(--moss, #4f6f52)' : 'var(--paper)',
                               color: c === 'work' ? '#fff' : 'var(--ink-2)',
                             }}
-                          >
-                            <option value="work">Работа</option>
-                            <option value="material">Материал</option>
-                          </select>
+                          />
                         </td>
                         <td>{it.name}</td>
                         <td>

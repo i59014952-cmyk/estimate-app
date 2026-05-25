@@ -505,16 +505,17 @@ function AdminUsersModal({ open, onClose }) {
               onKeyDown={(e) => { if (e.key === "Enter" && canAdd) add(); }}
               style={{ flex: "1 1 160px", minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
             />
-            <select
+            <KHSelect
               value={role}
-              onChange={(e) => setRole(e.target.value)}
+              onChange={setRole}
               title="Роль"
               style={{ flex: "0 0 auto", padding: "9px 12px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
-            >
-              <option value="estimator">Сметчик</option>
-              <option value="viewer">Наблюдатель</option>
-              <option value="admin">Администратор</option>
-            </select>
+              options={[
+                { value: "estimator", label: "Сметчик" },
+                { value: "viewer", label: "Наблюдатель" },
+                { value: "admin", label: "Администратор" },
+              ]}
+            />
             <button className="btn btn-sm" onClick={add} disabled={!canAdd}
               style={{ opacity: canAdd ? 1 : 0.5, cursor: canAdd ? "pointer" : "not-allowed" }}>
               <Icon name="plus" size={14} /> Добавить
@@ -542,17 +543,18 @@ function AdminUsersModal({ open, onClose }) {
                   </div>
                   <div className="row center gap-2">
                     <button className="btn btn-icon" title="Имя и фамилия" onClick={() => editName(u)}><Icon name="doc" size={14} /></button>
-                    <select
+                    <KHSelect
                       value={u.role}
                       disabled={u.role_locked}
                       title={u.role_locked ? "Роль задана переменной окружения" : "Роль"}
-                      onChange={(e) => changeRole(u, e.target.value)}
-                      style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit", opacity: u.role_locked ? 0.6 : 1 }}
-                    >
-                      <option value="estimator">Сметчик</option>
-                      <option value="viewer">Наблюдатель</option>
-                      <option value="admin">Администратор</option>
-                    </select>
+                      onChange={(v) => changeRole(u, v)}
+                      options={[
+                        { value: "estimator", label: "Сметчик" },
+                        { value: "viewer", label: "Наблюдатель" },
+                        { value: "admin", label: "Администратор" },
+                      ]}
+                      style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--rule)", background: "var(--paper)", color: "var(--ink)", font: "inherit" }}
+                    />
                     <button className="btn btn-icon" title="Сменить пароль" onClick={() => resetPwd(u)}><Icon name="refresh" size={14} /></button>
                     <button className="btn btn-icon" title="Удалить" onClick={() => del(u)}><Icon name="trash" size={14} /></button>
                   </div>
