@@ -293,9 +293,15 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
     arr.forEach(r => {
       const vals = compareSlugs.map(s => r.prices[s]).filter(v => v != null);
       r.min = vals.length ? Math.min(...vals) : null;
-      r.differs = vals.length < compareSlugs.length || new Set(vals).size > 1;
+      // cat 0 — сравнимо (2+ подрядчика) и цены расходятся
+      // cat 1 — сравнимо и цены совпадают
+      // cat 2 — без совпадений (позиция есть лишь у одного подрядчика)
+      if (vals.length < 2) r.cat = 2;
+      else if (new Set(vals).size > 1) r.cat = 0;
+      else r.cat = 1;
+      r.differs = r.cat === 0;
     });
-    arr.sort((a, b) => (Number(b.differs) - Number(a.differs)) || a.name.localeCompare(b.name, "ru"));
+    arr.sort((a, b) => (a.cat - b.cat) || a.name.localeCompare(b.name, "ru"));
     return arr;
   }, [compareMode, compareSlugs.join(","), vendorItemsBySlug, cmpQuery]);
 
@@ -512,8 +518,18 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
                     {compareMatrix.length === 0 && (
                       <tr><td colSpan={compareSlugs.length + 1} className="tiny muted" style={{ padding: 14 }}>Нет позиций.</td></tr>
                     )}
-                    {compareMatrix.map((r, i) => (
-                      <tr key={i}>
+                    {compareMatrix.map((r, i) => {
+                      const prev = compareMatrix[i - 1];
+                      const showHead = !prev || prev.cat !== r.cat;
+                      const headLabel = r.cat === 0 ? "Цены расходятся" : r.cat === 1 ? "Цены совпадают" : "Без совпадений (у одного подрядчика)";
+                      return (
+                      <React.Fragment key={i}>
+                      {showHead && (
+                        <tr>
+                          <td colSpan={compareSlugs.length + 1} className="eyebrow" style={{ position: "sticky", left: 0, background: "var(--paper-2)", padding: "6px 12px", borderBottom: "1px solid var(--rule)", borderTop: "1px solid var(--rule)" }}>{headLabel}</td>
+                        </tr>
+                      )}
+                      <tr>
                         <td style={{ position: "sticky", left: 0, zIndex: 1, background: "var(--paper-card)", padding: "7px 12px", borderBottom: "1px solid var(--rule)", minWidth: 240, maxWidth: 360 }}>
                           <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
                           {r.unit ? <div className="mono tiny muted">{r.unit}</div> : null}
@@ -531,7 +547,9 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
                           );
                         })}
                       </tr>
-                    ))}
+                      </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

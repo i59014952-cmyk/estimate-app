@@ -154,6 +154,43 @@ function TopBar({ onTheme, theme, onMenu, onNew, savedAt }) {
 }
 
 function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }) {
+  const count = index ? index.length : 0;
+  const compareBtnRef = React.useRef(null);
+  const prevCount = React.useRef(count);
+  const [hint, setHint] = React.useState(false);
+  const [hintPos, setHintPos] = React.useState(null);
+
+  React.useEffect(() => {
+    const prev = prevCount.current;
+    prevCount.current = count;
+    if (count > prev && count >= 2) setHint(true); // открыли ещё одну смету — есть что сравнить
+  }, [count]);
+
+  React.useEffect(() => {
+    if (!hint) return;
+    const t = setTimeout(() => setHint(false), 12000);
+    return () => clearTimeout(t);
+  }, [hint]);
+
+  React.useLayoutEffect(() => {
+    if (!hint) return;
+    const place = () => {
+      const el = compareBtnRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setHintPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [hint]);
+
+  const dismissHint = () => setHint(false);
+
   if (!index || index.length <= 1) return null; // одну смету не показываем
   return (
     <div className="row center kh-esttabs" style={{
@@ -199,15 +236,41 @@ function EstimatesTabs({ index, currentId, onSwitch, onNew, onClose, onCompare }
         }}
       >+</button>
       <button
-        onClick={onCompare}
+        ref={compareBtnRef}
+        onClick={() => { dismissHint(); onCompare && onCompare(); }}
         title="Сравнить сметы"
         className="row center gap-2"
         style={{
-          flexShrink: 0, marginLeft: "auto", padding: "6px 12px", borderRadius: 8, cursor: "pointer",
-          border: "1px solid var(--rule)", background: "var(--paper-card)", color: "var(--ink-2)",
-          fontSize: 13, whiteSpace: "nowrap",
+          flexShrink: 0, marginLeft: "auto", padding: "7px 16px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid var(--moss, #4f6f52)", background: "var(--moss, #4f6f52)", color: "#fff",
+          fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
+          boxShadow: hint ? "0 0 0 4px rgba(79,111,82,.25)" : "0 1px 3px rgba(79,111,82,.35)",
         }}
       >⇆ Сравнить сметы</button>
+      {hint && hintPos && (
+        <div
+          style={{
+            position: "fixed", top: hintPos.top, right: hintPos.right, zIndex: 1000,
+            maxWidth: 260, padding: "10px 12px", borderRadius: 10,
+            background: "var(--ink)", color: "var(--paper)",
+            boxShadow: "0 8px 24px rgba(0,0,0,.22)", fontSize: 13, lineHeight: 1.4,
+          }}
+        >
+          <div style={{
+            position: "absolute", top: -6, right: 18, width: 12, height: 12,
+            background: "var(--ink)", transform: "rotate(45deg)",
+          }} />
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Теперь можно сравнить сметы</div>
+          <div style={{ opacity: 0.85 }}>Открыто несколько смет — нажмите «Сравнить сметы», чтобы увидеть различия в позициях и ценах.</div>
+          <button
+            onClick={dismissHint}
+            style={{
+              marginTop: 8, padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+              border: "1px solid rgba(255,255,255,.4)", background: "transparent", color: "var(--paper)", fontSize: 12,
+            }}
+          >Понятно</button>
+        </div>
+      )}
     </div>
   );
 }
