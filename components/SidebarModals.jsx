@@ -314,14 +314,16 @@ function khSeedObjectsIfNeeded(current) {
   const fresh = KH_OBJECTS_SEED
     .filter(o => !existing.has(o.name.trim().toLowerCase()))
     .map((o, i) => ({ id: 'seed-obj-' + i + '-' + Date.now(), files: [], ...o }));
-  const next = [...fresh, ...patched];
-  khSaveObjects(next);
-  try { localStorage.setItem(KH_OBJECTS_SEEDED_KEY, '1'); } catch {}
-  return next;
+  return [...fresh, ...patched];
 }
 
 function KHObjectsView() {
   const [list, setList] = React.useState(() => khSeedObjectsIfNeeded(khLoadObjects()));
+  React.useEffect(() => {
+    if (localStorage.getItem(KH_OBJECTS_SEEDED_KEY)) return;
+    khSaveObjects(list);
+    try { localStorage.setItem(KH_OBJECTS_SEEDED_KEY, '1'); } catch {}
+  }, []);
   const [tab, setTab] = React.useState('active');
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
@@ -642,10 +644,7 @@ function khSeedIfNeeded(current) {
       seedFresh.push({ id: 'seed-' + i + '-' + Date.now(), ...v });
     }
   });
-  const next = [...seedFresh, ...merged];
-  khSaveContractors(next);
-  try { localStorage.setItem(KH_SEEDED_KEY, '1'); } catch {}
-  return next;
+  return [...seedFresh, ...merged];
 }
 
 function KHPriceCompare({ contractors }) {
@@ -790,6 +789,11 @@ function KHPriceCompare({ contractors }) {
 function KHContractorsView() {
   const data = useKHData();
   const [list, setList] = React.useState(() => khSeedIfNeeded(khLoadContractors()));
+  React.useEffect(() => {
+    if (localStorage.getItem(KH_SEEDED_KEY)) return;
+    khSaveContractors(list);
+    try { localStorage.setItem(KH_SEEDED_KEY, '1'); } catch {}
+  }, []);
   const [tab, setTab] = React.useState('Подрядчики');
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
