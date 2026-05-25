@@ -519,6 +519,9 @@ body{overscroll-behavior-y:none;overflow-x:hidden}
   min-height:100vh; min-height:100dvh;
   display:flex; align-items:center; justify-content:center;
   padding:24px; overflow:hidden;
+  /* Сплошной фон перекрывает статичную клетку body — иначе две сетки
+     (body 28px + анимированная 46px) накладываются друг на друга. */
+  background:var(--paper);
 }
 /* Два мягких цветных свечения, медленно дрейфующих по экрану */
 .kh-login__bg{ position:absolute; inset:0; z-index:0; pointer-events:none; }
