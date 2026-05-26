@@ -167,8 +167,28 @@ class LemanaSession:
         self._driver.set_window_size(1280, 900)
         self._driver.set_page_load_timeout(self.PAGE_TIMEOUT)
         self._driver.set_script_timeout(self.PAGE_TIMEOUT)
+        self._block_heavy_resources()
         logger.info("uc.Chrome started (headless=%s, city=%s, proxy=%s)",
                     self.headless, self.city, bool(self.proxy))
+
+    def _block_heavy_resources(self) -> None:
+        """Блокируем CSS/шрифты/медиа/аналитику через CDP — грузим почти голый
+        HTML+JS. Данные берём из JSON-LD (в HTML), элементы — из DOM (нужен JS),
+        поэтому стили/картинки не нужны. Резко ускоряет загрузку через медленный
+        мобильный прокси. JS НЕ блокируем (нужен для Qrator и рендера SPA)."""
+        patterns = [
+            "*.css",
+            "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot",
+            "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.webp", "*.ico", "*.avif",
+            "*.mp4", "*.webm", "*.mp3", "*.avi", "*.mov", "*.m4v",
+            "*google-analytics*", "*googletagmanager*", "*mc.yandex*",
+            "*/metrika/*", "*doubleclick*", "*/gtm.js*",
+        ]
+        try:
+            self._driver.execute_cdp_cmd("Network.enable", {})
+            self._driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": patterns})
+        except Exception as e:
+            logger.warning("CDP resource blocking failed: %s", e)
 
     def _apply_proxy(self, opts: "uc.ChromeOptions") -> None:
         """Направить Chrome через прокси (env LEMANA_PROXY).
