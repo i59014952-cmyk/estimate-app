@@ -88,7 +88,7 @@ class LemanaSession:
     # lemanapro + проверка Qrator через мобильный канал грузятся долго.
     DEFAULT_TIMEOUT = 30
     OVERLAY_WAIT = 15
-    PAGE_TIMEOUT = 120
+    PAGE_TIMEOUT = 55
     BASE_URL_TPL = "https://{city}.lemanapro.ru/?fromRegion={region}"
 
     def __init__(self, city: str = "kazan", headless: bool = True,
