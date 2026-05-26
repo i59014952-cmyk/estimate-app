@@ -174,10 +174,10 @@ async def lifespan(app: FastAPI):
 
     def _cache_lemana_job_result(q: str, products: list) -> None:
         # Результаты фоновой пакетной задачи кладём в тот же кэш, что читает
-        # /lemana/search (ключ с limit=5), чтобы цены отдавались мгновенно.
+        # /lemana/search (ключ с limit=2), чтобы цены отдавались мгновенно.
         items = [it for p in (products or [])
                  if (it := _lemana_product_to_item(p)) is not None and it.price]
-        _cache_set(_cache_key("lemana", q, 5), items)
+        _cache_set(_cache_key("lemana", q, 2), items)
 
     lemana_worker.on_query_result = _cache_lemana_job_result
     await lemana_worker.start()
@@ -573,7 +573,7 @@ async def lemana_search(
     limit: int = Query(6, ge=1, le=30),
     cache_only: bool = Query(False),
 ):
-    limit = min(limit, 5)  # Lemana: не более 5 вариантов на позицию
+    limit = min(limit, 2)  # Lemana: не более 2 вариантов на позицию (экономия трафика прокси)
     key = _cache_key("lemana", query, limit)
     cached = _cache_get(key)
     if cached:
