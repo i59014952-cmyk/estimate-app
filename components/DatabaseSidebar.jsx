@@ -458,6 +458,19 @@ function KHDatabaseView({ est, autoAdd, vendorFilter }) {
             🗑 Удалить выбранные ({sel.size})
           </button>
         )}
+        {(est.state.userCatalog || []).length > 0 && (
+          <button className="btn btn-sm" style={{ color: "var(--rust)", borderColor: "var(--rust)" }}
+            title="Удалить ВСЕ позиции вашей базы на сервере. Необратимо."
+            onClick={() => {
+              const n = (est.state.userCatalog || []).length;
+              if (!confirm(`Очистить ВСЮ вашу базу — удалить все ${n} позиций? Действие необратимо.`)) return;
+              est.actions.clearUserCatalog()
+                .then(() => alert("База очищена."))
+                .catch(() => alert("Не удалось очистить базу — проверьте, что вы вошли, и соединение."));
+            }}>
+            🧹 Очистить мою базу
+          </button>
+        )}
         <button className="btn btn-sm" onClick={refreshVendors} title="Перечитать КП подрядчиков из облака">⟳ Обновить</button>
         <button
           className="btn btn-sm"
