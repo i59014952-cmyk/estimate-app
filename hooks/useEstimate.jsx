@@ -241,16 +241,17 @@ function useEstimate() {
     let cancelled = false;
     window.SB.selectAll('kh_user_catalog', 'order=updated_at.desc').then(remote => {
       if (cancelled || !Array.isArray(remote)) return;
-      if (remote.length) {
-        const mapped = remote.map(it => ({
-          name: String(it.name), unit: String(it.unit || ''),
-          unitPrice: Number(it.unit_price) || 0,
-          category: it.category === 'work' ? 'work' : (it.category === 'material' ? 'material' : classifyItem(it.name, it.unit)),
-          tokenSet: new Set(tokenize(it.name)),
-        }));
-        setUserCatalog(mapped);
-        try { localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(mapped.map(({ name, unit, unitPrice, category }) => ({ name, unit, unitPrice, category })))); } catch (_) {}
-      }
+      // Облако — источник истины: синхронизируем ВСЕГДА, в т.ч. когда оно пустое
+      // (раньше при пустом облаке локальный кэш не очищался, и удалённые позиции
+      // «возвращались» после перезагрузки).
+      const mapped = remote.map(it => ({
+        name: String(it.name), unit: String(it.unit || ''),
+        unitPrice: Number(it.unit_price) || 0,
+        category: it.category === 'work' ? 'work' : (it.category === 'material' ? 'material' : classifyItem(it.name, it.unit)),
+        tokenSet: new Set(tokenize(it.name)),
+      }));
+      setUserCatalog(mapped);
+      try { localStorage.setItem(USER_CATALOG_KEY, JSON.stringify(mapped.map(({ name, unit, unitPrice, category }) => ({ name, unit, unitPrice, category })))); } catch (_) {}
     }).catch(e => console.warn('cloud load user_catalog:', e));
     window.SB.selectAll('kh_vendor_prices', 'select=id,name,unit,unit_price').then(remote => {
       if (cancelled || !Array.isArray(remote)) return;
@@ -262,11 +263,10 @@ function useEstimate() {
     }).catch(e => console.warn('cloud load vendor_prices:', e));
     window.SB.selectAll('kh_hidden').then(remote => {
       if (cancelled || !Array.isArray(remote)) return;
-      if (remote.length) {
-        const set = new Set(remote.map(r => r.key));
-        setHiddenCatalog(set);
-        try { localStorage.setItem(HIDDEN_CATALOG_KEY, JSON.stringify([...set])); } catch (_) {}
-      }
+      // Тоже синхронизируем всегда (пустое облако => снять локальные скрытия).
+      const set = new Set(remote.map(r => r.key));
+      setHiddenCatalog(set);
+      try { localStorage.setItem(HIDDEN_CATALOG_KEY, JSON.stringify([...set])); } catch (_) {}
     }).catch(e => console.warn('cloud load hidden:', e));
     return () => { cancelled = true; };
   }, []);
@@ -1184,6 +1184,19 @@ function useEstimate() {
     if (window.SB) window.SB.remove('kh_hidden', 'key=neq.__never__').catch(e => console.warn('cloud hidden clear:', e));
   }, []);
 
+  // Полностью очистить СВОЮ базу (kh_user_catalog) одним серверным запросом.
+  // Надёжнее, чем удалять по одной (те запросы могут частично не дойти, а потом
+  // пустое облако всё равно подтянет остаток). Возвращает промис — UI ждёт.
+  const clearUserCatalog = React.useCallback(async () => {
+    if (window.SB) {
+      // DELETE всех строк: neq.__never__ совпадает со всеми (имя != '__never__').
+      await window.SB.remove('kh_user_catalog', 'name=neq.__never__')
+        .catch(e => { console.warn('cloud clear user_catalog:', e); throw e; });
+    }
+    setUserCatalog([]);
+    try { localStorage.removeItem(USER_CATALOG_KEY); } catch (_) {}
+  }, []);
+
   const unhideKeys = React.useCallback((keys) => {
     if (!keys || !keys.length) return;
     setHiddenCatalog(prev => {
@@ -1295,7 +1308,7 @@ function useEstimate() {
     actions: {
       setQuery, addRow, removeRow, resetEstimate, createClientLink, updateQty, updateRow, togglePicker, applyCandidate,
       applyManualPrice, handleFile, fetchPricesForNotFound, exportCsv, exportDoc, addBlankRow,
-      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile, setItemCategory, setMarkup,
+      addCatalogItem, removeCatalogItem, restoreCatalogItem, clearHiddenCatalog, clearUserCatalog, unhideKeys, removeVendorPrice, updateVendorPrice, uploadCatalogFile, setItemCategory, setMarkup,
     },
   };
 }
