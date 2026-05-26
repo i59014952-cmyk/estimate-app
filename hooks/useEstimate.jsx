@@ -662,8 +662,10 @@ function useEstimate() {
 
     while (Date.now() < deadline) {
       let allDone = true;
+      let aggDone = 0, aggTotal = 0;   // прогресс самой Lemana-задачи (X/Y)
       for (const job of jobs) {
         const st = await getLemanaJobStatus(job.jobId);
+        aggTotal += (job.names || []).length;
         if (!st) {
           // Статус не пришёл. Пробуем достать из кэша то, что уже записано.
           for (const nm of (job.names || [])) {
@@ -677,6 +679,7 @@ function useEstimate() {
           continue;
         }
         nullStreak[job.jobId] = 0;
+        aggDone += st.done_count || 0;
         const readyNames = (job.names || []).slice(0, st.done_count || 0);
         for (const nm of readyNames) {
           if (applied.has(nm)) continue;
@@ -684,6 +687,8 @@ function useEstimate() {
         }
         if (!['done', 'failed', 'cancelled'].includes(st.status)) allDone = false;
       }
+      // Показываем реальный прогресс Lemana в индикаторе «Поиск цен в фоне: X/Y».
+      if (aggTotal > 0) setPricesProgress({ done: aggDone, total: aggTotal, filled: applied.size, failed: 0 });
       if (allDone) {
         // Финальный проход: задачи завершены, кэш точно записан — добираем всё,
         // что осталось (в т.ч. при обработке не по порядку).
@@ -791,41 +796,56 @@ function useEstimate() {
     };
 
     try {
-      // Первый проход.
-      const pass1 = await runPass(initialTargets, 0, initialTargets.length);
-      totalFilled += pass1.filled;
-      totalFailed = pass1.failed;
-
-      // Авто-ретрай: проходим ещё раз по строкам, где фетч провалился
-      // (notFound остался true, candidates === null). Помогает когда первая
-      // волна частично таймаутит из-за холодного старта прокси, но повторный
-      // запрос уже на прогретом сервисе успевает уложиться в таймаут.
-      // Строки с candidates === [] (фетч успешен, но ничего не нашлось)
-      // не ретраим — это легитимно «нет соответствия в каталогах».
-      const retryTargets = estimateRef.current
-        .filter(r => {
-          if (!r.notFound) return false;
-          if (r.candidates !== null) return false;
-          return initialTargets.some(t => t.id === r.id);
-        })
-        .map(r => ({ id: r.id, name: r.name }));
-
-      if (retryTargets.length > 0) {
-        const totalWithRetry = initialTargets.length + retryTargets.length;
-        const pass2 = await runPass(retryTargets, initialTargets.length, totalWithRetry);
-        totalFilled += pass2.filled;
-        totalFailed = pass2.failed;
-      }
-
-      // Petrovich/магазины отработали (без конкуренции). Оставшиеся ненайденные
-      // позиции отдаём в фоновую Lemana-задачу — теперь она не мешает Petrovich.
-      const targetIds = new Set(initialTargets.map(t => t.id));
-      const lemanaTargets = estimateRef.current.filter(r => r.notFound && targetIds.has(r.id));
-      if (lemanaTargets.length) {
-        try { lemanaJobs = (await submitLemanaBatch(lemanaTargets.map(r => r.name))) || []; } catch (_) {}
+      if (background) {
+        // Большой КП = поиск по Lemana ПРО. Сразу запускаем Lemana-задачу по
+        // ВСЕМ ненайденным и НЕ гоняем инлайн-проход Petrovich: он медленный
+        // (каждый запрос ждёт таймаут), насыщает бэкенд, при пустой базе почти
+        // ничего не находит и лишь задерживает старт Lemana. Прогресс самой
+        // Lemana-задачи покажет pollLemanaJobs (X/Y).
+        setPricesProgress({ done: 0, total: initialTargets.length, filled: 0, failed: 0 });
+        try { lemanaJobs = (await submitLemanaBatch(initialTargets.map(t => t.name))) || []; } catch (_) {}
         if (lemanaJobs.length) {
-          const lids = new Set(lemanaTargets.map(r => r.id));
+          const lids = new Set(initialTargets.map(t => t.id));
           setEstimate(prev => prev.map(r => (lids.has(r.id) && r.notFound) ? { ...r, lemanaPending: true } : r));
+        }
+      } else {
+        // Маленький КП: инлайн-проход (Petrovich/магазины/Lemana-кэш) + ретрай,
+        // затем Lemana по остаткам.
+        const pass1 = await runPass(initialTargets, 0, initialTargets.length);
+        totalFilled += pass1.filled;
+        totalFailed = pass1.failed;
+
+        // Авто-ретрай: проходим ещё раз по строкам, где фетч провалился
+        // (notFound остался true, candidates === null). Помогает когда первая
+        // волна частично таймаутит из-за холодного старта прокси, но повторный
+        // запрос уже на прогретом сервисе успевает уложиться в таймаут.
+        // Строки с candidates === [] (фетч успешен, но ничего не нашлось)
+        // не ретраим — это легитимно «нет соответствия в каталогах».
+        const retryTargets = estimateRef.current
+          .filter(r => {
+            if (!r.notFound) return false;
+            if (r.candidates !== null) return false;
+            return initialTargets.some(t => t.id === r.id);
+          })
+          .map(r => ({ id: r.id, name: r.name }));
+
+        if (retryTargets.length > 0) {
+          const totalWithRetry = initialTargets.length + retryTargets.length;
+          const pass2 = await runPass(retryTargets, initialTargets.length, totalWithRetry);
+          totalFilled += pass2.filled;
+          totalFailed = pass2.failed;
+        }
+
+        // Petrovich/магазины отработали (без конкуренции). Оставшиеся ненайденные
+        // позиции отдаём в фоновую Lemana-задачу — теперь она не мешает Petrovich.
+        const targetIds = new Set(initialTargets.map(t => t.id));
+        const lemanaTargets = estimateRef.current.filter(r => r.notFound && targetIds.has(r.id));
+        if (lemanaTargets.length) {
+          try { lemanaJobs = (await submitLemanaBatch(lemanaTargets.map(r => r.name))) || []; } catch (_) {}
+          if (lemanaJobs.length) {
+            const lids = new Set(lemanaTargets.map(r => r.id));
+            setEstimate(prev => prev.map(r => (lids.has(r.id) && r.notFound) ? { ...r, lemanaPending: true } : r));
+          }
         }
       }
     } catch (err) {
