@@ -1072,6 +1072,13 @@ function PositionsHeader({ est, onAddRow }) {
             <Icon name="refresh" size={13} /> {est.state.pricesBusy ? "Запрос…" : (est.state.pricesBgBusy ? "Ищу в фоне…" : (est.state.lemanaBgActive ? "Лемана в фоне…" : "Обновить цены"))}
           </button>
         )}
+        {caps.edit && (est.state.pricesBgBusy || est.state.lemanaBgActive) && (
+          <span className="kh-lemana-loading" title="Идёт фоновый поиск цен — результаты появляются автоматически">
+            <span className="kh-spinner" /> Поиск цен в фоне
+            {est.state.pricesProgress && est.state.pricesProgress.total > 0
+              ? `: ${est.state.pricesProgress.done}/${est.state.pricesProgress.total}` : "…"}
+          </span>
+        )}
         {caps.edit && (
           <button
             className="btn btn-sm"
@@ -1601,6 +1608,15 @@ function Workspace({ embedded = false, onTheme, theme, onNewEstimate, onRename }
   };
   const openContractors = () => { setNavActive("contractors"); setKhModalTab("contractors"); setDbAutoAdd(false); };
   const est = useEstimate();
+  // Пока идёт фоновый поиск цен (большой КП, без оверлея) — форсируем
+  // периодический ре-рендер, чтобы цены/замены появлялись в таблице САМИ,
+  // без перезагрузки страницы.
+  const [, forceTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!(est.state.pricesBgBusy || est.state.lemanaBgActive)) return;
+    const id = setInterval(() => forceTick(t => t + 1), 2500);
+    return () => clearInterval(id);
+  }, [est.state.pricesBgBusy, est.state.lemanaBgActive]);
   const [meta, updateMetaRaw] = useEditableMeta();
   const updateMeta = React.useCallback((key, value) => {
     updateMetaRaw(key, value);
