@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
+import subprocess
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -162,7 +164,8 @@ class LemanaWorker:
                         job_id, status="failed", error="job timeout",
                         finished_at=datetime.utcnow(),
                     )
-                    await asyncio.to_thread(self._restart_session_sync)
+                    # Весь job повис — жёстко убиваем браузер (graceful повис бы).
+                    await asyncio.to_thread(self._hard_restart_session_sync)
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
@@ -240,7 +243,9 @@ class LemanaWorker:
                 return {"query": query, "ok": True, "products": products}
             except asyncio.TimeoutError:
                 logger.warning("query '%s' timed out (attempt %d)", query, attempt)
-                await asyncio.to_thread(self._restart_session_sync)
+                # Таймаут = браузер завис: вежливый restart сам бы повис на
+                # мёртвом драйвере. Жёстко убиваем процессы и поднимаем заново.
+                await asyncio.to_thread(self._hard_restart_session_sync)
                 if attempt == 2:
                     return {"query": query, "ok": False, "error": "timeout",
                             "products": []}
@@ -286,6 +291,44 @@ class LemanaWorker:
             logger.warning("session restart failed, recreating: %s", e)
             self._close_session_sync()
 
+    def _hard_restart_session_sync(self) -> None:
+        """Watchdog: жёстко прибить (возможно зависший) Chrome/chromedriver и
+        бросить объект сессии БЕЗ graceful-close. Применяется при таймауте
+        позиции: поток с заблокированным Selenium-вызовом висит на мёртвом
+        драйвере, а `restart()`/`close()` сами бы зависли, разговаривая с ним.
+        Убийство процессов разблокирует тот поток (вызов падает с ошибкой), и
+        следующий `_ensure_session_sync` поднимет свежую сессию.
+
+        Бьём только процессы текущей сессии (по PID драйвера/браузера и их
+        детям) — Playwright-браузер Petrovich не трогаем."""
+        sess = self._session
+        drv = getattr(sess, "_driver", None) if sess is not None else None
+        pids: list[int] = []
+        if drv is not None:
+            bp = getattr(drv, "browser_pid", None)
+            if bp:
+                pids.append(int(bp))
+            try:
+                proc = drv.service.process
+                if proc is not None:
+                    pids.append(int(proc.pid))
+            except Exception:
+                pass
+        for pid in pids:
+            # сперва дети (рендереры Chrome), затем сам процесс
+            try:
+                subprocess.run(["pkill", "-9", "-P", str(pid)], timeout=5)
+            except Exception:
+                pass
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+        # роняем сессию без graceful-close (он завис бы на мёртвом драйвере)
+        self._session = None
+        self._session_city = None
+        logger.warning("hard-killed Lemana Chrome (pids=%s)", pids or "n/a")
+
     def _close_session_sync(self) -> None:
         if self._session is not None:
             try:
@@ -317,7 +360,7 @@ class LemanaWorker:
                     timeout=timeout,
                 )
             except asyncio.TimeoutError:
-                await asyncio.to_thread(self._restart_session_sync)
+                await asyncio.to_thread(self._hard_restart_session_sync)
                 raise
             except WebDriverException:
                 await asyncio.to_thread(self._restart_session_sync)
