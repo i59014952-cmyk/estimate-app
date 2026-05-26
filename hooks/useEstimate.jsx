@@ -645,7 +645,16 @@ function useEstimate() {
     // Достать позицию из кэша и подставить цену. true — если цена подставлена.
     const tryApply = async (nm) => {
       let cands = [];
-      try { cands = (await searchLemana(nm)).filter(c => c.price && isRelevantCandidate(nm, c)); } catch (_) {}
+      try {
+        const raw = (await searchLemana(nm)).filter(c => c.price);
+        // Сначала предпочитаем совпадения по словам. Но если по словам ничего
+        // не совпало, а Lemana товар ВЕРНУЛА — берём её результат: Lemana уже
+        // искала по нашему запросу и ранжировала сама, а наивная проверка по
+        // словам выкидывает верные синонимы («вата минеральная» → Lemana отдаёт
+        // «Утеплитель Knauf …»). Лучше показать цену Lemana, чем пустоту.
+        const relevant = raw.filter(c => isRelevantCandidate(nm, c));
+        cands = relevant.length ? relevant : raw;
+      } catch (_) {}
       if (!cands.length) return false;
       const c = cands[0];
       setEstimate(prev => prev.map(r => {
