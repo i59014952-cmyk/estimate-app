@@ -4,6 +4,7 @@ const USER_CATALOG_KEY = "kh-user-catalog-v1";
 const HIDDEN_CATALOG_KEY = "kh-hidden-catalog-v1";
 const ESTIMATE_KEY = "kh-estimate-v1";
 const ESTIMATE_SAVED_KEY = "kh-estimate-saved-at-v1";
+const LEMANA_JOBS_KEY = "kh-lemana-jobs-v1";
 const CAT_OVERRIDE_KEY = "kh-cat-override-v1";
 const MARKUP_KEY = "kh-markup-v1";
 const META_KEY = "kh-meta-v1";
@@ -101,6 +102,30 @@ function saveEstimate(rows) {
     localStorage.setItem(_ek(ESTIMATE_SAVED_KEY), String(ts));
     return ts;
   } catch (_) { return null; }
+}
+
+// Активные фоновые Lemana-задачи. Сохраняем, чтобы возобновить опрос после
+// перезагрузки страницы — иначе незавершённые позиции навсегда останутся со
+// спиннером без цены (пользователь жал F5 и часть цен «терялась»).
+function loadLemanaJobs() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(_ek(LEMANA_JOBS_KEY)) || "null");
+    if (!raw || !Array.isArray(raw.jobs) || !raw.at) return null;
+    // Старше 2 часов — протухли (бэкенд держит задачу максимум ~90 мин).
+    if (Date.now() - raw.at > 2 * 60 * 60 * 1000) return null;
+    const jobs = raw.jobs.filter(j => j && j.jobId && Array.isArray(j.names));
+    return jobs.length ? jobs : null;
+  } catch (_) { return null; }
+}
+
+function saveLemanaJobs(jobs) {
+  try {
+    if (jobs && jobs.length) {
+      localStorage.setItem(_ek(LEMANA_JOBS_KEY), JSON.stringify({ at: Date.now(), jobs }));
+    } else {
+      localStorage.removeItem(_ek(LEMANA_JOBS_KEY));
+    }
+  } catch (_) {}
 }
 
 function loadHiddenCatalog() {
@@ -599,6 +624,83 @@ function useEstimate() {
     fail(new Error('поддерживаются только Excel (.xlsx/.xls), PDF, Word (.docx), CSV'));
   }, [importRows]);
 
+  // Фоновый опрос Lemana-задач: по мере готовности позиций тянем их из кэша и
+  // подставляем цену, снимая спиннер. Вынесен на уровень хука, чтобы его можно
+  // было ВОЗОБНОВИТЬ после перезагрузки страницы (см. эффект ниже), а не только
+  // запускать из fetchPricesForNotFound.
+  //
+  // Надёжность: позицию НЕ «сжигаем», если цены ещё нет в кэше. Бэкенд может
+  // отметить запрос обработанным (done_count++) на миг раньше, чем запись в
+  // кэш — тогда searchLemana вернёт пусто. Раньше мы сразу гасили спиннер без
+  // цены и больше не пытались → цена терялась. Теперь оставляем спиннер и
+  // повторяем на следующем цикле; когда задача завершилась — финальный полный
+  // проход по кэшу, и лишь затем снимаем спиннеры с не нашедшихся.
+  const pollLemanaJobs = React.useCallback(async (jobs) => {
+    if (!jobs || !jobs.length) return;
+    saveLemanaJobs(jobs);                 // запомнить для возобновления после F5
+    const applied = new Set();            // имена, которым цена уже подставлена
+    const nullStreak = {};                // подряд неответов статуса по задаче
+    const deadline = Date.now() + 90 * 60 * 1000;   // максимум 90 минут
+
+    // Достать позицию из кэша и подставить цену. true — если цена подставлена.
+    const tryApply = async (nm) => {
+      let cands = [];
+      try { cands = (await searchLemana(nm)).filter(c => c.price && isRelevantCandidate(nm, c)); } catch (_) {}
+      if (!cands.length) return false;
+      const c = cands[0];
+      setEstimate(prev => prev.map(r => {
+        if (r.name !== nm || !r.lemanaPending || !r.notFound) return r;
+        return {
+          ...r, lemanaPending: false, candidates: cands,
+          name: c.name || r.name, unitPrice: c.price, unit: c.unit || r.unit || 'шт.',
+          source: 'lemana', sourceLabel: c.sourceLabel || 'Лемана ПРО',
+          url: c.url || '', notFound: false, expanded: false,
+        };
+      }));
+      return true;
+    };
+
+    while (Date.now() < deadline) {
+      let allDone = true;
+      for (const job of jobs) {
+        const st = await getLemanaJobStatus(job.jobId);
+        if (!st) {
+          // Статус не пришёл. Пробуем достать из кэша то, что уже записано.
+          for (const nm of (job.names || [])) {
+            if (!applied.has(nm) && await tryApply(nm)) applied.add(nm);
+          }
+          nullStreak[job.jobId] = (nullStreak[job.jobId] || 0) + 1;
+          // ≥4 неответов подряд (~20с) — считаем задачу пропавшей (бэкенд
+          // перезапущен / протухла) и больше не ждём её. Иначе — временный сбой,
+          // продолжаем ждать.
+          if (nullStreak[job.jobId] < 4) allDone = false;
+          continue;
+        }
+        nullStreak[job.jobId] = 0;
+        const readyNames = (job.names || []).slice(0, st.done_count || 0);
+        for (const nm of readyNames) {
+          if (applied.has(nm)) continue;
+          if (await tryApply(nm)) applied.add(nm);   // промах — повторим на след. цикле
+        }
+        if (!['done', 'failed', 'cancelled'].includes(st.status)) allDone = false;
+      }
+      if (allDone) {
+        // Финальный проход: задачи завершены, кэш точно записан — добираем всё,
+        // что осталось (в т.ч. при обработке не по порядку).
+        for (const job of jobs) {
+          for (const nm of (job.names || [])) {
+            if (!applied.has(nm) && await tryApply(nm)) applied.add(nm);
+          }
+        }
+        break;
+      }
+      await new Promise(res => setTimeout(res, 5000));
+    }
+    // Снять спиннер со всех оставшихся (не нашлись или вышло время).
+    setEstimate(prev => prev.map(r => r.lemanaPending ? { ...r, lemanaPending: false } : r));
+    saveLemanaJobs(null);                 // задачи завершены — убрать из хранилища
+  }, []);
+
   const fetchPricesForNotFound = React.useCallback(async () => {
     // Уже идёт фоновая Lemana-задача — не запускаем вторую (защита от перегрузки).
     if (lemanaBgActiveRef.current) return;
@@ -683,46 +785,6 @@ function useEstimate() {
       return { filled, failed };
     };
 
-    // Фоновый опрос Lemana-задачи: по мере готовности позиций тянем их из кэша
-    // и подставляем цену, снимая индикатор загрузки. В конце снимаем индикатор
-    // со всех оставшихся. Работает поверх инлайн-проходов, не блокируя UI.
-    const pollLemanaJobs = async (jobs) => {
-      if (!jobs || !jobs.length) return;
-      const applied = new Set();
-      const deadline = Date.now() + 90 * 60 * 1000;   // максимум 90 минут
-      while (Date.now() < deadline) {
-        let allDone = true;
-        for (const job of jobs) {
-          const st = await getLemanaJobStatus(job.jobId);
-          if (!st) { allDone = false; continue; }
-          const readyNames = (job.names || []).slice(0, st.done_count || 0);
-          for (const nm of readyNames) {
-            if (applied.has(nm)) continue;
-            applied.add(nm);
-            let cands = [];
-            try { cands = (await searchLemana(nm)).filter(c => c.price && isRelevantCandidate(nm, c)); } catch (_) {}
-            setEstimate(prev => prev.map(r => {
-              if (r.name !== nm || !r.lemanaPending) return r;
-              if (r.notFound && cands.length) {
-                const c = cands[0];
-                return {
-                  ...r, lemanaPending: false, candidates: cands,
-                  name: c.name || r.name, unitPrice: c.price, unit: c.unit || r.unit || 'шт.',
-                  source: 'lemana', sourceLabel: c.sourceLabel || 'Лемана ПРО',
-                  url: c.url || '', notFound: false, expanded: false,
-                };
-              }
-              return { ...r, lemanaPending: false };
-            }));
-          }
-          if (!['done', 'failed', 'cancelled'].includes(st.status)) allDone = false;
-        }
-        if (allDone) break;
-        await new Promise(res => setTimeout(res, 5000));
-      }
-      setEstimate(prev => prev.map(r => r.lemanaPending ? { ...r, lemanaPending: false } : r));
-    };
-
     try {
       // Первый проход.
       const pass1 = await runPass(initialTargets, 0, initialTargets.length);
@@ -784,7 +846,30 @@ function useEstimate() {
         });
       }
     }
-  }, []);
+  }, [pollLemanaJobs]);
+
+  // Возобновление фоновых Lemana-задач после перезагрузки страницы. Если поиск
+  // ещё не завершился, а пользователь обновил вкладку — восстанавливаем спиннеры
+  // и продолжаем опрос: позиции дополучат цену сами, без повторного запуска
+  // поиска. Это и есть то, что раньше «лечилось» ручным F5, только теперь
+  // надёжно и автоматически.
+  React.useEffect(() => {
+    const jobs = loadLemanaJobs();
+    if (!jobs) return;
+    const pendingNames = new Set(jobs.flatMap(j => j.names || []));
+    setEstimate(prev => {
+      let changed = false;
+      const next = prev.map(r => {
+        if (r.notFound && !r.lemanaPending && pendingNames.has(r.name)) { changed = true; return { ...r, lemanaPending: true }; }
+        return r;
+      });
+      return changed ? next : prev;
+    });
+    setLemanaBg(true);
+    pollLemanaJobs(jobs)
+      .catch(err => console.error('[lemana resume]', err))
+      .finally(() => setLemanaBg(false));
+  }, [pollLemanaJobs]);
 
   const exportCsv = React.useCallback(() => {
     if (estimate.length === 0) return;
