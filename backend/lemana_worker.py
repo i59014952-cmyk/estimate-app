@@ -174,7 +174,7 @@ class LemanaWorker:
                         job_id, status="failed", error=str(e)[:300],
                         finished_at=datetime.utcnow(),
                     )
-                    await asyncio.to_thread(self._restart_session_sync)
+                    await asyncio.to_thread(self._hard_restart_session_sync)
 
     async def _gc_loop(self) -> None:
         while True:
@@ -201,11 +201,9 @@ class LemanaWorker:
             job_id, status="running", started_at=datetime.utcnow(),
         )
 
-        try:
-            await asyncio.to_thread(self._ensure_session_sync, job.city)
-        except Exception as e:
-            raise RuntimeError(f"session start failed: {e}") from e
-
+        # Сессию НЕ поднимаем здесь заранее (без таймаута старт Chrome мог бы
+        # зависнуть и подвесить job): её поднимает/восстанавливает каждый запрос
+        # в _run_query_with_retry — под таймаутом и с жёстким убийством при сбое.
         results: list[dict] = []
         for q in job.queries:
             current = await self.store.get(job_id)
@@ -216,7 +214,7 @@ class LemanaWorker:
                 )
                 return
             await self.store.update(job_id, current_query=q)
-            result = await self._run_query_with_retry(q, job.limit_per_query)
+            result = await self._run_query_with_retry(q, job.limit_per_query, job.city)
             results.append(result)
             if result.get("ok") and self.on_query_result:
                 try:
@@ -232,34 +230,36 @@ class LemanaWorker:
             results=results, finished_at=datetime.utcnow(),
         )
 
-    async def _run_query_with_retry(self, query: str, limit: int) -> dict:
-        """Одна query: per-query таймаут + одна попытка restart при WebDriverException."""
+    async def _run_query_with_retry(self, query: str, limit: int, city: str) -> dict:
+        """Одна query: поднять/восстановить сессию и искать — ВСЁ под таймаутом.
+        ЛЮБОЙ сбой (таймаут asyncio или Selenium, мёртвая/зависшая сессия) лечим
+        ЖЁСТКИМ убийством процессов, а не вежливым restart: вежливый restart сам
+        зависает на полумёртвом драйвере (наблюдали на 'Доска обрезная …':
+        WebDriverWait timeout → restart висит → встаёт вся очередь). После
+        убийства следующая попытка/позиция поднимает свежий Chrome."""
         for attempt in (1, 2):
             try:
+                # Старт Chrome тоже под таймаутом — он может зависнуть (битый
+                # прокси / Qrator), а без таймаута подвесил бы весь job.
+                await asyncio.wait_for(
+                    asyncio.to_thread(self._ensure_session_sync, city),
+                    timeout=QUERY_TIMEOUT_SEC,
+                )
                 products = await asyncio.wait_for(
                     asyncio.to_thread(self._do_search_sync, query, limit),
                     timeout=QUERY_TIMEOUT_SEC,
                 )
                 return {"query": query, "ok": True, "products": products}
-            except asyncio.TimeoutError:
-                logger.warning("query '%s' timed out (attempt %d)", query, attempt)
-                # Таймаут = браузер завис: вежливый restart сам бы повис на
-                # мёртвом драйвере. Жёстко убиваем процессы и поднимаем заново.
+            except (asyncio.TimeoutError, WebDriverException, RuntimeError) as e:
+                logger.warning("query '%s' %s (attempt %d) — hard restart",
+                               query, type(e).__name__, attempt, exc_info=True)
                 await asyncio.to_thread(self._hard_restart_session_sync)
                 if attempt == 2:
-                    return {"query": query, "ok": False, "error": "timeout",
-                            "products": []}
-            except (WebDriverException, RuntimeError) as e:
-                # RuntimeError = 'search trigger not found' (битая страница/сессия):
-                # тоже перезапускаем сессию, иначе один сбой валит всю пачку.
-                logger.warning("query '%s' %s (attempt %d)",
-                               query, type(e).__name__, attempt, exc_info=True)
-                await asyncio.to_thread(self._restart_session_sync)
-                if attempt == 2:
                     return {"query": query, "ok": False,
-                            "error": f"{type(e).__name__}: {e}"[:200], "products": []}
+                            "error": f"{type(e).__name__}"[:200], "products": []}
             except Exception as e:
                 logger.exception("query '%s' failed", query)
+                await asyncio.to_thread(self._hard_restart_session_sync)
                 return {"query": query, "ok": False, "error": str(e)[:200],
                         "products": []}
         return {"query": query, "ok": False, "error": "unknown", "products": []}
@@ -324,6 +324,15 @@ class LemanaWorker:
                 os.kill(pid, signal.SIGKILL)
             except Exception:
                 pass
+        # Фолбэк по имени — на случай, когда PID-ов нет (завис САМ старт Chrome,
+        # объект сессии ещё не присвоен). Бьём только uc-chromedriver и
+        # google-chrome; Playwright-браузер Petrovich это НЕ задевает (у него нет
+        # chromedriver, а его chromium лежит в ms-playwright, не в google/chrome).
+        for pat in ("chromedriver", "google/chrome/chrome"):
+            try:
+                subprocess.run(["pkill", "-9", "-f", pat], timeout=5)
+            except Exception:
+                pass
         # роняем сессию без graceful-close (он завис бы на мёртвом драйвере)
         self._session = None
         self._session_city = None
@@ -363,5 +372,5 @@ class LemanaWorker:
                 await asyncio.to_thread(self._hard_restart_session_sync)
                 raise
             except WebDriverException:
-                await asyncio.to_thread(self._restart_session_sync)
+                await asyncio.to_thread(self._hard_restart_session_sync)
                 raise
