@@ -604,16 +604,11 @@ function useEstimate() {
       bumpBusy(+1);
       setPricesBusy(true);
     }
-    // Фоновая пакетная загрузка Лемана ПРО: парсинг тяжёлый (по ~минуте на
-    // позицию через прокси за Qrator), поэтому отправляем все позиции одной
-    // фоновой задачей — она наполнит кэш, а searchLemana подтянет из кэша.
-    // Помечаем строки lemanaPending (индикатор загрузки) и опрашиваем задачу.
+    // Lemana запускаем ПОСЛЕ инлайн-поиска Petrovich/магазинов (см. ниже), чтобы
+    // тяжёлый браузер Lemana не конкурировал за ресурсы сервера с Petrovich
+    // (иначе Petrovich не успевает и «не ищет»). Сюда попадут только позиции,
+    // которые не нашли остальные источники.
     let lemanaJobs = [];
-    try { lemanaJobs = (await submitLemanaBatch(initialTargets.map(t => t.name))) || []; } catch (_) {}
-    if (lemanaJobs.length) {
-      const targetIds = new Set(initialTargets.map(t => t.id));
-      setEstimate(prev => prev.map(r => (targetIds.has(r.id) && r.notFound) ? { ...r, lemanaPending: true } : r));
-    }
     let totalFilled = 0, totalFailed = 0;
 
     // Один проход воркеров. progressBase позволяет ретраю продолжать счётчик
@@ -741,6 +736,18 @@ function useEstimate() {
         const pass2 = await runPass(retryTargets, initialTargets.length, totalWithRetry);
         totalFilled += pass2.filled;
         totalFailed = pass2.failed;
+      }
+
+      // Petrovich/магазины отработали (без конкуренции). Оставшиеся ненайденные
+      // позиции отдаём в фоновую Lemana-задачу — теперь она не мешает Petrovich.
+      const targetIds = new Set(initialTargets.map(t => t.id));
+      const lemanaTargets = estimateRef.current.filter(r => r.notFound && targetIds.has(r.id));
+      if (lemanaTargets.length) {
+        try { lemanaJobs = (await submitLemanaBatch(lemanaTargets.map(r => r.name))) || []; } catch (_) {}
+        if (lemanaJobs.length) {
+          const lids = new Set(lemanaTargets.map(r => r.id));
+          setEstimate(prev => prev.map(r => (lids.has(r.id) && r.notFound) ? { ...r, lemanaPending: true } : r));
+        }
       }
     } catch (err) {
       setStatus({ kind: "error", text: `Сервис цен недоступен: ${err.message}` });
