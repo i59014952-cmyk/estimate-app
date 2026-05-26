@@ -61,6 +61,36 @@ def _detect_chrome_major() -> Optional[int]:
     return None
 
 
+_DIM_RE = re.compile(r'\d+[.,]?\d*\s*[xх×*]\s*\d+[.,]?\d*', re.I)  # размеры 1200×2500
+_NUM_RE = re.compile(r'^\d+[.,]?\d*$')
+_NUMUNIT_RE = re.compile(r'^\d+[.,]?\d*(мм|см|м|м2|м²|мм2|кг|г|л|мл|шт|т|мп|кв|пог)\.?$', re.I)
+_DROP_TOKENS = {"мм", "см", "кв", "пог", "шт", "м2", "м²", "ду", "ø", "d", "класс",
+                "рулон", "флакон", "мешок", "упак", "уп", "мл", "л", "г", "кг", "т", "мп"}
+
+
+def _simplify_query(q: str) -> str:
+    """Упрощает название позиции для поиска на Lemana: убирает скобки, габариты
+    (1200×2500), числа с единицами (12.5 мм, 50 мм) и служебные слова. Lemana
+    ищет лучше по короткому названию («Пеноплэкс», «Гипсокартон ГКЛ»), чем по
+    полному с размерами/артикулами. Ранжирование кандидатов идёт по исходному
+    названию, так что точность не теряется."""
+    s = re.sub(r'\([^)]*\)', ' ', q)        # содержимое скобок: (XPS)
+    s = _DIM_RE.sub(' ', s)                  # размеры 1200×2500
+    keep = []
+    for t in re.split(r'[\s,;]+', s):
+        t = t.strip()
+        if not t:
+            continue
+        low = t.lower()
+        if _NUM_RE.fullmatch(t) or _NUMUNIT_RE.fullmatch(low) or low in _DROP_TOKENS:
+            continue
+        keep.append(t)
+        if len(keep) >= 5:
+            break
+    out = " ".join(keep).strip()
+    return out if len(out) >= 3 else q       # если перестарались — исходное
+
+
 CITY_TO_REGION = {
     "moscow": 506,
     "spb": 1448,
@@ -276,7 +306,10 @@ class LemanaSession:
     def search(self, query: str, limit: int = 5) -> list[ProductDict]:
         """Полный цикл: ввод запроса -> URL-ы карточек -> парсинг карточек."""
         assert self._driver is not None, "session not started"
-        urls = self._perform_search(query)[:limit]
+        sq = _simplify_query(query)
+        if sq != query:
+            logger.info("query simplified: %r -> %r", query, sq)
+        urls = self._perform_search(sq)[:limit]
         out: list[ProductDict] = []
         for url in urls:
             try:
