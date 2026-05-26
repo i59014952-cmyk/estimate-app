@@ -124,13 +124,15 @@ class LemanaSession:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         opts.add_argument("--window-size=1280,900")
-        # Экономия памяти (сервер 4 ГБ): один renderer, лимит JS-кучи, без кэша
-        # на диск и фоновых процессов — чтобы Chrome не раздувался и не вызывал OOM.
+        # Экономия памяти (сервер 4 ГБ): один renderer, лимит JS-кучи.
         opts.add_argument("--renderer-process-limit=1")
         opts.add_argument("--js-flags=--max-old-space-size=256")
-        opts.add_argument("--disk-cache-size=1")
-        opts.add_argument("--disable-application-cache")
         opts.add_argument("--disable-background-networking")
+        # Кэш ВКЛЮЧЁН (на диске, ~200 МБ): тяжёлые JS-бандлы lemanapro скачиваются
+        # один раз за сессию и переиспользуются на всех карточках/запросах задачи —
+        # это резко экономит трафик прокси (1 ГБ хватает надолго). Кэш на диске,
+        # на RAM почти не влияет.
+        opts.add_argument("--disk-cache-size=209715200")
         # Не грузим картинки: данные берём из JSON-LD/HTML (текст), а картинки
         # только жрут память и трафик прокси. Меньше RAM + быстрее загрузка.
         opts.add_argument("--blink-settings=imagesEnabled=false")
