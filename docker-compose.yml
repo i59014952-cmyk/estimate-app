@@ -20,8 +20,8 @@ services:
       LEMANA_HEADLESS: "0"
       # Таймауты увеличены под медленный мобильный прокси (телефон): страница
       # через мобильный канал + Qrator грузится дольше.
-      LEMANA_TIMEOUT_S: "300"
-      LEMANA_QUERY_TIMEOUT: "300"
+      LEMANA_TIMEOUT_S: "90"
+      LEMANA_QUERY_TIMEOUT: "90"
       # Фоновая пакетная задача (/lemana/jobs) парсит весь КП — даём ей много
       # времени: до ~50 позиций через медленный мобильный прокси.
       LEMANA_JOB_TIMEOUT: "9000"
