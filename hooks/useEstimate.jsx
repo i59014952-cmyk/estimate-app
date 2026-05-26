@@ -68,8 +68,11 @@ function loadEstimate() {
       catManual: x.catManual === true,
       markup: (x.markup != null && isFinite(Number(x.markup))) ? Number(x.markup) : null,
       url: String(x.url || ""),
+      sourceLabel: x.sourceLabel || null,
       expanded: false,
-      candidates: null,
+      // Восстанавливаем подобранные варианты замены (чтобы не пропадали после
+      // перезагрузки страницы).
+      candidates: Array.isArray(x.candidates) ? x.candidates : null,
       candidatesLoading: false,
       candidatesError: null,
     }));
@@ -83,6 +86,15 @@ function saveEstimate(rows) {
       qty: r.qty, notFound: !!r.notFound, source: r.source,
       category: r.category || 'material', catManual: r.catManual === true,
       markup: (r.markup != null && isFinite(Number(r.markup))) ? Number(r.markup) : null, url: r.url || "",
+      sourceLabel: r.sourceLabel || null,
+      // Сохраняем варианты замены (до 12 на позицию), чтобы они не пропадали
+      // после перезагрузки страницы. Поля урезаны до нужных для отображения.
+      candidates: Array.isArray(r.candidates)
+        ? r.candidates.slice(0, 12).map(c => ({
+            name: c.name, price: c.price, unit: c.unit || null, url: c.url || "",
+            city: c.city || null, source: c.source || null, sourceLabel: c.sourceLabel || null,
+          }))
+        : null,
     }));
     localStorage.setItem(_ek(ESTIMATE_KEY), JSON.stringify(slim));
     const ts = Date.now();
