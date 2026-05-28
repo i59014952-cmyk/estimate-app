@@ -14,7 +14,7 @@ const KH_IFC_WEBIFC_URL   = 'https://esm.sh/web-ifc@0.0.55';
 const KH_IFC_WASM_PATH    = 'https://unpkg.com/web-ifc@0.0.55/';
 const KH_IFC_BACKEND_BASE = (typeof window !== 'undefined' && window.PRICES_BACKEND) || 'https://api.sme-ta.ru';
 
-function KHIfcViewer({ open, fileId, fileName, onClose }) {
+function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
   const containerRef = React.useRef(null);
   const cleanupRef   = React.useRef(() => {});
   const [stage, setStage]       = React.useState('');           // текущий шаг
@@ -22,16 +22,20 @@ function KHIfcViewer({ open, fileId, fileName, onClose }) {
   const [error, setError]       = React.useState(null);
 
   React.useEffect(() => {
-    if (!open || !fileId) return;
+    if (!open || (!fileId && !fileUrl)) return;
     let cancelled = false;
     setStage('Загрузка модели с сервера…'); setProgress(0); setError(null);
     cleanupRef.current = () => {};
 
     (async () => {
       try {
-        // 1. Авторизованный fetch файла. Используем reader для прогресса.
+        // 1. Авторизованный fetch файла. fileUrl (для демо/каталога) приоритетнее
+        // fileId (загруженный пользователем файл). Используем reader для прогресса.
+        const url = fileUrl
+          ? (fileUrl.startsWith('http') ? fileUrl : `${KH_IFC_BACKEND_BASE}${fileUrl}`)
+          : `${KH_IFC_BACKEND_BASE}/object_files/${encodeURIComponent(fileId)}`;
         const tok = (window.KHAuth && await window.KHAuth.ensureToken()) || '';
-        const resp = await fetch(`${KH_IFC_BACKEND_BASE}/object_files/${encodeURIComponent(fileId)}`, {
+        const resp = await fetch(url, {
           headers: tok ? { Authorization: 'Bearer ' + tok } : {},
         });
         if (!resp.ok) throw new Error(`Не удалось получить файл (${resp.status})`);
@@ -187,7 +191,7 @@ function KHIfcViewer({ open, fileId, fileName, onClose }) {
       cancelled = true;
       try { cleanupRef.current(); } catch (_) {}
     };
-  }, [open, fileId]);
+  }, [open, fileId, fileUrl]);
 
   if (!open) return null;
   return (

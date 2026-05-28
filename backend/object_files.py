@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 import logging
 from pathlib import Path
@@ -32,6 +33,11 @@ router = APIRouter(tags=["object_files"])
 # Каталог хранения. По умолчанию /app/data/object_files (см. docker-compose volume),
 # для локальной разработки можно перекрыть через env OBJECT_FILES_DIR.
 OBJECT_FILES_DIR = Path(os.getenv("OBJECT_FILES_DIR", "/app/data/object_files"))
+
+# Каталог демо-файлов (IFC-модели как часть «каталога» — пользователь их только
+# смотрит, не загружает). Файлы кладёт админ напрямую на VPS, имя задаёт slug.
+DEMO_DIR = Path(os.getenv("OBJECT_FILES_DEMO_DIR", "/app/data/demo"))
+_DEMO_SAFE_SLUG = re.compile(r"^[a-z0-9_-]+$")
 
 # Защита от мусорных гигабайтных аплоадов. Можно поднять через env.
 MAX_FILE_BYTES = int(os.getenv("OBJECT_FILE_MAX_BYTES", str(100 * 1024 * 1024)))   # 100 МБ
@@ -184,3 +190,44 @@ async def delete_file(file_id: str, _email: str = Depends(auth.require_writer)):
         raise HTTPException(404, "Файл не найден")
     _file_path(file_id).unlink(missing_ok=True)
     return None
+
+
+@router.get("/demo/ifc/{slug}")
+async def stream_demo_ifc(slug: str, _email: str = Depends(auth.require_user)):
+    """Демо-IFC файлы (часть каталога). Админ кладёт их в DEMO_DIR/{slug}.ifc,
+    пользователи только смотрят (стрим без Content-Disposition). Slug проверяем
+    жёстко, чтобы не было path-traversal."""
+    if not _DEMO_SAFE_SLUG.match(slug):
+        raise HTTPException(400, "invalid slug")
+    path = DEMO_DIR / f"{slug}.ifc"
+    if not path.exists():
+        raise HTTPException(404, "demo file not found — положи файл в /app/data/demo/")
+    size = path.stat().st_size
+
+    def _iter():
+        with open(path, "rb") as f:
+            while True:
+                chunk = f.read(CHUNK_BYTES)
+                if not chunk:
+                    break
+                yield chunk
+
+    headers = {
+        "Content-Length": str(size),
+        "X-Content-Type-Options": "nosniff",
+        # демо общий → можно кэшировать в браузере; auth-only по private
+        "Cache-Control": "private, max-age=600",
+    }
+    return StreamingResponse(_iter(), media_type="application/octet-stream", headers=headers)
+
+
+@router.get("/demo/ifc/{slug}/info")
+async def demo_ifc_info(slug: str, _email: str = Depends(auth.require_user)):
+    """Метаданные о демо-файле (для UI: чтобы знать, есть он или нет, размер)."""
+    if not _DEMO_SAFE_SLUG.match(slug):
+        raise HTTPException(400, "invalid slug")
+    path = DEMO_DIR / f"{slug}.ifc"
+    if not path.exists():
+        return {"slug": slug, "exists": False, "filename": None, "size_bytes": 0}
+    st = path.stat()
+    return {"slug": slug, "exists": True, "filename": f"{slug}.ifc", "size_bytes": st.st_size}
