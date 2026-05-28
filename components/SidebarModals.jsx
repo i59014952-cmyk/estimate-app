@@ -2195,7 +2195,7 @@ function KHModalRoot({ activeId, onClose, est, autoAdd, vendorFilter }) {
   const view = activeId ? KH_VIEWS[activeId] : null;
   const C = view ? view.comp : null;
   return (
-    <KHModal open={!!activeId} onClose={onClose} title={view?.title} subtitle={view?.sub} wide={activeId === 'database'}>
+    <KHModal open={!!activeId} onClose={onClose} title={view?.title} subtitle={view?.sub} wide={activeId === 'database' || activeId === 'templates'}>
       {C && <C est={est} onClose={onClose} autoAdd={autoAdd} vendorFilter={vendorFilter} />}
     </KHModal>
   );
