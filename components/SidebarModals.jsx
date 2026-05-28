@@ -2035,7 +2035,8 @@ function KHTemplatesView({ est, onClose }) {
                 </div>
               )}
               {isOpen && (t.items || []).length > 0 && (
-                <table className="kh-table" style={{ marginTop: 4 }}>
+                <div style={{ marginTop: 4, overflowX: 'auto' }}>
+                <table className="kh-table" style={{ width: '100%', minWidth: 900 }}>
                   <thead><tr>
                     <th style={{ width: 34, textAlign: 'center' }}>
                       <input type="checkbox"
@@ -2049,14 +2050,14 @@ function KHTemplatesView({ est, onClose }) {
                           });
                         }} />
                     </th>
-                    <th style={{ width: 92 }}>Категория</th>
-                    <th>Наименование</th>
-                    <th style={{ width: 70 }}>Ед.</th>
-                    <th className="num" style={{ width: 90 }}>Кол-во</th>
-                    <th className="num" style={{ width: 120, whiteSpace: 'nowrap' }}>Цена</th>
-                    <th className="num" style={{ width: 150, whiteSpace: 'nowrap' }}>Сумма</th>
-                    <th style={{ width: 130 }}>Подрядчик</th>
-                    <th style={{ width: 40 }}></th>
+                    <th style={{ width: 88, whiteSpace: 'nowrap' }}>Категория</th>
+                    <th style={{ minWidth: 260 }}>Наименование</th>
+                    <th style={{ width: 64, whiteSpace: 'nowrap' }}>Ед.</th>
+                    <th className="num" style={{ width: 82, whiteSpace: 'nowrap' }}>Кол-во</th>
+                    <th className="num" style={{ width: 112, whiteSpace: 'nowrap' }}>Цена</th>
+                    <th className="num" style={{ width: 140, whiteSpace: 'nowrap' }}>Сумма</th>
+                    <th style={{ width: 110 }}>Подрядчик</th>
+                    <th style={{ width: 36 }}></th>
                   </tr></thead>
                   <tbody>
                     {(() => {
@@ -2106,7 +2107,7 @@ function KHTemplatesView({ est, onClose }) {
                             }}
                           />
                         </td>
-                        <td>{it.name}</td>
+                        <td style={{ minWidth: 260, wordBreak: 'normal', overflowWrap: 'break-word' }}>{it.name}</td>
                         <td>
                           <input
                             value={it.unit || ''}
@@ -2148,6 +2149,7 @@ function KHTemplatesView({ est, onClose }) {
                     })()}
                   </tbody>
                 </table>
+                </div>
               )}
               {isOpen && isAddingItem && (
                 <form onSubmit={(e) => { e.preventDefault(); addItem(t.id); }}
