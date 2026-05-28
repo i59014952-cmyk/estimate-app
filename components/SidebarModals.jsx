@@ -481,8 +481,15 @@ function KHObjectsView() {
     window.SB.selectAll('kh_objects', 'order=updated_at.desc').then(remote => {
       if (cancelled || !Array.isArray(remote)) return;
       if (remote.length) {
-        setList(remote);
-        khSaveObjectsLocal(remote);
+        // Облачная схема не хранит demo/demoIfcSlug — обогащаем по совпадению
+        // имени с сидом, иначе закреплённая 3D-модель «теряется» после рестарта.
+        const seedByName = new Map(KH_OBJECTS_SEED.map(s => [(s.name || '').trim().toLowerCase(), s]));
+        const enriched = remote.map(o => {
+          const seed = seedByName.get((o.name || '').trim().toLowerCase());
+          return seed && seed.demo ? { ...o, demo: true, demoIfcSlug: seed.demoIfcSlug } : o;
+        });
+        setList(enriched);
+        khSaveObjectsLocal(enriched);
       } else {
         const local = khLoadObjects();
         if (local.length) khSaveObjects(local);
