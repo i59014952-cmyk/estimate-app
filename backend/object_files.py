@@ -56,6 +56,10 @@ async def ensure_schema() -> None:
     добавляем колонку kind для уже существующих БД."""
     OBJECT_FILES_DIR.mkdir(parents=True, exist_ok=True)
     async with pool().acquire() as conn:
+        # Каждый стейтмент отдельно — иначе один сбой откатывает всю транзакцию.
+        # ВАЖНО: alter table ... add column kind ВЫПОЛНЯЕМ ДО создания индекса,
+        # который ссылается на kind (иначе на старой БД индекс падал «column does
+        # not exist» и валил весь блок, ALTER до него не дотягивал).
         await conn.execute("""
             create table if not exists kh_object_files (
               id            text primary key,
@@ -67,11 +71,10 @@ async def ensure_schema() -> None:
               uploaded_by   text,
               kind          text
             );
-            create index if not exists kh_object_files_obj  on kh_object_files (object_id);
-            create index if not exists kh_object_files_kind on kh_object_files (object_id, kind);
-            -- старые БД без колонки kind — добавим без падения
-            alter table kh_object_files add column if not exists kind text;
         """)
+        await conn.execute("alter table kh_object_files add column if not exists kind text;")
+        await conn.execute("create index if not exists kh_object_files_obj  on kh_object_files (object_id);")
+        await conn.execute("create index if not exists kh_object_files_kind on kh_object_files (object_id, kind);")
 
 
 @router.post("/objects/{object_id}/files")
