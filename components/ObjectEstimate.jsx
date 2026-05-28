@@ -123,11 +123,19 @@ function KHObjectEstimate({ objectId }) {
 
   // ----- рендер --------------------------------------------------------------
   const btn = {
-    padding: '6px 12px', fontSize: 12, fontWeight: 600,
+    padding: '7px 14px', fontSize: 13, fontWeight: 600,
     border: '1px solid var(--rust)', borderRadius: 6,
     background: 'var(--paper)', color: 'var(--rust)', cursor: 'pointer',
   };
-  const cell = { padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 4, background: 'var(--paper)', fontSize: 12, color: 'var(--ink)' };
+  const cell = { padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 4, background: 'var(--paper)', fontSize: 13, color: 'var(--ink)' };
+  // Разделение на «Работы» / «Материалы» с сохранением порядка внутри секций.
+  const isWork = (it) => khObjEstCat(it) === 'work';
+  const works = items.filter(isWork);
+  const mats  = items.filter(it => !isWork(it));
+  const sectionSum = (arr) => arr.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+  const sections = [];
+  if (works.length) sections.push({ key: 'work', title: 'РАБОТЫ', items: works, sum: sectionSum(works) });
+  if (mats.length)  sections.push({ key: 'material', title: 'МАТЕРИАЛЫ (цены уже с НДС)', items: mats, sum: sectionSum(mats) });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8 }}>
@@ -193,81 +201,125 @@ function KHObjectEstimate({ objectId }) {
         <button style={btn} onClick={addBlank}>+ Вручную</button>
       </div>
 
-      <div style={{ overflow: 'auto', minHeight: 0, border: '1px solid var(--rule)', borderRadius: 8 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <div style={{ overflow: 'auto', minHeight: 0, border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--paper)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
           <thead>
-            <tr style={{ background: 'var(--paper-2, #f0e6d2)', fontSize: 10, letterSpacing: '.16em', color: 'var(--ink-3)' }}>
-              <th style={{ padding: '8px 10px', textAlign: 'left', width: 84 }}>КАТЕГОРИЯ</th>
-              <th style={{ padding: '8px 10px', textAlign: 'left' }}>НАИМЕНОВАНИЕ</th>
-              <th style={{ padding: '8px 10px', width: 56, textAlign: 'left' }}>ЕД.</th>
-              <th style={{ padding: '8px 10px', width: 72, textAlign: 'right' }}>КОЛ-ВО</th>
-              <th style={{ padding: '8px 10px', width: 100, textAlign: 'right' }}>ЦЕНА</th>
-              <th style={{ padding: '8px 10px', width: 110, textAlign: 'right' }}>СУММА</th>
-              <th style={{ width: 32 }}></th>
+            <tr style={{ background: 'var(--paper-2, #f0e6d2)', fontSize: 10, letterSpacing: '.18em', color: 'var(--ink-3)' }}>
+              <th style={{ padding: '10px 12px', textAlign: 'left', width: 100 }}>КАТЕГОРИЯ</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left' }}>НАИМЕНОВАНИЕ</th>
+              <th style={{ padding: '10px 12px', width: 70, textAlign: 'left' }}>ЕД.</th>
+              <th style={{ padding: '10px 12px', width: 90, textAlign: 'right' }}>КОЛ-ВО</th>
+              <th style={{ padding: '10px 12px', width: 130, textAlign: 'right' }}>ЦЕНА, ₽</th>
+              <th style={{ padding: '10px 12px', width: 160, textAlign: 'right' }}>СУММА, ₽</th>
+              <th style={{ width: 40 }}></th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: 'var(--ink-4)' }}>
+              <tr><td colSpan={7} style={{ padding: 28, textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
                 Смета пуста — добавь позиции кнопками сверху.
               </td></tr>
             )}
-            {items.map(it => {
-              const sum = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
-              return (
-                <tr key={it.id} style={{ borderTop: '1px solid var(--rule)' }}>
-                  <td style={{ padding: '4px 6px' }}>
-                    <select value={khObjEstCat(it)} onChange={e => update(it.id, { category: e.target.value })}
-                      style={{ ...cell, fontWeight: 600,
-                        color: khObjEstCat(it) === 'work' ? '#fff' : 'var(--ink-2)',
-                        background: khObjEstCat(it) === 'work' ? 'var(--moss, #4f6f52)' : 'var(--paper)',
-                        borderColor: khObjEstCat(it) === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)' }}>
-                      <option value="work">Работа</option>
-                      <option value="material">Материал</option>
-                    </select>
+            {sections.map((sec, secIdx) => (
+              <React.Fragment key={sec.key}>
+                <tr style={{ background: 'var(--paper-2, #f0e6d2)' }}>
+                  <td colSpan={5} style={{
+                    padding: '11px 14px', fontSize: 11, fontWeight: 700,
+                    letterSpacing: '.18em', color: 'var(--rust)',
+                    borderTop: secIdx === 0 ? 'none' : '1px solid var(--rule)',
+                  }}>
+                    {sec.title} · {sec.items.length}
                   </td>
-                  <td style={{ padding: '4px 6px' }}>
-                    <input value={it.name || ''} placeholder="Наименование"
-                      onChange={e => update(it.id, { name: e.target.value })}
-                      style={{ ...cell, width: '100%' }} />
+                  <td style={{
+                    padding: '11px 14px', textAlign: 'right', fontSize: 12, fontWeight: 700,
+                    color: 'var(--rust)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+                    borderTop: secIdx === 0 ? 'none' : '1px solid var(--rule)',
+                  }}>
+                    {khObjEstFmt(sec.sum)} ₽
                   </td>
-                  <td style={{ padding: '4px 6px' }}>
-                    <input value={it.unit || ''} placeholder="ед."
-                      onChange={e => update(it.id, { unit: e.target.value })}
-                      style={{ ...cell, width: '100%' }} />
-                  </td>
-                  <td style={{ padding: '4px 6px', textAlign: 'right' }}>
-                    <input type="number" min="0" step="0.01" value={it.qty ?? 0}
-                      onChange={e => update(it.id, { qty: e.target.value })}
-                      style={{ ...cell, width: '100%', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
-                  </td>
-                  <td style={{ padding: '4px 6px', textAlign: 'right' }}>
-                    <input type="number" min="0" step="0.01" value={it.unitPrice ?? 0}
-                      onChange={e => update(it.id, { unitPrice: e.target.value })}
-                      style={{ ...cell, width: '100%', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
-                  </td>
-                  <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                    {sum > 0 ? `${khObjEstFmt(sum)} ₽` : '—'}
-                  </td>
-                  <td style={{ padding: '4px 6px', textAlign: 'center' }}>
-                    <button onClick={() => remove(it.id)} title="Удалить"
-                      style={{ border: 0, background: 'transparent', color: 'var(--rust)', cursor: 'pointer', fontSize: 16, padding: 4 }}>×</button>
-                  </td>
+                  <td style={{
+                    borderTop: secIdx === 0 ? 'none' : '1px solid var(--rule)',
+                  }}></td>
                 </tr>
-              );
-            })}
+                {sec.items.map((it, rowIdx) => {
+                  const sum = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+                  const zebra = rowIdx % 2 === 1 ? 'rgba(160,122,74,.035)' : 'transparent';
+                  return (
+                    <tr key={it.id} style={{ background: zebra, borderTop: '1px solid var(--rule)' }}>
+                      <td style={{ padding: '6px 8px' }}>
+                        <select value={khObjEstCat(it)} onChange={e => update(it.id, { category: e.target.value })}
+                          style={{ ...cell, fontWeight: 600, width: '100%',
+                            color: khObjEstCat(it) === 'work' ? '#fff' : 'var(--ink-2)',
+                            background: khObjEstCat(it) === 'work' ? 'var(--moss, #4f6f52)' : 'var(--paper)',
+                            borderColor: khObjEstCat(it) === 'work' ? 'var(--moss, #4f6f52)' : 'var(--rule)' }}>
+                          <option value="work">Работа</option>
+                          <option value="material">Материал</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <input value={it.name || ''} placeholder="Наименование"
+                          onChange={e => update(it.id, { name: e.target.value })}
+                          style={{ ...cell, width: '100%' }} />
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <input value={it.unit || ''} placeholder="ед."
+                          onChange={e => update(it.id, { unit: e.target.value })}
+                          style={{ ...cell, width: '100%' }} />
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                        <input type="number" min="0" step="0.01" value={it.qty ?? 0}
+                          onChange={e => update(it.id, { qty: e.target.value })}
+                          style={{ ...cell, width: '100%', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                        <input type="number" min="0" step="0.01" value={it.unitPrice ?? 0}
+                          onChange={e => update(it.id, { unitPrice: e.target.value })}
+                          style={{ ...cell, width: '100%', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
+                      </td>
+                      <td style={{
+                        padding: '6px 12px', textAlign: 'right', whiteSpace: 'nowrap',
+                        fontVariantNumeric: 'tabular-nums', fontSize: 14, fontWeight: 700,
+                        color: sum > 0 ? 'var(--ink)' : 'var(--ink-4)',
+                      }}>
+                        {sum > 0 ? `${khObjEstFmt(sum)} ₽` : '—'}
+                      </td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                        <button onClick={() => remove(it.id)} title="Удалить позицию"
+                          style={{ border: 0, background: 'transparent', color: 'var(--rust)', cursor: 'pointer', fontSize: 18, padding: 4, lineHeight: 1 }}>×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </tbody>
         </table>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 10px', borderTop: '1px solid var(--rule)' }}>
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Работы: <b style={{ color: 'var(--ink)' }}>{khObjEstFmt(totals.work)} ₽</b></span>
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Материалы (с НДС): <b style={{ color: 'var(--ink)' }}>{khObjEstFmt(totals.mat)} ₽</b></span>
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>НДС 22% (на работы): <b style={{ color: 'var(--ink)' }}>{khObjEstFmt(totals.vat)} ₽</b></span>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-          Итого: {khObjEstFmt(totals.grand)} ₽
-        </span>
+      {/* Карточка итогов */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 14, alignItems: 'end',
+        padding: '14px 18px', background: 'var(--paper-2, #f0e6d2)',
+        border: '1px solid var(--rule)', borderRadius: 10,
+      }}>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: '.18em', color: 'var(--ink-3)', marginBottom: 4 }}>РАБОТЫ</div>
+          <div style={{ fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{khObjEstFmt(totals.work)} ₽</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: '.18em', color: 'var(--ink-3)', marginBottom: 4 }}>МАТЕРИАЛЫ (С НДС)</div>
+          <div style={{ fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{khObjEstFmt(totals.mat)} ₽</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: '.18em', color: 'var(--ink-3)', marginBottom: 4 }}>НДС 22% (НА РАБОТЫ)</div>
+          <div style={{ fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{khObjEstFmt(totals.vat)} ₽</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 10, letterSpacing: '.18em', color: 'var(--rust)', marginBottom: 4 }}>ИТОГО</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--ink)', whiteSpace: 'nowrap' }}>
+            {khObjEstFmt(totals.grand)} ₽
+          </div>
+        </div>
       </div>
     </div>
   );
