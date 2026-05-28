@@ -709,6 +709,12 @@ function KHObjectsView() {
                   ? <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'completed')}>✓ Завершить</button>
                   : <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'active')}>↶ В активные</button>}
               </div>
+              {/* Галерея фото объекта: «Визуализация» и «Чертежи». */}
+              {window.KHObjectPhotos && (
+                <div style={{ marginTop: 4 }}>
+                  {React.createElement(window.KHObjectPhotos, { objectId: o.id })}
+                </div>
+              )}
             </div>
           );
         })}

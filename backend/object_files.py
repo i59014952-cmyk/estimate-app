@@ -20,8 +20,9 @@ import logging
 from pathlib import Path
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.responses import StreamingResponse
+from typing import Optional
 
 import auth
 from db import pool
@@ -41,7 +42,7 @@ _DEMO_SAFE_SLUG = re.compile(r"^[a-z0-9_-]+$")
 
 # Защита от мусорных гигабайтных аплоадов. Можно поднять через env.
 MAX_FILE_BYTES = int(os.getenv("OBJECT_FILE_MAX_BYTES", str(100 * 1024 * 1024)))   # 100 МБ
-MAX_FILES_PER_OBJECT = int(os.getenv("OBJECT_FILE_MAX_PER_OBJECT", "10"))
+MAX_FILES_PER_OBJECT = int(os.getenv("OBJECT_FILE_MAX_PER_OBJECT", "50"))   # IFC + 2 галереи фото
 CHUNK_BYTES = 1 << 20   # 1 МБ
 
 
@@ -51,7 +52,8 @@ def _file_path(file_id: str) -> Path:
 
 async def ensure_schema() -> None:
     """Создать таблицу при старте, если её нет (на случай старой БД без
-    схемы из db/schema.sql — таблица добавилась позже)."""
+    схемы из db/schema.sql — таблица добавилась позже). Дополнительно
+    добавляем колонку kind для уже существующих БД."""
     OBJECT_FILES_DIR.mkdir(parents=True, exist_ok=True)
     async with pool().acquire() as conn:
         await conn.execute("""
@@ -62,9 +64,13 @@ async def ensure_schema() -> None:
               size_bytes    bigint not null,
               content_type  text,
               uploaded_at   timestamptz not null default now(),
-              uploaded_by   text
+              uploaded_by   text,
+              kind          text
             );
-            create index if not exists kh_object_files_obj on kh_object_files (object_id);
+            create index if not exists kh_object_files_obj  on kh_object_files (object_id);
+            create index if not exists kh_object_files_kind on kh_object_files (object_id, kind);
+            -- старые БД без колонки kind — добавим без падения
+            alter table kh_object_files add column if not exists kind text;
         """)
 
 
@@ -72,6 +78,7 @@ async def ensure_schema() -> None:
 async def upload_file(
     object_id: str,
     upload: UploadFile = File(...),
+    kind: Optional[str] = Form(default=None),
     email: str = Depends(auth.require_writer),
 ):
     # лимит количества файлов на объект — защита от случайной массовой загрузки
@@ -107,16 +114,21 @@ async def upload_file(
         logger.exception("upload write failed")
         raise HTTPException(500, f"Не удалось сохранить файл: {e}")
 
+    # Лимит — отдельный по kind, чтобы 100 рендеров не блокировали загрузку IFC.
+    kind_norm = (kind or "").strip().lower() or None
+    if kind_norm not in (None, "viz", "blueprint"):
+        path.unlink(missing_ok=True)
+        raise HTTPException(400, "kind must be 'viz' or 'blueprint' (or empty)")
     try:
         async with pool().acquire() as conn:
             row = await conn.fetchrow(
                 """
-                insert into kh_object_files (id, object_id, filename, size_bytes, content_type, uploaded_by)
-                values ($1, $2, $3, $4, $5, $6)
-                returning id, object_id, filename, size_bytes, content_type, uploaded_at, uploaded_by
+                insert into kh_object_files (id, object_id, filename, size_bytes, content_type, uploaded_by, kind)
+                values ($1, $2, $3, $4, $5, $6, $7)
+                returning id, object_id, filename, size_bytes, content_type, uploaded_at, uploaded_by, kind
                 """,
                 file_id, object_id, upload.filename or file_id, total,
-                upload.content_type or "application/octet-stream", email,
+                upload.content_type or "application/octet-stream", email, kind_norm,
             )
     except asyncpg.ForeignKeyViolationError:
         path.unlink(missing_ok=True)
@@ -130,17 +142,45 @@ async def upload_file(
 
 
 @router.get("/objects/{object_id}/files")
-async def list_files(object_id: str, _email: str = Depends(auth.require_user)):
+async def list_files(
+    object_id: str,
+    kind: Optional[str] = Query(default=None),   # 'viz' | 'blueprint' | None=все
+    _email: str = Depends(auth.require_user),
+):
+    if kind is not None and kind not in ("viz", "blueprint", "ifc"):
+        raise HTTPException(400, "invalid kind filter")
     async with pool().acquire() as conn:
-        rows = await conn.fetch(
-            """
-            select id, object_id, filename, size_bytes, content_type, uploaded_at, uploaded_by
-            from kh_object_files
-            where object_id = $1
-            order by uploaded_at desc
-            """,
-            object_id,
-        )
+        if kind == "ifc":
+            # «IFC» = старые записи без kind (загружали до этого деления).
+            rows = await conn.fetch(
+                """
+                select id, object_id, filename, size_bytes, content_type, uploaded_at, uploaded_by, kind
+                from kh_object_files
+                where object_id = $1 and kind is null
+                order by uploaded_at desc
+                """,
+                object_id,
+            )
+        elif kind is None:
+            rows = await conn.fetch(
+                """
+                select id, object_id, filename, size_bytes, content_type, uploaded_at, uploaded_by, kind
+                from kh_object_files
+                where object_id = $1
+                order by uploaded_at desc
+                """,
+                object_id,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                select id, object_id, filename, size_bytes, content_type, uploaded_at, uploaded_by, kind
+                from kh_object_files
+                where object_id = $1 and kind = $2
+                order by uploaded_at desc
+                """,
+                object_id, kind,
+            )
     return [dict(r) | {"uploaded_at": r["uploaded_at"].isoformat()} for r in rows]
 
 
