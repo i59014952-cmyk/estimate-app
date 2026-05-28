@@ -2053,8 +2053,8 @@ function KHTemplatesView({ est, onClose }) {
                     <th>Наименование</th>
                     <th style={{ width: 70 }}>Ед.</th>
                     <th className="num" style={{ width: 90 }}>Кол-во</th>
-                    <th className="num" style={{ width: 110 }}>Цена</th>
-                    <th className="num" style={{ width: 120 }}>Сумма</th>
+                    <th className="num" style={{ width: 120, whiteSpace: 'nowrap' }}>Цена</th>
+                    <th className="num" style={{ width: 150, whiteSpace: 'nowrap' }}>Сумма</th>
                     <th style={{ width: 130 }}>Подрядчик</th>
                     <th style={{ width: 40 }}></th>
                   </tr></thead>
@@ -2133,8 +2133,8 @@ function KHTemplatesView({ est, onClose }) {
                             }}
                           />
                         </td>
-                        <td className="num">{num(it.unitPrice)} ₽</td>
-                        <td className="num" style={{ fontWeight: 600, color: 'var(--ink)' }}>
+                        <td className="num" style={{ whiteSpace: 'nowrap' }}>{num(it.unitPrice)} ₽</td>
+                        <td className="num" style={{ fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
                           {(() => {
                             const s = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
                             return s > 0 ? `${num(s)} ₽` : '—';
