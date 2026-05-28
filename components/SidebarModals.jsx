@@ -257,7 +257,7 @@ function KHEstimatesView() {
 
 // ---------- Объекты ----------
 const KH_OBJECTS_KEY = 'kh-objects-v1';
-const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v2';
+const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v3';   // v3: добавлен «Тестовый — BasicHouse»
 window.KH_OBJECT_FILES = window.KH_OBJECT_FILES || new Map();
 const khLoadObjects = () => { try { return JSON.parse(localStorage.getItem(KH_OBJECTS_KEY) || '[]'); } catch { return []; } };
 const khSaveObjectsLocal = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
@@ -305,6 +305,15 @@ const KH_OBJECTS_SEED = [
     status: 'completed',
     note: 'Каркасный дом из КДК, 1.5 этажа. Подписаны акты КС-2/КС-3, гарантия — до 2026.',
   },
+  {
+    name: 'Тестовый — BasicHouse',
+    address: '— тестовый объект для проверки 3D-вьюера —',
+    area: 120, stage: 'Демо', date: '',
+    budget: 0,
+    client: 'Demo',
+    status: 'active',
+    note: 'Загрузите сюда IFC-модель (кнопка «📎 IFC на сервер»), затем «▶ Открыть в 3D» — модель откроется в браузере.',
+  },
 ];
 
 function khSeedObjectsIfNeeded(current) {
@@ -329,6 +338,79 @@ function KHObjectsView() {
   const [editingId, setEditingId] = React.useState(null);
   const [draft, setDraft] = React.useState(emptyObjDraft());
   const [, force] = React.useReducer(x => x + 1, 0);
+
+  // === Серверные файлы объектов (IFC и т.п.) — хранение на бэкенде ============
+  const [serverFilesByObj, setServerFilesByObj] = React.useState({});
+  const [uploadingForObj, setUploadingForObj]   = React.useState(null);
+  const [viewerFile, setViewerFile]             = React.useState(null);   // {id, name}|null
+  const ifcFileInputRef       = React.useRef(null);
+  const uploadTargetObjIdRef  = React.useRef(null);
+  const KH_API_BASE = (typeof window !== 'undefined' && window.PRICES_BACKEND) || 'https://api.sme-ta.ru';
+  const authFetch = React.useCallback(async (url, opts = {}) => {
+    const tok = (window.KHAuth && await window.KHAuth.ensureToken()) || '';
+    const headers = { ...(opts.headers || {}) };
+    if (tok) headers['Authorization'] = 'Bearer ' + tok;
+    return fetch(url, { ...opts, headers });
+  }, []);
+  const refreshServerFiles = React.useCallback(async (objectId) => {
+    try {
+      const r = await authFetch(`${KH_API_BASE}/objects/${encodeURIComponent(objectId)}/files`);
+      if (!r.ok) return;
+      const items = await r.json();
+      setServerFilesByObj(prev => ({ ...prev, [objectId]: items || [] }));
+    } catch (_) { /* офлайн — игнорим, покажем пустой */ }
+  }, [authFetch, KH_API_BASE]);
+  // Подгружаем список файлов для каждого объекта по разу (по мере появления).
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const o of list) {
+        if (cancelled) break;
+        if (serverFilesByObj[o.id] !== undefined) continue;
+        await refreshServerFiles(o.id);
+      }
+    })();
+    return () => { cancelled = true; };
+  // serverFilesByObj намеренно не в deps — иначе зацикл.
+  }, [list, refreshServerFiles]);
+  const onPickIfc = (objectId) => {
+    uploadTargetObjIdRef.current = objectId;
+    if (ifcFileInputRef.current) ifcFileInputRef.current.click();
+  };
+  const onIfcChange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    const objectId = uploadTargetObjIdRef.current;
+    if (!f || !objectId) return;
+    setUploadingForObj(objectId);
+    try {
+      const form = new FormData();
+      form.append('upload', f);
+      const r = await authFetch(`${KH_API_BASE}/objects/${encodeURIComponent(objectId)}/files`, {
+        method: 'POST', body: form,
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => '');
+        throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 160) : ''}`);
+      }
+      await refreshServerFiles(objectId);
+    } catch (err) {
+      alert('Не удалось загрузить файл: ' + (err.message || err));
+    } finally {
+      setUploadingForObj(null);
+    }
+  };
+  const removeServerFile = async (objectId, fileId, filename) => {
+    if (!confirm(`Удалить файл «${filename}»? Действие необратимо.`)) return;
+    try {
+      const r = await authFetch(`${KH_API_BASE}/object_files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+      if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+      await refreshServerFiles(objectId);
+    } catch (err) {
+      alert('Не удалось удалить файл: ' + (err.message || err));
+    }
+  };
+  // === конец блока серверных файлов ============================================
 
   const persist = (next) => { setList(next); khSaveObjects(next); };
 
@@ -543,8 +625,41 @@ function KHObjectsView() {
                   })}
                 </div>
               )}
+              {/* Серверные файлы (IFC) — отображаются, если есть */}
+              {(serverFilesByObj[o.id] || []).length > 0 && (
+                <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(serverFilesByObj[o.id] || []).map(sf => {
+                    const isIfc = /\.ifc$/i.test(sf.filename || '');
+                    return (
+                      <div key={sf.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                        border: '1px solid var(--rule)', borderRadius: 6,
+                        background: 'linear-gradient(180deg, var(--paper) 0%, var(--paper-2,#efe6d2) 100%)',
+                      }}>
+                        <span style={{ fontSize: 16 }}>{isIfc ? '🏠' : '📎'}</span>
+                        <span style={{ flex: 1, fontSize: 12, color: 'var(--ink-2)' }}>
+                          {sf.filename} · {sizeLabel(sf.size_bytes)}
+                        </span>
+                        {isIfc && (
+                          <button className="btn btn-sm" style={{ color: 'var(--rust)', borderColor: 'var(--rust)' }}
+                            onClick={() => setViewerFile({ id: sf.id, name: sf.filename })}>
+                            ▶ Открыть в 3D
+                          </button>
+                        )}
+                        <button className="btn btn-sm" style={{ color: 'var(--rust)' }}
+                          onClick={() => removeServerFile(o.id, sf.id, sf.filename)} title="Удалить">×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={() => attachFiles(o.id)}>+ Прикрепить файлы</button>
+                <button className="btn btn-sm" disabled={uploadingForObj === o.id}
+                  onClick={() => onPickIfc(o.id)}
+                  title="Загрузить IFC-модель на сервер">
+                  {uploadingForObj === o.id ? '⏳ Загрузка…' : '📎 IFC на сервер'}
+                </button>
                 {(o.status || 'active') === 'active'
                   ? <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'completed')}>✓ Завершить</button>
                   : <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'active')}>↶ В активные</button>}
@@ -553,6 +668,12 @@ function KHObjectsView() {
           );
         })}
       </div>
+      <input ref={ifcFileInputRef} type="file" accept=".ifc,application/octet-stream"
+        style={{ display: 'none' }} onChange={onIfcChange} />
+      {viewerFile && window.KHIfcViewer && React.createElement(window.KHIfcViewer, {
+        open: true, fileId: viewerFile.id, fileName: viewerFile.name,
+        onClose: () => setViewerFile(null),
+      })}
     </div>
   );
 }

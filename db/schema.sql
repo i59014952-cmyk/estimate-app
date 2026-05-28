@@ -142,3 +142,17 @@ create table if not exists kh_stores (
   added_at   timestamptz default now(),
   last_check timestamptz
 );
+
+-- Файлы, прикреплённые к объектам (IFC-модели, чертежи и т.п.). Хранятся на
+-- диске бэкенда (см. backend/object_files.py), в этой таблице — только
+-- метаданные. Скачивать клиенту не даём (стрим без Content-Disposition).
+create table if not exists kh_object_files (
+  id            text primary key,            -- uuid строки
+  object_id     text not null references kh_objects(id) on delete cascade,
+  filename      text not null,
+  size_bytes    bigint not null,
+  content_type  text,
+  uploaded_at   timestamptz not null default now(),
+  uploaded_by   text                          -- email оператора (для аудита)
+);
+create index if not exists kh_object_files_obj on kh_object_files (object_id);

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright, Browser, BrowserContext
 
 from lemana_api import router as lemana_router
+import object_files
 from lemana_worker import JobStore, LemanaWorker
 
 import auth
@@ -184,6 +185,13 @@ async def lifespan(app: FastAPI):
     app.state.lemana_worker = lemana_worker
 
     await db.connect()
+    # Создаём таблицу kh_object_files, если её ещё нет (старые БД без свежей
+    # схемы). И каталог для файлов на диске.
+    try:
+        await object_files.ensure_schema()
+    except Exception as e:
+        # Не валим стек — если БД ещё не готова или ALTER FK конфликт, видно в логах
+        print(f"[startup] object_files schema ensure failed: {e}")
     try:
         yield
     finally:
@@ -208,6 +216,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(db.router)
 app.include_router(lemana_router)
+app.include_router(object_files.router)
 
 
 async def _new_context(city: str) -> BrowserContext:
