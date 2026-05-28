@@ -138,10 +138,14 @@ function KHPhotoSection({ title, kind, objectId, files, refreshKind, onOpen, upl
                       width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer', display: 'block',
                     }} />
                 ) : (
-                  <div onClick={() => onOpen(kind, i)} title={f.filename} style={{
-                    width: '100%', height: '100%', display: 'grid', placeItems: 'center',
-                    cursor: 'pointer', color: 'var(--ink-4)', fontSize: 20,
-                  }}>📷</div>
+                  <div title={f.filename} style={{
+                    width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 6,
+                    color: 'var(--ink-3)', fontSize: 10, letterSpacing: '.1em',
+                  }}>
+                    <span className="kh-spinner" />
+                    <span>ЗАГРУЗКА</span>
+                  </div>
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFile(f.id, f.filename, kind); }}
@@ -184,28 +188,26 @@ function KHObjectPhotos({ objectId }) {
 
   React.useEffect(() => { refreshKind('viz'); refreshKind('blueprint'); }, [refreshKind]);
 
-  // Подгрузить blob-URL для тех файлов, у которых его ещё нет.
+  // Подгружаем blob-URL ПАРАЛЛЕЛЬНО — каждый файл сам себя добавляет в state
+  // как только пришёл, плитки не ждут друг друга. На 10+ фото разница ощутима.
   React.useEffect(() => {
     const all = [...viz, ...bps];
     const toLoad = all.filter(f => !blobUrls[f.id]);
     if (!toLoad.length) return;
     let cancelled = false;
-    (async () => {
-      const added = {};
-      for (const f of toLoad) {
-        if (cancelled) break;
-        try {
-          const r = await khOpAuthFetch(`${KH_OP_API}/object_files/${encodeURIComponent(f.id)}`, {});
-          if (!r.ok) { console.warn('[ObjectPhotos] fetch failed', f.id, r.status); continue; }
-          const blob = await r.blob();
-          if (!blob || blob.size === 0) { console.warn('[ObjectPhotos] empty blob', f.id); continue; }
-          added[f.id] = URL.createObjectURL(blob);
-        } catch (err) {
-          console.warn('[ObjectPhotos] fetch error', f.id, err);
-        }
+    toLoad.forEach(async (f) => {
+      try {
+        const r = await khOpAuthFetch(`${KH_OP_API}/object_files/${encodeURIComponent(f.id)}`, {});
+        if (!r.ok) { console.warn('[ObjectPhotos] fetch failed', f.id, r.status); return; }
+        const blob = await r.blob();
+        if (!blob || blob.size === 0) { console.warn('[ObjectPhotos] empty blob', f.id); return; }
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setBlobUrls(prev => prev[f.id] ? prev : ({ ...prev, [f.id]: url }));
+      } catch (err) {
+        console.warn('[ObjectPhotos] fetch error', f.id, err);
       }
-      if (!cancelled && Object.keys(added).length) setBlobUrls(prev => ({ ...prev, ...added }));
-    })();
+    });
     return () => { cancelled = true; };
   }, [viz, bps]);   // намеренно без blobUrls, чтобы не зациклить
 
