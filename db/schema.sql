@@ -153,6 +153,8 @@ create table if not exists kh_object_files (
   size_bytes    bigint not null,
   content_type  text,
   uploaded_at   timestamptz not null default now(),
-  uploaded_by   text                          -- email оператора (для аудита)
+  uploaded_by   text,                         -- email оператора (для аудита)
+  kind          text                          -- 'viz' | 'blueprint' | null (IFC)
 );
-create index if not exists kh_object_files_obj on kh_object_files (object_id);
+create index if not exists kh_object_files_obj  on kh_object_files (object_id);
+create index if not exists kh_object_files_kind on kh_object_files (object_id, kind);
