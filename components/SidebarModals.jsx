@@ -2021,10 +2021,34 @@ function KHTemplatesView({ est, onClose }) {
                     <th style={{ width: 40 }}></th>
                   </tr></thead>
                   <tbody>
-                    {t.items.map((it, ii) => {
-                      const c = tplCat(it);
-                      const rowKey = t.id + ':' + ii;
-                      return (
+                    {(() => {
+                      // Группируем позиции шаблона на «Работы» и «Материалы» —
+                      // так же, как в основной смете. Внутри секций сохраняем
+                      // исходный порядок (и оригинальный индекс ii — он нужен
+                      // обновлятором category).
+                      const items = t.items || [];
+                      const isWork = (it) => tplCat(it) === 'work';
+                      const pairs = items.map((it, ii) => ({ it, ii }));
+                      const works = pairs.filter(x => isWork(x.it));
+                      const mats  = pairs.filter(x => !isWork(x.it));
+                      const list = [];
+                      if (works.length) { list.push({ _sec: 'work', title: 'Работы', count: works.length, first: true }); works.forEach(x => list.push(x)); }
+                      if (mats.length)  { list.push({ _sec: 'material', title: 'Материалы — цены уже с НДС', count: mats.length, first: works.length === 0 }); mats.forEach(x => list.push(x)); }
+                      return list.map(entry => {
+                        if (entry._sec) return (
+                          <tr key={'sec-' + entry._sec}>
+                            <td colSpan={8} style={{
+                              padding: '12px 10px 8px',
+                              borderTop: entry.first ? 'none' : '1px solid var(--rule)',
+                              color: 'var(--rust)', fontWeight: 600, fontSize: 11,
+                              letterSpacing: '0.16em', textTransform: 'uppercase',
+                            }}>{entry.title} · {entry.count}</td>
+                          </tr>
+                        );
+                        const { it, ii } = entry;
+                        const c = tplCat(it);
+                        const rowKey = t.id + ':' + ii;
+                        return (
                       <tr key={it.id || rowKey}>
                         <td style={{ textAlign: 'center' }}>
                           <input type="checkbox" checked={selItems.has(it.id)}
@@ -2075,8 +2099,9 @@ function KHTemplatesView({ est, onClose }) {
                         <td style={{ color: it.vendor ? 'var(--ink-2)' : 'var(--ink-4)' }}>{it.vendor || '—'}</td>
                         <td className="num"><button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeItem(t.id, it.id)}>×</button></td>
                       </tr>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               )}
