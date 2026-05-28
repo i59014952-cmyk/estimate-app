@@ -14,7 +14,7 @@ const KH_IFC_WEBIFC_URL   = 'https://esm.sh/web-ifc@0.0.55';
 const KH_IFC_WASM_PATH    = 'https://unpkg.com/web-ifc@0.0.55/';
 const KH_IFC_BACKEND_BASE = (typeof window !== 'undefined' && window.PRICES_BACKEND) || 'https://api.sme-ta.ru';
 
-function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
+function KHIfcViewer({ open, fileId, fileUrl, fileName, objectId, onClose }) {
   const containerRef = React.useRef(null);
   const cleanupRef   = React.useRef(() => {});
   const [stage, setStage]       = React.useState('');           // текущий шаг
@@ -205,7 +205,7 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: 'min(96vw, 1400px)', height: 'min(92vh, 900px)',
+        width: 'min(96vw, 1400px)', height: 'min(95vh, 1000px)',
         background: 'var(--paper, #f4ecdc)', borderRadius: 14, boxShadow: '0 30px 80px -20px rgba(0,0,0,.4)',
         padding: 14, display: 'flex', flexDirection: 'column', gap: 10, color: 'var(--ink)',
       }}>
@@ -216,9 +216,11 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
           </div>
           <button className="btn" onClick={onClose} title="Закрыть">✕ Закрыть</button>
         </div>
+        {/* 3D-холст: фиксированная высота, чтобы под ним всегда хватало места смете. */}
         <div style={{
-          flex: 1, minHeight: 0, background: '#efe6d2', borderRadius: 10,
-          position: 'relative', overflow: 'hidden', border: '1px solid var(--rule)',
+          height: objectId ? '55%' : '100%', minHeight: 280,
+          background: '#efe6d2', borderRadius: 10,
+          position: 'relative', overflow: 'hidden', border: '1px solid var(--rule)', flexShrink: 0,
         }}>
           {/* контейнер для canvas — React в него ничего не рендерит,
               чтобы не конфликтовать с three.js-mounted canvas (removeChild error). */}
@@ -242,6 +244,12 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
         <div className="tiny muted" style={{ padding: '0 6px' }}>
           Левая кнопка мыши — вращать · правая — двигать · колесо — приближать
         </div>
+        {/* Панель сметы под 3D — показывается, если передан objectId. */}
+        {objectId && window.KHObjectEstimate && (
+          <div style={{ flex: 1, minHeight: 220, display: 'flex', flexDirection: 'column' }}>
+            {React.createElement(window.KHObjectEstimate, { objectId })}
+          </div>
+        )}
       </div>
     </div>
   );

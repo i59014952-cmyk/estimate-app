@@ -643,7 +643,7 @@ function KHObjectsView() {
                     Демо-модель закреплена · только просмотр
                   </span>
                   <button className="btn btn-sm" style={{ color: 'var(--rust)', borderColor: 'var(--rust)', fontWeight: 600 }}
-                    onClick={() => setViewerFile({ url: `/demo/ifc/${encodeURIComponent(demoSlug)}`, name: `${demoSlug}.ifc` })}>
+                    onClick={() => setViewerFile({ url: `/demo/ifc/${encodeURIComponent(demoSlug)}`, name: `${demoSlug}.ifc`, objectId: o.id })}>
                     ▶ Открыть в 3D
                   </button>
                 </div>
@@ -665,7 +665,7 @@ function KHObjectsView() {
                         </span>
                         {isIfc && (
                           <button className="btn btn-sm" style={{ color: 'var(--rust)', borderColor: 'var(--rust)' }}
-                            onClick={() => setViewerFile({ id: sf.id, name: sf.filename })}>
+                            onClick={() => setViewerFile({ id: sf.id, name: sf.filename, objectId: o.id })}>
                             ▶ Открыть в 3D
                           </button>
                         )}
@@ -702,6 +702,7 @@ function KHObjectsView() {
         fileId: viewerFile.id,
         fileUrl: viewerFile.url,
         fileName: viewerFile.name,
+        objectId: viewerFile.objectId,
         onClose: () => setViewerFile(null),
       })}
     </div>
