@@ -257,7 +257,7 @@ function KHEstimatesView() {
 
 // ---------- Объекты ----------
 const KH_OBJECTS_KEY = 'kh-objects-v1';
-const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v3';   // v3: добавлен «Тестовый — BasicHouse»
+const KH_OBJECTS_SEEDED_KEY = 'kh-objects-seeded-v4';   // v4: добавлена «Усадьба Исидор»
 window.KH_OBJECT_FILES = window.KH_OBJECT_FILES || new Map();
 const khLoadObjects = () => { try { return JSON.parse(localStorage.getItem(KH_OBJECTS_KEY) || '[]'); } catch { return []; } };
 const khSaveObjectsLocal = (l) => { try { localStorage.setItem(KH_OBJECTS_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
@@ -315,6 +315,17 @@ const KH_OBJECTS_SEED = [
     demo: true,
     demoIfcSlug: 'basichouse',
     note: 'Демо-IFC для проверки 3D-вьюера. Нажмите «▶ Открыть в 3D» — модель уже привязана к объекту.',
+  },
+  {
+    name: 'Усадьба Исидор',
+    address: '— демо-объект каталога, 3D-модель закреплена —',
+    area: 380, stage: 'Демо', date: '',
+    budget: 0,
+    client: 'Demo',
+    status: 'active',
+    demo: true,
+    demoIfcSlug: 'isidor',
+    note: 'Большая IFC-модель (~173 МБ). Парсинг в браузере займёт 1–3 минуты — это нормально.',
   },
 ];
 
