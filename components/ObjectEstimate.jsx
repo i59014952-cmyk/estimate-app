@@ -39,6 +39,7 @@ function KHObjectEstimate({ objectId }) {
   const [dbCatalog, setDbCatalog] = React.useState(null);   // null = ещё не грузили
   const [dbLoading, setDbLoading] = React.useState(false);
   const [dbError, setDbError] = React.useState(null);
+  const [catFilter, setCatFilter] = React.useState('all');   // 'all'|'work'|'material'
 
   // При смене objectId — перечитать смету.
   React.useEffect(() => { setItems(khObjEstLoad(objectId)); }, [objectId]);
@@ -133,14 +134,35 @@ function KHObjectEstimate({ objectId }) {
   const works = items.filter(isWork);
   const mats  = items.filter(it => !isWork(it));
   const sectionSum = (arr) => arr.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
-  const sections = [];
-  if (works.length) sections.push({ key: 'work', title: 'РАБОТЫ', items: works, sum: sectionSum(works) });
-  if (mats.length)  sections.push({ key: 'material', title: 'МАТЕРИАЛЫ (цены уже с НДС)', items: mats, sum: sectionSum(mats) });
+  const allSections = [];
+  if (works.length) allSections.push({ key: 'work', title: 'РАБОТЫ', items: works, sum: sectionSum(works) });
+  if (mats.length)  allSections.push({ key: 'material', title: 'МАТЕРИАЛЫ (цены уже с НДС)', items: mats, sum: sectionSum(mats) });
+  // Активный фильтр-таб скрывает ненужные секции (но в карточке итогов внизу
+  // мы всё равно показываем оба числа, чтобы не теряли общий счёт).
+  const sections = catFilter === 'all' ? allSections : allSections.filter(s => s.key === catFilter);
+  const tabStyle = (active) => ({
+    padding: '6px 14px', fontSize: 12, fontWeight: 600, letterSpacing: '.04em',
+    border: '1px solid ' + (active ? 'var(--rust)' : 'var(--rule)'),
+    background: active ? 'var(--rust)' : 'var(--paper)',
+    color: active ? 'var(--paper)' : 'var(--ink-2)',
+    borderRadius: 999, cursor: 'pointer', transition: 'background .12s, color .12s',
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div className="eyebrow" style={{ color: 'var(--rust)' }}>Смета объекта</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button style={tabStyle(catFilter === 'all')}      onClick={() => setCatFilter('all')}>
+            Все · {items.length}
+          </button>
+          <button style={tabStyle(catFilter === 'work')}     onClick={() => setCatFilter('work')}>
+            Работы · {works.length}
+          </button>
+          <button style={tabStyle(catFilter === 'material')} onClick={() => setCatFilter('material')}>
+            Материалы · {mats.length}
+          </button>
+        </div>
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative' }}>
           <button style={btn} onClick={() => { setDbOpen(false); setTplOpen(v => !v); }}>+ Из шаблона ▾</button>
@@ -218,6 +240,11 @@ function KHObjectEstimate({ objectId }) {
             {items.length === 0 && (
               <tr><td colSpan={7} style={{ padding: 28, textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
                 Смета пуста — добавь позиции кнопками сверху.
+              </td></tr>
+            )}
+            {items.length > 0 && sections.length === 0 && (
+              <tr><td colSpan={7} style={{ padding: 22, textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+                В фильтре «{catFilter === 'work' ? 'Работы' : 'Материалы'}» нет позиций.
               </td></tr>
             )}
             {sections.map((sec, secIdx) => (
