@@ -10,6 +10,7 @@
 
 const KH_IFC_THREE_URL    = 'https://esm.sh/three@0.160.0';
 const KH_IFC_ORBIT_URL    = 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+const KH_IFC_BGU_URL      = 'https://esm.sh/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
 const KH_IFC_WEBIFC_URL   = 'https://esm.sh/web-ifc@0.0.55';
 const KH_IFC_WASM_PATH    = 'https://unpkg.com/web-ifc@0.0.55/';
 const KH_IFC_BACKEND_BASE = (typeof window !== 'undefined' && window.PRICES_BACKEND) || 'https://api.sme-ta.ru';
@@ -53,11 +54,12 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, objectId, onClose }) {
         for (const c of chunks) { bytes.set(c, off); off += c.length; }
         if (cancelled) return;
 
-        // 2. Подключаем 3D-библиотеки с CDN (один раз — три кеша CDN кеширует).
+        // 2. Подключаем 3D-библиотеки с CDN (один раз — потом кеш браузера).
         setStage('Подключение 3D-библиотеки…');
-        const [THREE, OrbitMod, WebIFC] = await Promise.all([
+        const [THREE, OrbitMod, BGU, WebIFC] = await Promise.all([
           import(/* webpackIgnore: true */ KH_IFC_THREE_URL),
           import(/* webpackIgnore: true */ KH_IFC_ORBIT_URL),
+          import(/* webpackIgnore: true */ KH_IFC_BGU_URL),
           import(/* webpackIgnore: true */ KH_IFC_WEBIFC_URL),
         ]);
         if (cancelled) return;
@@ -93,11 +95,14 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, objectId, onClose }) {
         dl.position.set(50, 80, 30);
         scene.add(dl);
 
-        // 5. Достаём геометрии из IFC и собираем меши.
+        // 5. Достаём геометрии из IFC; группируем по цвету и сливаем в один меш
+        //    на материал — иначе 10–30 тысяч мешей кладут браузер.
         const meshGroup = new THREE.Group();
         const flatMeshes = ifcAPI.LoadAllGeometry(modelID);
         console.log('[IfcViewer] flatMeshes:', flatMeshes.size());
-        let geomCount = 0;
+        // Map: ключ цвета+прозрачности → { color, opacity, geometries: BufferGeometry[] }
+        const groups = new Map();
+        let totalGeoms = 0;
         for (let i = 0; i < flatMeshes.size(); i++) {
           if (cancelled) break;
           const flatMesh = flatMeshes.get(i);
@@ -107,7 +112,6 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, objectId, onClose }) {
             const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
             const verts = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
             const idx   = ifcAPI.GetIndexArray(geom.GetIndexData(),  geom.GetIndexDataSize());
-            // verts — interleaved (pos.x, pos.y, pos.z, n.x, n.y, n.z), 6 floats/vertex
             const vCount = verts.length / 6;
             const positions = new Float32Array(vCount * 3);
             const normals   = new Float32Array(vCount * 3);
@@ -119,36 +123,63 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, objectId, onClose }) {
             bg.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             bg.setAttribute('normal',   new THREE.BufferAttribute(normals, 3));
             bg.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
-            const color = new THREE.Color(pg.color.x, pg.color.y, pg.color.z);
+            // Запекаем трансформацию в саму геометрию (для merge нужно, чтобы
+            // у всех мержащихся геометрий не было дополнительных matrix).
+            bg.applyMatrix4(new THREE.Matrix4().fromArray(pg.flatTransformation));
             const alpha = pg.color.w == null ? 1 : pg.color.w;
-            const mat = new THREE.MeshLambertMaterial({
-              color, transparent: alpha < 1, opacity: alpha, side: THREE.DoubleSide,
-            });
-            const mesh = new THREE.Mesh(bg, mat);
-            const m = pg.flatTransformation;
-            mesh.applyMatrix4(new THREE.Matrix4().fromArray(m));
-            meshGroup.add(mesh);
-            geomCount++;
-            // освободим WASM-копии
+            const key = `${Math.round(pg.color.x * 255)}-${Math.round(pg.color.y * 255)}-${Math.round(pg.color.z * 255)}-${Math.round(alpha * 100)}`;
+            let bucket = groups.get(key);
+            if (!bucket) {
+              bucket = {
+                color: new THREE.Color(pg.color.x, pg.color.y, pg.color.z),
+                opacity: alpha, geometries: [],
+              };
+              groups.set(key, bucket);
+            }
+            bucket.geometries.push(bg);
+            totalGeoms++;
             geom.delete && geom.delete();
           }
         }
         if (cancelled) { try { ifcAPI.CloseModel(modelID); } catch (_) {} return; }
-        console.log('[IfcViewer] meshes added:', geomCount);
+        console.log('[IfcViewer] geometries collected:', totalGeoms, 'color groups:', groups.size);
+        setStage(`Сборка сцены (${groups.size} групп)…`);
+        // Сливаем все геометрии каждой группы в одну → один меш на цвет.
+        for (const { color, opacity, geometries } of groups.values()) {
+          if (!geometries.length) continue;
+          const merged = BGU.mergeGeometries(geometries, false);
+          if (!merged) {
+            // Если что-то не слилось (разные атрибуты) — добавим как есть.
+            for (const g of geometries) {
+              const mat = new THREE.MeshLambertMaterial({ color, transparent: opacity < 1, opacity, side: THREE.DoubleSide });
+              meshGroup.add(new THREE.Mesh(g, mat));
+            }
+            continue;
+          }
+          const mat = new THREE.MeshLambertMaterial({ color, transparent: opacity < 1, opacity, side: THREE.DoubleSide });
+          meshGroup.add(new THREE.Mesh(merged, mat));
+          for (const g of geometries) g.dispose();
+        }
+        console.log('[IfcViewer] merged meshes (draw calls):', meshGroup.children.length);
         scene.add(meshGroup);
 
         // 6. Подгоним камеру под bounding box модели.
         const box = new THREE.Box3().setFromObject(meshGroup);
-        console.log('[IfcViewer] bbox:', box.isEmpty() ? 'empty' : box, 'center:', box.getCenter(new THREE.Vector3()), 'size:', box.getSize(new THREE.Vector3()));
-        if (!box.isEmpty()) {
+        if (box.isEmpty()) {
+          console.log('[IfcViewer] bbox: empty (нет видимой геометрии)');
+        } else {
           const center = box.getCenter(new THREE.Vector3());
           const size   = box.getSize(new THREE.Vector3());
           const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          console.log('[IfcViewer] bbox center:', center.x.toFixed(2), center.y.toFixed(2), center.z.toFixed(2),
+                      '| size:', size.x.toFixed(2), size.y.toFixed(2), size.z.toFixed(2),
+                      '| maxDim:', maxDim.toFixed(2));
           camera.position.set(center.x + maxDim, center.y + maxDim * 0.8, center.z + maxDim);
           camera.near = maxDim / 1000;
           camera.far  = maxDim * 50;
           camera.updateProjectionMatrix();
           controls.target.copy(center);
+          console.log('[IfcViewer] camera at:', camera.position.x.toFixed(2), camera.position.y.toFixed(2), camera.position.z.toFixed(2));
         }
 
         // 7. Цикл рендеринга + resize.
