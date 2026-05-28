@@ -1764,10 +1764,9 @@ function KHTemplatesView({ est, onClose }) {
       } catch (_) { /* ignore */ }
     }
     setUploadStatus({ kind: 'ok', text: `В смету добавлено: ${added} из ${items.length}` });
-    setTimeout(() => {
-      setUploadStatus(null);
-      if (typeof onClose === 'function') onClose();
-    }, 800);
+    // Раньше после импорта закрывали модалку — теперь остаёмся в шаблонах,
+    // чтобы можно было импортировать ещё или вернуться к редактированию.
+    setTimeout(() => setUploadStatus(null), 3500);
   };
 
   const clearTplItems = (tplId) => {
