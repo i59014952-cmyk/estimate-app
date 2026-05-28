@@ -44,6 +44,10 @@ services:
         condition: service_healthy
     # Browsers (Chromium + Chrome) need extra shared memory or they crash.
     shm_size: "1gb"
+    volumes:
+      # Постоянный bind-маунт для файлов объектов (IFC-модели и т.п.).
+      # Лежит рядом с проектом, чтобы переживало пересборки контейнера.
+      - ./data/object_files:/app/data/object_files
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health').status==200 else sys.exit(1)"]
       interval: 30s
