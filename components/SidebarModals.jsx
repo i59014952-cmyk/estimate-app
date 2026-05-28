@@ -1331,7 +1331,9 @@ async function khParseTemplateFile(file) {
     const cells = (allRows[i] || []).map(norm);
     const nIdx = cells.findIndex(h => /наимен|name|позиц|товар|материал|работ/.test(h));
     if (nIdx === -1) continue;
-    const u = cells.findIndex(h => /^ед\b|unit|един|изм/.test(h));
+    // Шапка ед.изм. — варианты: "Ед.", "Ед.изм.", "Единица", "Изм.", "Е.и.",
+    // "Меры", "Размерность", "Unit". Достаточно широко, чтобы цеплять разные КП.
+    const u = cells.findIndex(h => /^ед\b|^е\.?и|unit|един|изм|меры|размерн/.test(h));
     const q = cells.findIndex(h => /кол|qty|количеств|объ[её]м|объ.ем/.test(h));
     const p = cells.findIndex(h => /цена|price|стоим|тариф|расц|прайс|за\s*ед|руб\s*\/\s*ед/.test(h));
     const s = cells.findIndex((h, idx) => idx !== p && /сумма|итог|всего|^сум\b/.test(h));
@@ -2052,6 +2054,7 @@ function KHTemplatesView({ est, onClose }) {
                     <th style={{ width: 70 }}>Ед.</th>
                     <th className="num" style={{ width: 90 }}>Кол-во</th>
                     <th className="num" style={{ width: 110 }}>Цена</th>
+                    <th className="num" style={{ width: 120 }}>Сумма</th>
                     <th style={{ width: 130 }}>Подрядчик</th>
                     <th style={{ width: 40 }}></th>
                   </tr></thead>
@@ -2072,7 +2075,7 @@ function KHTemplatesView({ est, onClose }) {
                       return list.map(entry => {
                         if (entry._sec) return (
                           <tr key={'sec-' + entry._sec}>
-                            <td colSpan={8} style={{
+                            <td colSpan={9} style={{
                               padding: '12px 10px 8px',
                               borderTop: entry.first ? 'none' : '1px solid var(--rule)',
                               color: 'var(--rust)', fontWeight: 600, fontSize: 11,
@@ -2131,6 +2134,12 @@ function KHTemplatesView({ est, onClose }) {
                           />
                         </td>
                         <td className="num">{num(it.unitPrice)} ₽</td>
+                        <td className="num" style={{ fontWeight: 600, color: 'var(--ink)' }}>
+                          {(() => {
+                            const s = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+                            return s > 0 ? `${num(s)} ₽` : '—';
+                          })()}
+                        </td>
                         <td style={{ color: it.vendor ? 'var(--ink-2)' : 'var(--ink-4)' }}>{it.vendor || '—'}</td>
                         <td className="num"><button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeItem(t.id, it.id)}>×</button></td>
                       </tr>
