@@ -126,16 +126,23 @@ function KHPhotoSection({ title, kind, objectId, files, refreshKind, onOpen, upl
           {files.map((f, i) => {
             const src = blobUrls[f.id];
             return (
-              <div key={f.id} style={{ position: 'relative' }}>
-                <div onClick={() => onOpen(kind, i)} title={f.filename}
-                  style={{
-                    width: 132, height: 96, borderRadius: 8, cursor: 'pointer',
-                    background: src ? `center/cover no-repeat url("${src}")` : 'var(--paper-2, #efe6d2)',
-                    border: '1px solid var(--rule)',
-                    display: 'grid', placeItems: 'center',
-                  }}>
-                  {!src && <span style={{ fontSize: 20, color: 'var(--ink-4)' }}>📷</span>}
-                </div>
+              <div key={f.id} style={{
+                position: 'relative', width: 132, height: 96,
+                borderRadius: 8, overflow: 'hidden',
+                border: '1px solid var(--rule)', background: 'var(--paper-2, #efe6d2)',
+              }}>
+                {src ? (
+                  <img src={src} alt={f.filename || ''} loading="lazy"
+                    onClick={() => onOpen(kind, i)} title={f.filename}
+                    style={{
+                      width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer', display: 'block',
+                    }} />
+                ) : (
+                  <div onClick={() => onOpen(kind, i)} title={f.filename} style={{
+                    width: '100%', height: '100%', display: 'grid', placeItems: 'center',
+                    cursor: 'pointer', color: 'var(--ink-4)', fontSize: 20,
+                  }}>📷</div>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFile(f.id, f.filename, kind); }}
                   title="Удалить" aria-label="Удалить"
@@ -189,10 +196,13 @@ function KHObjectPhotos({ objectId }) {
         if (cancelled) break;
         try {
           const r = await khOpAuthFetch(`${KH_OP_API}/object_files/${encodeURIComponent(f.id)}`, {});
-          if (!r.ok) continue;
+          if (!r.ok) { console.warn('[ObjectPhotos] fetch failed', f.id, r.status); continue; }
           const blob = await r.blob();
+          if (!blob || blob.size === 0) { console.warn('[ObjectPhotos] empty blob', f.id); continue; }
           added[f.id] = URL.createObjectURL(blob);
-        } catch (_) { /* ignore */ }
+        } catch (err) {
+          console.warn('[ObjectPhotos] fetch error', f.id, err);
+        }
       }
       if (!cancelled && Object.keys(added).length) setBlobUrls(prev => ({ ...prev, ...added }));
     })();
