@@ -138,7 +138,7 @@ function KHObjectEstimate({ objectId }) {
   if (mats.length)  sections.push({ key: 'material', title: 'МАТЕРИАЛЫ (цены уже с НДС)', items: mats, sum: sectionSum(mats) });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div className="eyebrow" style={{ color: 'var(--rust)' }}>Смета объекта</div>
         <div style={{ flex: 1 }} />
@@ -201,7 +201,7 @@ function KHObjectEstimate({ objectId }) {
         <button style={btn} onClick={addBlank}>+ Вручную</button>
       </div>
 
-      <div style={{ overflow: 'auto', minHeight: 0, border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--paper)' }}>
+      <div style={{ overflow: 'visible', border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--paper)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
           <thead>
             <tr style={{ background: 'var(--paper-2, #f0e6d2)', fontSize: 10, letterSpacing: '.18em', color: 'var(--ink-3)' }}>

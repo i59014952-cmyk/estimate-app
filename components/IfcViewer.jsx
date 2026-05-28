@@ -207,49 +207,58 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, objectId, onClose }) {
       <div onClick={e => e.stopPropagation()} style={{
         width: 'min(96vw, 1400px)', height: 'min(95vh, 1000px)',
         background: 'var(--paper, #f4ecdc)', borderRadius: 14, boxShadow: '0 30px 80px -20px rgba(0,0,0,.4)',
-        padding: 14, display: 'flex', flexDirection: 'column', gap: 10, color: 'var(--ink)',
+        display: 'flex', flexDirection: 'column', color: 'var(--ink)', overflow: 'hidden',
       }}>
-        <div className="row between center" style={{ padding: '4px 6px' }}>
+        {/* Шапка с кнопкой закрытия — приклеена сверху, не скроллится. */}
+        <div className="row between center" style={{
+          padding: '14px 20px', borderBottom: '1px solid var(--rule)',
+          background: 'var(--paper, #f4ecdc)', flexShrink: 0,
+        }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="eyebrow" style={{ color: 'var(--rust)' }}>3D-модель</div>
             <div style={{ fontWeight: 600 }}>{fileName || 'IFC'}</div>
           </div>
           <button className="btn" onClick={onClose} title="Закрыть">✕ Закрыть</button>
         </div>
-        {/* 3D-холст: фиксированная высота, чтобы под ним всегда хватало места смете. */}
-        <div style={{
-          height: objectId ? '55%' : '100%', minHeight: 280,
-          background: '#efe6d2', borderRadius: 10,
-          position: 'relative', overflow: 'hidden', border: '1px solid var(--rule)', flexShrink: 0,
-        }}>
-          {/* контейнер для canvas — React в него ничего не рендерит,
-              чтобы не конфликтовать с three.js-mounted canvas (removeChild error). */}
-          <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-          {(stage || error) && (
+        {/* Единая прокручиваемая область: 3D + подсказка + смета — листаются вместе. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* 3D-холст: фиксированная высота, обычный блок (скроллится вместе со сметой). */}
             <div style={{
-              position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-              padding: '14px 20px', background: 'rgba(255,255,255,.92)', borderRadius: 10,
-              maxWidth: '80%', textAlign: 'center', color: error ? 'var(--rust)' : 'var(--ink)',
-              fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,.12)', pointerEvents: 'none',
+              height: 'min(70vh, 720px)', minHeight: 360,
+              background: '#efe6d2', borderRadius: 10,
+              position: 'relative', overflow: 'hidden', border: '1px solid var(--rule)',
             }}>
-              {error ? `Ошибка: ${error}` : `${stage}${progress > 0 ? ` ${progress}%` : ''}`}
-              {error && (
-                <div className="tiny muted" style={{ marginTop: 8 }}>
-                  Если файл очень большой, попробуй сетевое соединение получше и подожди до минуты.
+              {/* контейнер для canvas — React в него ничего не рендерит,
+                  чтобы не конфликтовать с three.js-mounted canvas (removeChild error). */}
+              <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+              {(stage || error) && (
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                  padding: '14px 20px', background: 'rgba(255,255,255,.92)', borderRadius: 10,
+                  maxWidth: '80%', textAlign: 'center', color: error ? 'var(--rust)' : 'var(--ink)',
+                  fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,.12)', pointerEvents: 'none',
+                }}>
+                  {error ? `Ошибка: ${error}` : `${stage}${progress > 0 ? ` ${progress}%` : ''}`}
+                  {error && (
+                    <div className="tiny muted" style={{ marginTop: 8 }}>
+                      Если файл очень большой, попробуй сетевое соединение получше и подожди до минуты.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
-        <div className="tiny muted" style={{ padding: '0 6px' }}>
-          Левая кнопка мыши — вращать · правая — двигать · колесо — приближать
-        </div>
-        {/* Панель сметы под 3D — показывается, если передан objectId. */}
-        {objectId && window.KHObjectEstimate && (
-          <div style={{ flex: 1, minHeight: 220, display: 'flex', flexDirection: 'column' }}>
-            {React.createElement(window.KHObjectEstimate, { objectId })}
+            <div className="tiny muted" style={{ padding: '0 6px' }}>
+              Левая кнопка мыши — вращать · правая — двигать · колесо — приближать
+            </div>
+            {/* Панель сметы под 3D — показывается, если передан objectId. */}
+            {objectId && window.KHObjectEstimate && (
+              <div style={{ marginTop: 6 }}>
+                {React.createElement(window.KHObjectEstimate, { objectId })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
