@@ -1365,6 +1365,27 @@ async function khParseTemplateFile(file) {
     nameIdx = bestCol;
   }
 
+  // Auto-detect missing unit column: ищем колонку, в которой большинство ячеек
+  // похожи на единицу измерения («м³», «м²», «шт», «кг», «т», «м», «л» и т.п.).
+  // Бывает, что в файле нет строки-заголовка вообще (как в выгрузках смет),
+  // тогда без этого юнит остаётся пустым.
+  if (unitIdx === -1) {
+    const UNIT_RE = /^(шт|кг|г|т|м|мм|см|км|л|мл|м[²2]|м[³3]|кв\.?м|куб\.?м|пог\.?м|пог|уп|упак|меш(ок)?|флак(он)?|рулон|час|день|сут|комп|компл|пар|набор|м\/п|м\/?ч|ед)\.?$/i;
+    let best = -1, bestScore = 0;
+    for (let col = 0; col < 8; col++) {
+      if (col === nameIdx) continue;
+      let score = 0;
+      for (let i = startIdx; i < allRows.length && i < startIdx + 30; i++) {
+        const row = allRows[i];
+        if (!row || row._colored || row._sectionLike) continue;
+        const c = String(row[col] == null ? '' : row[col]).trim();
+        if (c && UNIT_RE.test(c)) score++;
+      }
+      if (score > bestScore) { bestScore = score; best = col; }
+    }
+    if (bestScore >= 3) unitIdx = best;   // ≥3 «похожих» строк, чтобы избежать ложного срабатывания
+  }
+
   // Auto-detect missing numeric columns by scanning a sample of data rows.
   if (qtyIdx === -1 || priceIdx === -1) {
     const numericByCol = new Map();
