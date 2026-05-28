@@ -1834,7 +1834,16 @@ function KHTemplatesView({ est, onClose }) {
 
       <div className="kh-list">
         {list.map(t => {
-          const total = totalOf(t);
+          // Считаем суммы по позициям с разбивкой работы/материалы.
+          // qty/unitPrice могут быть строками — приводим к числу; пустые → 0.
+          const tplItems = t.items || [];
+          let workSum = 0, matSum = 0, workCnt = 0, matCnt = 0;
+          for (const it of tplItems) {
+            const sum = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+            if (tplCat(it) === 'work') { workSum += sum; workCnt++; }
+            else { matSum += sum; matCnt++; }
+          }
+          const total = workSum + matSum;
           const isOpen = openId === t.id;
           const isAddingItem = itemDraft.tplId === t.id;
           return (
@@ -1850,7 +1859,9 @@ function KHTemplatesView({ est, onClose }) {
                   {t.note && <div className="kh-card__meta" style={{ marginTop: 4 }}>{t.note}</div>}
                   <div className="kh-card__pills" style={{ marginTop: 6 }}>
                     {t.area ? <span className="kh-pill">{t.area} м²</span> : null}
-                    <span className="kh-pill">позиций: {(t.items || []).length}</span>
+                    <span className="kh-pill">позиций: {tplItems.length}</span>
+                    {workCnt > 0 && <span className="kh-pill">работ: {workCnt}</span>}
+                    {matCnt > 0 && <span className="kh-pill">материалов: {matCnt}</span>}
                   </div>
                 </div>
                 <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -1877,17 +1888,25 @@ function KHTemplatesView({ est, onClose }) {
                   ) : (
                     <button
                       type="button"
-                      className="btn btn-sm"
                       onClick={() => triggerCardCover(t.id)}
                       title="Добавить фото объекта"
                       style={{
-                        width: 120, height: 90, padding: 0, borderRadius: 8,
-                        borderStyle: 'dashed', flexDirection: 'column', gap: 4,
-                        color: 'var(--ink-3)', fontSize: 11,
+                        width: 120, height: 90, padding: 0, borderRadius: 10,
+                        border: '1.5px dashed var(--rule)',
+                        background: 'linear-gradient(135deg, rgba(160,122,74,.08) 0%, rgba(160,122,74,.02) 100%)',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        cursor: 'pointer', color: 'var(--rust)',
+                        transition: 'border-color .15s ease, background .15s ease',
                       }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--rust)'; e.currentTarget.style.background = 'linear-gradient(135deg, rgba(160,122,74,.14) 0%, rgba(160,122,74,.04) 100%)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--rule)'; e.currentTarget.style.background = 'linear-gradient(135deg, rgba(160,122,74,.08) 0%, rgba(160,122,74,.02) 100%)'; }}
                     >
-                      <span style={{ fontSize: 18 }}>📷</span>
-                      <span>Фото</span>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3.5" y="6" width="17" height="13" rx="2.5" />
+                        <circle cx="9" cy="11.5" r="1.5" />
+                        <path d="M20.5 16.5l-5.5-5L9 17.5 6 14.5 3.5 17" />
+                      </svg>
+                      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--rust)' }}>Добавить фото</span>
                     </button>
                   )}
                 </div>
@@ -1896,7 +1915,23 @@ function KHTemplatesView({ est, onClose }) {
                     <button className="btn btn-sm" onClick={() => startEditTpl(t)} title="Редактировать">✎</button>
                     <button className="btn btn-sm" style={{ color: 'var(--rust)' }} onClick={() => removeTpl(t.id)} title="Удалить">×</button>
                   </div>
-                  {total ? <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{num(total)} ₽</div> : null}
+                  {(workSum > 0 || matSum > 0) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {workSum > 0 && (
+                        <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                          Работы: <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{num(workSum)}&nbsp;₽</span>
+                        </div>
+                      )}
+                      {matSum > 0 && (
+                        <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                          Материалы: <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{num(matSum)}&nbsp;₽</span>
+                        </div>
+                      )}
+                      <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid var(--rule)', fontWeight: 600, fontSize: 14 }}>
+                        Итого: {num(total)}&nbsp;₽
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
