@@ -1362,17 +1362,17 @@ function MarkupCard({ est }) {
 
 function BudgetCard({ est }) {
   const caps = useCaps();
-  const { cost, margin, subtotal, vat, grand, workSubtotal, materialSubtotal } = est.state.totals;
+  const { cost, margin, vat, grand, workSubtotal, materialSubtotal } = est.state.totals;
   const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
+  const workWithVat = (workSubtotal || 0) + vat;
   const items = [
     ...(caps.cost ? [
       { label: "Себестоимость", value: cost },
       { label: "Наценка (маржа)", value: margin },
     ] : []),
     { label: "Работы", value: workSubtotal || 0 },
+    { label: "Работы с НДС", value: workWithVat },
     { label: "Материалы (с НДС)", value: materialSubtotal || 0 },
-    { label: "Сумма без НДС", value: subtotal },
-    { label: "НДС 22% (только на работы)", value: vat },
   ];
   return (
     <div className="frame" style={{ padding:"18px 18px 16px", border:"1px solid var(--rule)", background:"var(--paper-card)", position:"relative" }}>
@@ -1387,7 +1387,7 @@ function BudgetCard({ est }) {
         ))}
       </div>
       <div className="row between center" style={{ marginTop:16 }}>
-        <span className="serif-it" style={{ fontSize: 22, fontStyle:"italic" }}>Итого</span>
+        <span className="serif-it" style={{ fontSize: 22, fontStyle:"italic" }}>Сумма</span>
         <span className="serif" style={{ fontSize: 28, letterSpacing: "-0.02em", color: grand > 0 ? "var(--ink)" : "var(--ink-4)" }}>
           {grand > 0 ? fmt(Math.round(grand)) : "—"} <span className="mono tiny muted">₽</span>
         </span>
