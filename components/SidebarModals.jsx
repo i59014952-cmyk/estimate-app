@@ -307,12 +307,14 @@ const KH_OBJECTS_SEED = [
   },
   {
     name: 'Тестовый — BasicHouse',
-    address: '— тестовый объект для проверки 3D-вьюера —',
+    address: '— демо-объект каталога, 3D-модель закреплена —',
     area: 120, stage: 'Демо', date: '',
     budget: 0,
     client: 'Demo',
     status: 'active',
-    note: 'Загрузите сюда IFC-модель (кнопка «📎 IFC на сервер»), затем «▶ Открыть в 3D» — модель откроется в браузере.',
+    demo: true,
+    demoIfcSlug: 'basichouse',
+    note: 'Демо-IFC для проверки 3D-вьюера. Нажмите «▶ Открыть в 3D» — модель уже привязана к объекту.',
   },
 ];
 
@@ -361,11 +363,13 @@ function KHObjectsView() {
     } catch (_) { /* офлайн — игнорим, покажем пустой */ }
   }, [authFetch, KH_API_BASE]);
   // Подгружаем список файлов для каждого объекта по разу (по мере появления).
+  // Демо-объекты пропускаем — у них фиксированный файл из /demo/ifc/{slug}.
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       for (const o of list) {
         if (cancelled) break;
+        if (o.demo || o.name === 'Тестовый — BasicHouse') continue;
         if (serverFilesByObj[o.id] !== undefined) continue;
         await refreshServerFiles(o.id);
       }
@@ -582,6 +586,8 @@ function KHObjectsView() {
         {filtered.map(o => {
           const filesInMem = window.KH_OBJECT_FILES.get(o.id) || [];
           const filesMeta = o.files || [];
+          const isDemo = o.demo === true || o.name === 'Тестовый — BasicHouse';
+          const demoSlug = o.demoIfcSlug || 'basichouse';
           return (
             <div key={o.id} className="kh-card kh-card--static" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -625,8 +631,25 @@ function KHObjectsView() {
                   })}
                 </div>
               )}
-              {/* Серверные файлы (IFC) — отображаются, если есть */}
-              {(serverFilesByObj[o.id] || []).length > 0 && (
+              {/* Демо-плашка с прикреплённой 3D-моделью (нельзя загружать новые). */}
+              {isDemo && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                  border: '1px solid var(--rust)', borderRadius: 8,
+                  background: 'linear-gradient(180deg, rgba(160,122,74,.08) 0%, rgba(160,122,74,.02) 100%)',
+                }}>
+                  <span style={{ fontSize: 18 }}>🏠</span>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-2)' }}>
+                    Демо-модель закреплена · только просмотр
+                  </span>
+                  <button className="btn btn-sm" style={{ color: 'var(--rust)', borderColor: 'var(--rust)', fontWeight: 600 }}
+                    onClick={() => setViewerFile({ url: `/demo/ifc/${encodeURIComponent(demoSlug)}`, name: `${demoSlug}.ifc` })}>
+                    ▶ Открыть в 3D
+                  </button>
+                </div>
+              )}
+              {/* Серверные файлы (IFC) — только у обычных объектов, не у демо */}
+              {!isDemo && (serverFilesByObj[o.id] || []).length > 0 && (
                 <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {(serverFilesByObj[o.id] || []).map(sf => {
                     const isIfc = /\.ifc$/i.test(sf.filename || '');
@@ -654,12 +677,16 @@ function KHObjectsView() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button className="btn btn-sm" onClick={() => attachFiles(o.id)}>+ Прикрепить файлы</button>
-                <button className="btn btn-sm" disabled={uploadingForObj === o.id}
-                  onClick={() => onPickIfc(o.id)}
-                  title="Загрузить IFC-модель на сервер">
-                  {uploadingForObj === o.id ? '⏳ Загрузка…' : '📎 IFC на сервер'}
-                </button>
+                {!isDemo && (
+                  <>
+                    <button className="btn btn-sm" onClick={() => attachFiles(o.id)}>+ Прикрепить файлы</button>
+                    <button className="btn btn-sm" disabled={uploadingForObj === o.id}
+                      onClick={() => onPickIfc(o.id)}
+                      title="Загрузить IFC-модель на сервер">
+                      {uploadingForObj === o.id ? '⏳ Загрузка…' : '📎 IFC на сервер'}
+                    </button>
+                  </>
+                )}
                 {(o.status || 'active') === 'active'
                   ? <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'completed')}>✓ Завершить</button>
                   : <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setStatus(o.id, 'active')}>↶ В активные</button>}
@@ -671,7 +698,10 @@ function KHObjectsView() {
       <input ref={ifcFileInputRef} type="file" accept=".ifc,application/octet-stream"
         style={{ display: 'none' }} onChange={onIfcChange} />
       {viewerFile && window.KHIfcViewer && React.createElement(window.KHIfcViewer, {
-        open: true, fileId: viewerFile.id, fileName: viewerFile.name,
+        open: true,
+        fileId: viewerFile.id,
+        fileUrl: viewerFile.url,
+        fileName: viewerFile.name,
         onClose: () => setViewerFile(null),
       })}
     </div>
