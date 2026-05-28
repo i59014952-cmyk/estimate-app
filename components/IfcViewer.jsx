@@ -96,6 +96,8 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
         // 5. Достаём геометрии из IFC и собираем меши.
         const meshGroup = new THREE.Group();
         const flatMeshes = ifcAPI.LoadAllGeometry(modelID);
+        console.log('[IfcViewer] flatMeshes:', flatMeshes.size());
+        let geomCount = 0;
         for (let i = 0; i < flatMeshes.size(); i++) {
           if (cancelled) break;
           const flatMesh = flatMeshes.get(i);
@@ -126,15 +128,18 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
             const m = pg.flatTransformation;
             mesh.applyMatrix4(new THREE.Matrix4().fromArray(m));
             meshGroup.add(mesh);
+            geomCount++;
             // освободим WASM-копии
             geom.delete && geom.delete();
           }
         }
         if (cancelled) { try { ifcAPI.CloseModel(modelID); } catch (_) {} return; }
+        console.log('[IfcViewer] meshes added:', geomCount);
         scene.add(meshGroup);
 
         // 6. Подгоним камеру под bounding box модели.
         const box = new THREE.Box3().setFromObject(meshGroup);
+        console.log('[IfcViewer] bbox:', box.isEmpty() ? 'empty' : box, 'center:', box.getCenter(new THREE.Vector3()), 'size:', box.getSize(new THREE.Vector3()));
         if (!box.isEmpty()) {
           const center = box.getCenter(new THREE.Vector3());
           const size   = box.getSize(new THREE.Vector3());
@@ -211,16 +216,19 @@ function KHIfcViewer({ open, fileId, fileUrl, fileName, onClose }) {
           </div>
           <button className="btn" onClick={onClose} title="Закрыть">✕ Закрыть</button>
         </div>
-        <div ref={containerRef} style={{
+        <div style={{
           flex: 1, minHeight: 0, background: '#efe6d2', borderRadius: 10,
           position: 'relative', overflow: 'hidden', border: '1px solid var(--rule)',
         }}>
+          {/* контейнер для canvas — React в него ничего не рендерит,
+              чтобы не конфликтовать с three.js-mounted canvas (removeChild error). */}
+          <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
           {(stage || error) && (
             <div style={{
               position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
               padding: '14px 20px', background: 'rgba(255,255,255,.92)', borderRadius: 10,
               maxWidth: '80%', textAlign: 'center', color: error ? 'var(--rust)' : 'var(--ink)',
-              fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,.12)',
+              fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,.12)', pointerEvents: 'none',
             }}>
               {error ? `Ошибка: ${error}` : `${stage}${progress > 0 ? ` ${progress}%` : ''}`}
               {error && (
