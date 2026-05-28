@@ -1362,15 +1362,17 @@ function MarkupCard({ est }) {
 
 function BudgetCard({ est }) {
   const caps = useCaps();
-  const { cost, margin, subtotal, vat, grand } = est.state.totals;
+  const { cost, margin, subtotal, vat, grand, workSubtotal, materialSubtotal } = est.state.totals;
   const fmtCell = (v) => v > 0 ? fmtMoney(v) : "— ₽";
   const items = [
     ...(caps.cost ? [
       { label: "Себестоимость", value: cost },
       { label: "Наценка (маржа)", value: margin },
     ] : []),
+    { label: "Работы", value: workSubtotal || 0 },
+    { label: "Материалы (с НДС)", value: materialSubtotal || 0 },
     { label: "Сумма без НДС", value: subtotal },
-    { label: "НДС 22%", value: vat },
+    { label: "НДС 22% (только на работы)", value: vat },
   ];
   return (
     <div className="frame" style={{ padding:"18px 18px 16px", border:"1px solid var(--rule)", background:"var(--paper-card)", position:"relative" }}>

@@ -387,16 +387,23 @@ function useEstimate() {
   }, [query, visibleCatalog, visibleUserCatalog]);
 
   const totals = React.useMemo(() => {
-    let cost = 0, client = 0;
+    let cost = 0, clientWork = 0, clientMat = 0;
     for (const r of estimate) {
       if (r.notFound) continue;
       cost += r.qty * r.unitPrice;
-      client += r.qty * clientUnitPrice(r, markup);
+      const sum = r.qty * clientUnitPrice(r, markup);
+      if (r.category === 'work') clientWork += sum; else clientMat += sum;
     }
-    // subtotal — клиентская сумма (с наценкой); НДС и итог считаются от неё.
+    const client = clientWork + clientMat;
     const subtotal = client;
-    const vat = subtotal * VAT_RATE;
-    return { cost, client, margin: client - cost, subtotal, vat, grand: subtotal + vat };
+    // НДС начисляется ТОЛЬКО на работы. Цены материалов уже включают НДС
+    // (так оговорено бизнесом), второй раз его не накручиваем.
+    const vat = clientWork * VAT_RATE;
+    return {
+      cost, client, margin: client - cost,
+      subtotal, vat, grand: subtotal + vat,
+      workSubtotal: clientWork, materialSubtotal: clientMat,
+    };
   }, [estimate, markup]);
 
   const anyNotFound = React.useMemo(() => estimate.some(r => r.notFound), [estimate]);
@@ -908,19 +915,33 @@ function useEstimate() {
   const exportCsv = React.useCallback(() => {
     if (estimate.length === 0) return;
     const rows = [['Название', 'Ед. изм.', 'Кол-во', 'Цена за ед.', 'Итого', 'Источник']];
-    for (const r of estimate) {
-      const cu = clientUnitPrice(r, markup);
-      rows.push([
-        r.name, r.unit, r.qty,
-        r.notFound ? 'цена не найдена' : cu.toFixed(2),
-        r.notFound ? '' : (r.qty * cu).toFixed(2),
-        SOURCE_LABELS[r.source] || '',
-      ]);
-    }
+    // Разделяем на секции: РАБОТЫ и МАТЕРИАЛЫ — с заголовками и сабтоталами,
+    // чтобы выгрузка читалась так же, как смета на экране.
+    const isWork = (r) => (r.category || 'material') === 'work';
+    const works = estimate.filter(isWork);
+    const mats  = estimate.filter(r => !isWork(r));
+    const pushSection = (title, arr) => {
+      if (!arr.length) return;
+      const sum = arr.reduce((s, r) => s + (r.notFound ? 0 : r.qty * clientUnitPrice(r, markup)), 0);
+      rows.push([`— ${title} (${arr.length}) —`, '', '', '', sum.toFixed(2), '']);
+      for (const r of arr) {
+        const cu = clientUnitPrice(r, markup);
+        rows.push([
+          r.name, r.unit, r.qty,
+          r.notFound ? 'цена не найдена' : cu.toFixed(2),
+          r.notFound ? '' : (r.qty * cu).toFixed(2),
+          SOURCE_LABELS[r.source] || '',
+        ]);
+      }
+    };
+    pushSection('РАБОТЫ', works);
+    pushSection('МАТЕРИАЛЫ (цены уже с НДС)', mats);
     rows.push([]);
-    rows.push(['', '', '', 'Сумма', totals.subtotal.toFixed(2), '']);
-    rows.push(['', '', '', 'НДС 22%', totals.vat.toFixed(2), '']);
-    rows.push(['', '', '', 'Итого с НДС', totals.grand.toFixed(2), '']);
+    rows.push(['', '', '', 'Работы', (totals.workSubtotal || 0).toFixed(2), '']);
+    rows.push(['', '', '', 'Материалы (с НДС)', (totals.materialSubtotal || 0).toFixed(2), '']);
+    rows.push(['', '', '', 'Сумма без НДС', totals.subtotal.toFixed(2), '']);
+    rows.push(['', '', '', 'НДС 22% (только на работы)', totals.vat.toFixed(2), '']);
+    rows.push(['', '', '', 'Итого', totals.grand.toFixed(2), '']);
     downloadCsv(rows, `estimate-${new Date().toISOString().slice(0, 10)}.csv`);
   }, [estimate, totals, markup]);
 
@@ -961,21 +982,43 @@ function useEstimate() {
                       date ? esc(date) : '']
       .filter(Boolean).join(' <span class="dot">·</span> ');
 
-    const rowsHtml = estimate.map((r, i) => {
+    // Группируем смету в две секции: РАБОТЫ и МАТЕРИАЛЫ (так просил заказчик).
+    // У материалов в названии секции отмечаем «цены уже с НДС» — на материалы
+    // НДС повторно не накручивается (см. totals в useEstimate).
+    const isWork = (r) => (r.category || 'material') === 'work';
+    const works = estimate.filter(isWork);
+    const mats  = estimate.filter(r => !isWork(r));
+    const rowHtml = (r, idx) => {
       const cu = clientUnitPrice(r, markup);
       const totalCell = r.notFound ? '&mdash;' : num(r.qty * cu);
       const priceCell = r.notFound ? '&mdash;' : num(cu);
       const qtyCell   = `${qtyFmt(r.qty)}${r.unit ? '&nbsp;' + esc(r.unit) : ''}`;
       return `<tr>
-        <td class="idx">${String(i + 1).padStart(2, '0')}</td>
+        <td class="idx">${String(idx).padStart(2, '0')}</td>
         <td class="name">${esc(r.name)}</td>
         <td class="right">${priceCell}</td>
         <td class="right">${qtyCell}</td>
         <td class="right">${totalCell}</td>
       </tr>`;
-    }).join('');
+    };
+    const sectionSum = (arr) => arr.reduce((s, r) => s + (r.notFound ? 0 : r.qty * clientUnitPrice(r, markup)), 0);
+    const sectionRow = (title, count, sum) =>
+      `<tr><td colspan="4" style="padding:14px 18px 10px;border-top:1px solid #d9cdb6;font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:.2em;color:#7a5a36;text-transform:uppercase;background:#f0e6d2">${esc(title)} (${count})</td>` +
+      `<td class="right" style="padding:14px 18px 10px;border-top:1px solid #d9cdb6;font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;color:#7a5a36;background:#f0e6d2">${num(sum)}&nbsp;&#8381;</td></tr>`;
+    const parts = [];
+    let runIdx = 1;
+    if (works.length) {
+      parts.push(sectionRow('Работы', works.length, sectionSum(works)));
+      for (const r of works) parts.push(rowHtml(r, runIdx++));
+    }
+    if (mats.length) {
+      parts.push(sectionRow('Материалы — цены уже с НДС', mats.length, sectionSum(mats)));
+      for (const r of mats) parts.push(rowHtml(r, runIdx++));
+    }
+    const rowsHtml = parts.join('');
 
     const grandTotalStr = num(totals.grand) + '&nbsp;&#8381;';
+    const vatStr        = num(totals.vat) + '&nbsp;&#8381;';
     const today = new Date();
     const validUntil = new Date(today.getTime() + 14 * 86400000);
     const vu = `${String(validUntil.getDate()).padStart(2,'0')}.${String(validUntil.getMonth()+1).padStart(2,'0')}.${validUntil.getFullYear()}`;
@@ -1051,6 +1094,12 @@ function useEstimate() {
       <th>Итого,&nbsp;&#8381;</th>
     </tr></thead>
     <tbody>${rowsHtml}
+      <tr class="total" style="color:#5b524a">
+        <td></td>
+        <td class="name">в&nbsp;т.ч. НДС&nbsp;22% на&nbsp;работы</td>
+        <td></td><td></td>
+        <td class="right">${vatStr}</td>
+      </tr>
       <tr class="total">
         <td class="idx"></td>
         <td class="name" style="font-weight:600">Итого по&nbsp;объекту</td>

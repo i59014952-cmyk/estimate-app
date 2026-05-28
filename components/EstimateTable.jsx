@@ -7,7 +7,7 @@ function EstimateTable({ rows, catFilter = 'all', markup, onUpdateQty, onUpdateR
   }
   // Позиции без цены всегда сверху (стабильно, в т.ч. после «Обновить цены»).
   const noPrice = (r) => r.notFound || !(r.unitPrice > 0);
-  const sorted = visibleRows
+  const sortIt = (arr) => arr
     .map((r, i) => [r, i])
     .sort((a, b) => {
       const ap = noPrice(a[0]) ? 0 : 1;
@@ -15,13 +15,39 @@ function EstimateTable({ rows, catFilter = 'all', markup, onUpdateQty, onUpdateR
       return ap !== bp ? ap - bp : a[1] - b[1];
     })
     .map(p => p[0]);
+
+  // Когда фильтр «всё» — показываем смету двумя группами: РАБОТЫ и МАТЕРИАЛЫ
+  // (так просил заказчик). При активном фильтре одной категории заголовок не
+  // нужен — это и так одна группа.
+  const isWork = (r) => (r.category || 'material') === 'work';
+  let items;
+  if (catFilter === 'all') {
+    const works = sortIt(visibleRows.filter(isWork));
+    const mats  = sortIt(visibleRows.filter(r => !isWork(r)));
+    items = [];
+    if (works.length) items.push({ _section: 'work', title: `Работы (${works.length})`, first: items.length === 0 });
+    works.forEach(r => items.push(r));
+    if (mats.length)  items.push({ _section: 'material', title: `Материалы — ${mats.length}, цены уже с НДС`, first: items.length === 0 });
+    mats.forEach(r => items.push(r));
+  } else {
+    items = sortIt(visibleRows);
+  }
+
+  let runningIdx = 0;
   return (
     <div className="col">
-      {sorted.map((r, i) => (
+      {items.map((it, i) => it && it._section ? (
+        <div key={`sec-${it._section}`} className="eyebrow" style={{
+          padding: "14px 12px 8px",
+          marginTop: it.first ? 0 : 18,
+          borderTop: it.first ? "none" : "1px solid var(--rule)",
+          color: "var(--rust)", letterSpacing: "0.16em",
+        }}>{it.title}</div>
+      ) : (
         <EstimateRow
-          key={r.id}
-          row={r}
-          index={i + 1}
+          key={it.id}
+          row={it}
+          index={++runningIdx}
           markup={markup}
           onUpdateQty={onUpdateQty}
           onUpdateRow={onUpdateRow}
