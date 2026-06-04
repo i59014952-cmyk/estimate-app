@@ -60,6 +60,10 @@ TABLES: dict[str, dict[str, str]] = {
     "kh_client_estimates": {
         "token": "text", "rows": "jsonb", "created_at": "timestamptz", "updated_at": "timestamptz",
     },
+    "kh_templates": {
+        "id": "text", "name": "text", "note": "text", "area": "numeric",
+        "cover": "text", "items": "jsonb", "updated_at": "timestamptz",
+    },
     "kh_stores": {
         "id": "text", "url": "text", "name": "text", "host": "text", "favicon": "text",
         "method": "text", "currency": "text", "found": "boolean", "confidence": "numeric",

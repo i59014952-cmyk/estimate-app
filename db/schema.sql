@@ -158,3 +158,21 @@ create table if not exists kh_object_files (
 );
 create index if not exists kh_object_files_obj  on kh_object_files (object_id);
 create index if not exists kh_object_files_kind on kh_object_files (object_id, kind);
+
+-- Шаблоны смет (редактируемые наборы позиций). Раньше жили только в localStorage
+-- браузера; теперь хранятся на сервере, чтобы быть доступными с любого устройства.
+-- Позиции шаблона (items) кладём целиком в jsonb — как kh_objects.files и
+-- kh_client_estimates.rows. Применить на существующей базе можно безопасно:
+--   psql "$DATABASE_URL" -f db/schema.sql   (create table if not exists — идемпотентно)
+create table if not exists kh_templates (
+  id         text primary key,
+  name       text,
+  note       text,
+  area       numeric,
+  cover      text,
+  items      jsonb default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+drop trigger if exists kh_templates_touch on kh_templates;
+create trigger kh_templates_touch before update on kh_templates
+  for each row execute function kh_touch_updated_at();
