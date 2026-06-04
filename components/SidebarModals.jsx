@@ -1372,11 +1372,51 @@ const khLoadTpls = () => {
   try {
     const raw = JSON.parse(localStorage.getItem(KH_TPL_KEY) || '[]');
     const { list, changed } = khNormalizeTpls(raw);
-    if (changed) { try { localStorage.setItem(KH_TPL_KEY, JSON.stringify(list)); } catch {} }
+    if (changed) khSaveTplsLocal(list);
     return list;
   } catch { return []; }
 };
-const khSaveTpls = (l) => { try { localStorage.setItem(KH_TPL_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+
+// --- маппинг шаблон <-> строка в БД (таблица kh_templates на бэкенде) ---------
+// items храним целиком в jsonb-колонке; пустую площадь приводим к null (numeric).
+const khTplToRow = (t) => ({
+  id: String(t.id),
+  name: t.name || '',
+  note: t.note || '',
+  area: (t.area === '' || t.area == null) ? null : (Number(t.area) || null),
+  cover: t.cover || '',
+  items: (t.items || []).map(it => ({
+    id: it.id, name: it.name || '', unit: it.unit || '',
+    qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0,
+    category: it.category || '', vendor: it.vendor || '',
+  })),
+});
+const khTplFromRow = (r) => ({
+  id: String(r.id),
+  name: r.name || '',
+  note: r.note || '',
+  area: (r.area == null || r.area === '') ? '' : Number(r.area),
+  cover: r.cover || '',
+  items: (Array.isArray(r.items) ? r.items : []).map(it => ({
+    id: (it && it.id) || khUniqueItemId(),
+    name: (it && it.name) || '', unit: (it && it.unit) || '',
+    qty: Number(it && it.qty) || 0, unitPrice: Number(it && it.unitPrice) || 0,
+    category: (it && it.category) || '', vendor: (it && it.vendor) || '',
+  })),
+});
+
+// localStorage остаётся быстрым кешем/фолбэком; khSaveTpls дополнительно
+// синхронизирует весь список на сервер (как kh_events/kh_objects).
+const khSaveTplsLocal = (l) => { try { localStorage.setItem(KH_TPL_KEY, JSON.stringify(l)); window.dispatchEvent(new Event('kh-storage')); } catch {} };
+const khSaveTpls = (l) => {
+  khSaveTplsLocal(l);
+  if (window.SB && Array.isArray(l) && l.length) {
+    window.SB.upsert('kh_templates', l.map(khTplToRow), 'id').catch(e => console.warn('cloud templates:', e));
+  }
+};
+const khRemoveTplCloud = (id) => {
+  if (window.SB) window.SB.remove('kh_templates', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('cloud templates del:', e));
+};
 
 const KH_TPL_SEED = [{
   name: 'Каркасный дом 120 м²',
@@ -1410,7 +1450,10 @@ function khSeedTplsIfNeeded(current) {
       items: t.items.map((it, j) => ({ id: 'tpli-' + i + '-' + j + '-' + Date.now(), ...it })),
     }));
   const next = [...fresh, ...current];
-  khSaveTpls(next);
+  // Только локально: на сервер демо-шаблон попадёт лишь если облако окажется
+  // пустым (см. эффект загрузки в KHTemplatesView), иначе он бы дублировался
+  // у всех операторов при каждом первом заходе с нового браузера.
+  khSaveTplsLocal(next);
   try { localStorage.setItem(KH_TPL_SEEDED_KEY, '1'); } catch {}
   return next;
 }
@@ -1653,6 +1696,26 @@ function KHTemplatesView({ est, onClose }) {
 
   const persist = (next) => { setList(next); khSaveTpls(next); };
   const totalOf = (t) => (t.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+
+  // Подтягиваем шаблоны с сервера: облако — источник правды. Если на сервере
+  // пусто (первый запуск), заливаем то, что есть локально (включая демо-шаблон).
+  React.useEffect(() => {
+    if (!window.SB) return;
+    let cancelled = false;
+    window.SB.selectAll('kh_templates', 'order=updated_at.desc').then(remote => {
+      if (cancelled || !Array.isArray(remote)) return;
+      if (remote.length) {
+        const mapped = khNormalizeTpls(remote.map(khTplFromRow)).list;
+        setList(mapped);
+        khSaveTplsLocal(mapped);
+        try { localStorage.setItem(KH_TPL_SEEDED_KEY, '1'); } catch {}
+      } else {
+        const local = khLoadTpls();
+        if (local.length) khSaveTpls(local);
+      }
+    }).catch(e => console.warn('cloud load templates:', e));
+    return () => { cancelled = true; };
+  }, []);
   const tplCat = (it) => (it && (it.category === 'work' || it.category === 'material'))
     ? it.category
     : (typeof window.classifyItem === 'function' ? window.classifyItem(it && it.name, it && it.unit) : 'material');
@@ -1728,6 +1791,7 @@ function KHTemplatesView({ est, onClose }) {
   const removeTpl = (id) => {
     if (!confirm('Удалить шаблон?')) return;
     persist(list.filter(t => t.id !== id));
+    khRemoveTplCloud(id);
     if (openId === id) setOpenId(null);
   };
 
